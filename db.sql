@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS freelance_db;
-USE freelance_db;
+CREATE DATABASE IF NOT EXISTS freelancejob;
+USE freelancejob;
 
 -- 1. Users Table
 CREATE TABLE users (
@@ -7,6 +7,7 @@ CREATE TABLE users (
     username VARCHAR(50) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
+    profile_image VARCHAR(255) DEFAULT NULL,
     role ENUM('admin', 'company', 'freelancer') NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -15,9 +16,15 @@ CREATE TABLE users (
 CREATE TABLE companies (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT UNIQUE,
+    phone VARCHAR(20) DEFAULT NULL,
     company_name VARCHAR(100),
     website VARCHAR(255),
+    location VARCHAR(255) DEFAULT NULL,
+    established_year INT DEFAULT NULL,
+    industry VARCHAR(100) DEFAULT NULL,
+    company_size VARCHAR(50) DEFAULT NULL,
     description TEXT,
+    logo_image VARCHAR(255) DEFAULT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -25,7 +32,13 @@ CREATE TABLE companies (
 CREATE TABLE freelancers (
     id INT PRIMARY KEY AUTO_INCREMENT,
     user_id INT UNIQUE,
+    phone VARCHAR(20) DEFAULT NULL,
     full_name VARCHAR(100),
+    title VARCHAR(200) DEFAULT NULL,
+    location VARCHAR(255) DEFAULT NULL,
+    bio TEXT DEFAULT NULL,
+    experience_years INT DEFAULT NULL,
+    hourly_rate DECIMAL(10,2) DEFAULT NULL,
     portfolio_url VARCHAR(255),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -78,6 +91,23 @@ CREATE TABLE assignments (
     assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
     FOREIGN KEY (freelancer_id) REFERENCES freelancers(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 10. Notifications Table
+CREATE TABLE notifications (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    from_user_id INT DEFAULT NULL,
+    type VARCHAR(50) NOT NULL,
+    message VARCHAR(500) NOT NULL,
+    link VARCHAR(255) DEFAULT NULL,
+    is_read TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_notifications_user_read (user_id, is_read),
+    INDEX idx_notifications_type (type),
+    INDEX idx_notifications_created (created_at)
 );
 
 -- 9. Payments Table
@@ -90,6 +120,24 @@ CREATE TABLE payments (
     FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE
 );
 
+-- 11. Messages Table (Simple Chat System)
+ALTER TABLE users ADD COLUMN last_activity TIMESTAMP NULL AFTER created_at;
+
+CREATE TABLE IF NOT EXISTS messages (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    sender_id INT NOT NULL,
+    receiver_id INT NOT NULL,
+    message TEXT NOT NULL,
+    status ENUM('unread','read') DEFAULT 'unread',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_messages_sender (sender_id),
+    INDEX idx_messages_receiver (receiver_id),
+    INDEX idx_messages_status (receiver_id, status),
+    INDEX idx_messages_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Seed Data
 
 -- Admin user (email: admin@platform.com, password: admin123)
@@ -99,7 +147,48 @@ INSERT INTO users (username, email, password, role) VALUES
 -- Sample skills for freelancer registration
 INSERT INTO skills (skill_name) VALUES
 ('PHP'),
-('JavaScript'),
 ('MySQL'),
-('UI/UX'),
-('Writing');
+('JavaScript'),
+('HTML'),
+('CSS'),
+('Tailwind CSS'),
+('Bootstrap'),
+('React.js'),
+('Vue.js'),
+('Node.js'),
+('Express.js'),
+('Laravel'),
+('CodeIgniter'),
+('Python'),
+('Java'),
+('C#'),
+('C++'),
+('UI/UX Design'),
+('Graphic Design'),
+('Logo Design'),
+('Brand Identity Design'),
+('Adobe Photoshop'),
+('Adobe Illustrator'),
+('Adobe InDesign'),
+('Figma'),
+('Adobe XD'),
+('Canva'),
+('Video Editing'),
+('Motion Graphics'),
+('Animation'),
+('Content Writing'),
+('Copywriting'),
+
+('Blog Writing'),
+('Article Writing'),
+('SEO Writing'),
+('Translation'),
+
+
+('Digital Marketing'),
+('Social Media Marketing'),
+
+('Email Marketing'),
+
+
+('E-commerce');

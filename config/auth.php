@@ -5,12 +5,13 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 require_once __DIR__ . '/lang.php';
+require_once __DIR__ . '/upload.php';
 init_lang();
 
 function base_url(string $path = ''): string
 {
     $script = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
-    $root = preg_replace('#/(admin|company|freelancer)$#', '', $script);
+    $root = preg_replace('#/(admin|company|freelancer|chat)$#', '', $script);
     $root = rtrim($root, '/');
 
     if ($path === '') {
@@ -30,6 +31,35 @@ function require_login(): void
 {
     if (empty($_SESSION['user_id'])) {
         set_flash('error', __('error.login_required'));
+        redirect('login.php');
+    }
+
+    // Check if account is suspended or blocked (only if column exists)
+    if (!has_account_status_column()) {
+        return;
+    }
+
+    $status = $_SESSION['account_status'] ?? null;
+    if ($status === null) {
+        // Fetch from DB if not cached in session
+        global $conn;
+        $stmt = $conn->prepare('SELECT account_status FROM users WHERE id = ?');
+        $uid = (int) $_SESSION['user_id'];
+        $stmt->bind_param('i', $uid);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        $status = $row ? ($row['account_status'] ?? 'active') : 'active';
+        $_SESSION['account_status'] = $status;
+    }
+
+    if ($status === 'suspended') {
+        session_destroy();
+        set_flash('error', __('error.account_suspended'));
+        redirect('login.php');
+    } elseif ($status === 'blocked') {
+        session_destroy();
+        set_flash('error', __('error.account_blocked'));
         redirect('login.php');
     }
 }
@@ -52,7 +82,17 @@ function current_user(): array
         'email' => $_SESSION['email'] ?? null,
         'role' => $_SESSION['role'] ?? null,
         'profile_id' => $_SESSION['profile_id'] ?? null,
+        'profile_image' => $_SESSION['profile_image'] ?? null,
+        'logo_image' => $_SESSION['logo_image'] ?? null,
     ];
+}
+
+function profile_image_url(?string $filename): ?string
+{
+    if ($filename) {
+        return base_url('uploads/' . $filename);
+    }
+    return null;
 }
 
 function get_company_id(mysqli $conn, int $user_id): ?int
@@ -115,20 +155,44 @@ function e(?string $value): string
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
 }
 
+function _first_char(string $s): string {
+    if (function_exists('mb_substr')) {
+        return mb_strtoupper(mb_substr($s, 0, 1));
+    }
+    return strtoupper(substr($s, 0, 1));
+}
+
+/**
+ * Check if the account_status column exists in the users table.
+ */
+function has_account_status_column(): bool
+{
+    static $exists = null;
+    if ($exists === null) {
+        global $conn;
+        $result = $conn->query("SHOW COLUMNS FROM users LIKE 'account_status'");
+        $exists = $result && $result->num_rows > 0;
+    }
+    return $exists;
+}
+
 function status_badge(string $status): string
 {
     $classes = [
-        'pending' => 'bg-yellow-100 text-yellow-800',
-        'approved' => 'bg-green-100 text-green-800',
-        'rejected' => 'bg-red-100 text-red-800',
-        'completed' => 'bg-blue-100 text-blue-800',
-        'accepted' => 'bg-green-100 text-green-800',
-        'assigned' => 'bg-indigo-100 text-indigo-800',
-        'submitted' => 'bg-purple-100 text-purple-800',
-        'paid' => 'bg-emerald-100 text-emerald-800',
+        'pending' => 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
+        'approved' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+        'rejected' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+        'completed' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+        'accepted' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+        'assigned' => 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300',
+        'submitted' => 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300',
+        'paid' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
+        'active' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+        'suspended' => 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
+        'blocked' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
     ];
 
-    $class = $classes[$status] ?? 'bg-gray-100 text-gray-800';
+    $class = $classes[$status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';
 
     return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $class . '">' . e(translate_status($status)) . '</span>';
 }
