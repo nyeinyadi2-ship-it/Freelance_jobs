@@ -416,6 +416,13 @@ return [
     'chat.budget' => 'Budget',
     'chat.status' => 'Status',
     'chat.no_job_info' => 'No job info',
+    'chat.search_placeholder' => 'Search conversations...',
+    'chat.sending' => 'Sending...',
+    'chat.today' => 'Today',
+    'chat.yesterday' => 'Yesterday',
+    'chat.admin_view' => 'Admin View',
+    'chat.admin_hint' => 'As an admin, you can view all conversations but cannot send messages.',
+    'chat.online_now' => 'Online now',
 
     'notif.type.Registration' => 'Registration',
     'notif.type.Login' => 'Login',

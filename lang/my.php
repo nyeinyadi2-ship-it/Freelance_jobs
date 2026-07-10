@@ -416,6 +416,13 @@ return [
     'chat.budget' => 'ဘတ်ဂျက်',
     'chat.status' => 'အခြေအနေ',
     'chat.no_job_info' => 'အလုပ်အချက်အလက် မရှိပါ',
+    'chat.search_placeholder' => 'စကားဝိုင်းများ ရှာဖွေပါ...',
+    'chat.sending' => 'ပို့နေသည်...',
+    'chat.today' => 'ယနေ့',
+    'chat.yesterday' => 'မနေ့က',
+    'chat.admin_view' => 'Admin အမြင်',
+    'chat.admin_hint' => 'Admin အနေဖြင့် စကားဝိုင်းများကို ကြည့်ရှုနိုင်ပါသည်။',
+    'chat.online_now' => 'အွန်လိုင်း',
 
     'notif.type.Registration' => 'မှတ်ပုံတင်ခြင်း',
     'notif.type.Login' => 'အကောင့်ဝင်ခြင်း',

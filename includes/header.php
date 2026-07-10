@@ -25,7 +25,20 @@ $page_title = $page_title ?? __('app.name');
 </head>
 <body>
 <?php require __DIR__ . '/navbar.php'; ?>
+<?php if ($role === 'admin'): ?>
+<!-- Mobile sidebar overlay -->
+<div id="admin-sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden lg:!hidden"></div>
+<!-- Sidebar -->
+<aside id="admin-sidebar" class="fixed top-16 left-0 z-40 w-64 h-[calc(100vh-4rem)] transform -translate-x-full lg:translate-x-0 transition-transform duration-200 ease-in-out overflow-y-auto flex-shrink-0 border-r" style="background:var(--color-card);border-color:var(--color-border)">
+    <div class="flex flex-col h-full">
+        <?php require __DIR__ . '/../admin/includes/admin_sidebar.php'; ?>
+    </div>
+</aside>
+<main class="flex-1 lg:ml-64 min-h-[calc(100vh-4rem)]">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+<?php else: ?>
 <main class="flex-1 container mx-auto px-4 py-8 max-w-6xl">
+<?php endif; ?>
 <?php
 $flash = get_flash();
 if ($flash):

@@ -49,7 +49,7 @@ html.dark {
 }
 
 body {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: var(--color-bg);
     color: var(--color-text-primary);
 }
@@ -168,7 +168,7 @@ select.form-input option {
     animation: fadeIn .2s ease;
 }
 
-/* ===== HOME PAGE PREMIUM STYLES ===== */
+/* ===== PREMIUM UI COMPONENTS ===== */
 
 /* Hero gradient */
 .hero-gradient {
@@ -355,6 +355,37 @@ select.form-input option {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+/* ===== ADMIN SIDEBAR ===== */
+
+#admin-sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-text-placeholder) transparent;
+}
+
+#admin-sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+
+#admin-sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#admin-sidebar::-webkit-scrollbar-thumb {
+    background-color: var(--color-text-placeholder);
+    border-radius: 4px;
+}
+
+@media (min-width: 1024px) {
+    #admin-sidebar-overlay {
+        display: none !important;
+    }
+}
+
+/* Sidebar nav link hover effect */
+#admin-sidebar nav a {
+    position: relative;
 }
 
 /* ===== ADMIN COMPONENT STYLES ===== */

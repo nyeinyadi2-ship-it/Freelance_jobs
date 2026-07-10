@@ -11,7 +11,7 @@ $chat_unread = 0;
 if ($role && isset($user['user_id'])) {
     $unread_count = get_unread_notification_count($conn, (int) $user['user_id']);
     $recent_notifications = get_notifications($conn, (int) $user['user_id'], 5);
-    if (in_array($role, ['company', 'freelancer'], true)) {
+    if (in_array($role, ['company', 'freelancer', 'admin'], true)) {
         require_once __DIR__ . '/../config/chat.php';
         $chat_unread = get_unread_count($conn, (int) $user['user_id']);
     }
@@ -22,13 +22,18 @@ $is_dark = isset($_COOKIE['theme']) && $_COOKIE['theme'] === 'dark';
 <nav class="shadow-sm border-b" style="background:var(--color-nav);border-color:var(--color-border)">
     <div class="container mx-auto px-4 max-w-6xl">
         <div class="flex items-center justify-between h-16">
+            <?php if ($role === 'admin'): ?>
+                <button id="admin-sidebar-toggle" type="button" class="lg:hidden p-2 mr-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" style="color:var(--color-text-secondary)" aria-label="Toggle sidebar">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            <?php endif; ?>
             <a href="<?= e(base_url('index.php')) ?>" class="text-xl font-bold text-indigo-600"><?= e(__('app.name')) ?></a>
 
             <div class="flex items-center gap-3">
                 <?php if ($role === 'admin'): ?>
-                    <a href="<?= e(base_url('admin/admin_dashboard.php')) ?>" class="text-sm font-medium hover:text-indigo-600" style="color:var(--color-text-secondary)"><?= e(__('nav.dashboard')) ?></a>
-                    <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="text-sm font-medium hover:text-indigo-600" style="color:var(--color-text-secondary)"><?= e(__('nav.approve_jobs')) ?></a>
-                    <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="text-sm font-medium hover:text-indigo-600" style="color:var(--color-text-secondary)"><?= e(__('nav.manage_users')) ?></a>
+                    <!-- Admin nav links moved to sidebar -->
                 <?php elseif ($role === 'company'): ?>
                     <a href="<?= e(base_url('company/dashboard.php')) ?>" class="text-sm font-medium hover:text-indigo-600" style="color:var(--color-text-secondary)"><?= e(__('nav.dashboard')) ?></a>
                     <a href="<?= e(base_url('company/profile.php')) ?>" class="text-sm font-medium hover:text-indigo-600" style="color:var(--color-text-secondary)"><?= e(__('nav.profile')) ?></a>
