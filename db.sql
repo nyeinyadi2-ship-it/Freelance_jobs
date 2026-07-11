@@ -63,12 +63,29 @@ CREATE TABLE jobs (
     id INT PRIMARY KEY AUTO_INCREMENT,
     company_id INT,
     title VARCHAR(200) NOT NULL,
+    category VARCHAR(100) NOT NULL DEFAULT '',
+    experience_level ENUM('beginner', 'intermediate', 'expert') DEFAULT 'intermediate',
+    gender_requirement ENUM('any', 'male', 'female') DEFAULT 'any',
     description TEXT,
     budget DECIMAL(10, 2),
+    deadline DATETIME NULL,
+    duration VARCHAR(100) DEFAULT NULL,
+    freelancers_needed INT DEFAULT 1,
+    visibility ENUM('public', 'private') DEFAULT 'public',
+    attachment VARCHAR(255) DEFAULT NULL,
     status ENUM('pending', 'approved', 'rejected', 'completed') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 );
+
+-- 6b. Job_Skills Table (Many-to-Many: Jobs <-> Skills)
+CREATE TABLE job_skills (
+    job_id INT,
+    skill_id INT,
+    PRIMARY KEY (job_id, skill_id),
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 7. Job_Applications Table
 CREATE TABLE job_applications (

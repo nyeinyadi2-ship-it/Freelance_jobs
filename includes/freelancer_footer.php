@@ -21,7 +21,12 @@
     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
 </button>
 
+<script src="<?= e(base_url('assets/js/notification-sse.js')) ?>"></script>
 <script>
+if (typeof NotificationSSE !== 'undefined') {
+    NotificationSSE.init({ user_id: <?= (int) ($fl_uid ?? 0) ?> });
+}
+
 (function(){
     // Theme
     var tt=document.getElementById('fl-theme-toggle');

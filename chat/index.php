@@ -54,29 +54,27 @@ $unread_total = get_unread_count($conn, $user_id);
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
+    <script src="<?= e(base_url('assets/js/emoji-picker.js')) ?>"></script>
+    <script src="<?= e(base_url('assets/js/chat-websocket.js')) ?>"></script>
     <style>
         *, *::before, *::after { font-family: 'Poppins', system-ui, sans-serif; }
         html, body { height: 100%; margin: 0; overflow: hidden; }
 
-        /* Layout */
         .chat-layout { height: calc(100vh - 4rem); display: flex; }
 
-        /* Sidebar */
         .chat-sidebar {
-            width: 380px; min-width: 380px;
+            width: 460px; min-width: 460px;
             display: flex; flex-direction: column;
             background: var(--color-card);
             border-right: 1px solid var(--color-border);
             transition: transform 0.3s ease;
         }
 
-        /* Main */
         .chat-main {
             flex: 1; display: flex; flex-direction: column;
             background: var(--color-bg); min-width: 0;
         }
 
-        /* Conversation item */
         .conv-item {
             display: flex; align-items: center; gap: 12px;
             padding: 14px 20px;
@@ -92,7 +90,6 @@ $unread_total = get_unread_count($conn, $user_id);
             border-left: 3px solid #6366f1;
         }
 
-        /* Avatar */
         .avatar {
             width: 48px; height: 48px; border-radius: 50%;
             object-fit: cover; flex-shrink: 0;
@@ -110,7 +107,6 @@ $unread_total = get_unread_count($conn, $user_id);
         .avatar-sm { width: 36px; height: 36px; font-size: 14px; }
         .avatar-xs { width: 28px; height: 28px; font-size: 11px; }
 
-        /* Online indicator */
         .online-dot {
             width: 12px; height: 12px; border-radius: 50%;
             position: absolute; bottom: 0; right: 0;
@@ -119,15 +115,13 @@ $unread_total = get_unread_count($conn, $user_id);
         .online-dot.online { background: #22c55e; }
         .online-dot.offline { background: #9ca3af; }
 
-        /* Messages container */
         .chat-messages {
             flex: 1; overflow-y: auto; padding: 20px;
             background: linear-gradient(180deg, var(--color-bg) 0%, rgba(99,102,241,0.02) 100%);
         }
 
-        /* Message bubble */
         .msg-bubble {
-            max-width: 70%; padding: 10px 16px;
+            max-width: 75%; padding: 10px 16px;
             border-radius: 18px; word-wrap: break-word;
             white-space: pre-wrap; position: relative;
             animation: msgIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -149,7 +143,6 @@ $unread_total = get_unread_count($conn, $user_id);
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
         }
 
-        /* Date separator */
         .date-separator {
             display: flex; align-items: center; gap: 12px;
             margin: 20px 0; font-size: 12px; color: var(--color-text-placeholder);
@@ -159,13 +152,11 @@ $unread_total = get_unread_count($conn, $user_id);
             background: var(--color-border);
         }
 
-        /* Input area */
         .chat-input-area {
             border-top: 1px solid var(--color-border);
             padding: 16px 20px; background: var(--color-card);
         }
 
-        /* Search */
         .search-box {
             background: var(--color-bg); border: 1px solid var(--color-border);
             border-radius: 12px; padding: 10px 14px;
@@ -177,7 +168,6 @@ $unread_total = get_unread_count($conn, $user_id);
             outline: none;
         }
 
-        /* Send button */
         .send-btn {
             width: 44px; height: 44px; border-radius: 14px;
             display: flex; align-items: center; justify-content: center;
@@ -188,14 +178,12 @@ $unread_total = get_unread_count($conn, $user_id);
         .send-btn:hover { transform: scale(1.05); box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35); }
         .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
-        /* Empty state */
         .empty-state {
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
             height: 100%; text-align: center; padding: 40px;
         }
 
-        /* Unread badge */
         .unread-badge {
             min-width: 20px; height: 20px; padding: 0 6px;
             border-radius: 10px; font-size: 11px; font-weight: 700;
@@ -204,7 +192,6 @@ $unread_total = get_unread_count($conn, $user_id);
             color: white;
         }
 
-        /* Scrollbar */
         .chat-messages::-webkit-scrollbar,
         .conv-list::-webkit-scrollbar { width: 5px; }
         .chat-messages::-webkit-scrollbar-track,
@@ -214,7 +201,6 @@ $unread_total = get_unread_count($conn, $user_id);
             background: var(--color-border); border-radius: 10px;
         }
 
-        /* Typing indicator */
         .typing-dots { display: flex; gap: 3px; padding: 4px 0; }
         .typing-dots span {
             width: 6px; height: 6px; border-radius: 50%;
@@ -228,16 +214,18 @@ $unread_total = get_unread_count($conn, $user_id);
             40% { transform: scale(1); opacity: 1; }
         }
 
-        /* Mobile */
+        @media (max-width: 1024px) {
+            .chat-sidebar { width: 380px; min-width: 380px; }
+        }
+
         @media (max-width: 768px) {
             .chat-sidebar { position: absolute; width: 100%; min-width: 100%; z-index: 20; height: calc(100vh - 4rem); }
             .chat-sidebar.hidden-mobile { display: none; }
             .chat-main.hidden-mobile { display: none; }
             .chat-main { width: 100%; position: relative; z-index: 10; }
-            .msg-bubble { max-width: 85%; }
+            .msg-bubble { max-width: 88%; }
         }
 
-        /* Role badge */
         .role-badge {
             display: inline-flex; align-items: center; gap: 4px;
             padding: 2px 8px; border-radius: 6px;
@@ -247,6 +235,13 @@ $unread_total = get_unread_count($conn, $user_id);
         .role-badge.company { background: rgba(99,102,241,0.1); color: #6366f1; }
         .role-badge.freelancer { background: rgba(16,185,129,0.1); color: #10b981; }
         .role-badge.admin { background: rgba(245,158,11,0.1); color: #f59e0b; }
+
+        .msg-img-attachment {
+            border-radius: 12px; max-width: 260px; max-height: 200px;
+            object-fit: cover; cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .msg-img-attachment:hover { transform: scale(1.02); }
     </style>
 </head>
 <body class="bg-white dark:bg-slate-900">
@@ -255,7 +250,6 @@ $unread_total = get_unread_count($conn, $user_id);
 <div class="chat-layout">
     <!-- ===== SIDEBAR ===== -->
     <div class="chat-sidebar <?= $other_id > 0 ? 'hidden-mobile' : '' ?>" id="convSidebar">
-        <!-- Header -->
         <div class="p-5" style="border-bottom:1px solid var(--color-border)">
             <div class="flex items-center justify-between mb-4">
                 <div>
@@ -266,15 +260,12 @@ $unread_total = get_unread_count($conn, $user_id);
                     <span class="unread-badge"><?= $unread_total > 99 ? '99+' : $unread_total ?></span>
                 <?php endif; ?>
             </div>
-
-            <!-- Search -->
             <div class="relative">
                 <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                 <input type="text" id="convSearch" placeholder="Search conversations..." class="search-box w-full pl-10 pr-4 text-sm" style="color:var(--color-text-primary)">
             </div>
         </div>
 
-        <!-- Conversation List -->
         <div class="conv-list flex-1 overflow-y-auto" id="convList">
             <?php if (empty($conversations)): ?>
                 <div class="empty-state p-6">
@@ -297,7 +288,6 @@ $unread_total = get_unread_count($conn, $user_id);
                        class="conv-item <?= $is_active ? 'active' : '' ?>"
                        data-name="<?= e(strtolower($conv['other_display_name'] ?? $conv['other_username'])) ?>"
                        data-message="<?= e(strtolower($conv['last_message'] ?? '')) ?>">
-                        <!-- Avatar -->
                         <div class="relative flex-shrink-0">
                             <?php if (!empty($conv['other_profile_image'])): ?>
                                 <img src="<?= e(base_url('uploads/' . $conv['other_profile_image'])) ?>" alt="" class="avatar">
@@ -306,8 +296,6 @@ $unread_total = get_unread_count($conn, $user_id);
                             <?php endif; ?>
                             <span class="online-dot <?= !empty($conv['is_online']) ? 'online' : 'offline' ?>"></span>
                         </div>
-
-                        <!-- Info -->
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center justify-between mb-1">
                                 <div class="flex items-center gap-2 min-w-0">
@@ -340,14 +328,10 @@ $unread_total = get_unread_count($conn, $user_id);
         <?php if ($other_id > 0 && $partner): ?>
             <?php $initial = strtoupper(mb_substr($partner['display_name'] ?? $partner['username'], 0, 1)); ?>
 
-            <!-- Chat Header -->
             <div class="flex items-center gap-3 px-5 py-3.5" style="background:var(--color-card);border-bottom:1px solid var(--color-border)">
-                <!-- Back button (mobile) -->
                 <button type="button" class="md:hidden p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" onclick="toggleMobileView()" aria-label="Back">
                     <svg class="w-5 h-5" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
                 </button>
-
-                <!-- Partner avatar -->
                 <div class="relative flex-shrink-0">
                     <?php if (!empty($partner['profile_image'])): ?>
                         <img src="<?= e(base_url('uploads/' . $partner['profile_image'])) ?>" alt="" class="avatar-sm avatar">
@@ -356,8 +340,6 @@ $unread_total = get_unread_count($conn, $user_id);
                     <?php endif; ?>
                     <span class="online-dot <?= !empty($partner['is_online']) ? 'online' : 'offline' ?>" style="width:10px;height:10px;border-width:2px"></span>
                 </div>
-
-                <!-- Partner info -->
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2">
                         <h2 class="font-semibold text-sm truncate" style="color:var(--color-text-primary)"><?= e($partner['display_name'] ?? $partner['username']) ?></h2>
@@ -366,12 +348,10 @@ $unread_total = get_unread_count($conn, $user_id);
                         <?php endif; ?>
                     </div>
                     <p class="text-xs flex items-center gap-1.5" style="<?= !empty($partner['is_online']) ? 'color:#22c55e' : 'color:var(--color-text-placeholder)' ?>">
-                        <span class="w-1.5 h-1.5 rounded-full" style="background:<?= !empty($partner['is_online']) ? '#22c55e' : '#9ca3af' ?>; display:inline-block"></span>
+                        <span class="w-1.5 h-1.5 rounded-full inline-block" style="background:<?= !empty($partner['is_online']) ? '#22c55e' : '#9ca3af' ?>"></span>
                         <?= !empty($partner['is_online']) ? 'Online now' : 'Offline' ?>
                     </p>
                 </div>
-
-                <!-- Actions -->
                 <div class="flex items-center gap-1">
                     <a href="<?= e(base_url('chat/index.php')) ?>" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" style="color:var(--color-text-muted)" title="Refresh">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
@@ -379,7 +359,6 @@ $unread_total = get_unread_count($conn, $user_id);
                 </div>
             </div>
 
-            <!-- Messages Area -->
             <div class="chat-messages" id="chatMessages">
                 <div class="text-center py-8" id="loadingMessages">
                     <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full" style="background:var(--color-card);border:1px solid var(--color-border)">
@@ -389,29 +368,40 @@ $unread_total = get_unread_count($conn, $user_id);
                 </div>
             </div>
 
-            <!-- Input Area -->
+            <div id="typingIndicator" class="px-5 py-2 hidden" style="background:var(--color-card);border-top:1px solid var(--color-border)">
+                <div class="flex items-center gap-2 text-xs" style="color:var(--color-text-muted)">
+                    <div class="typing-dots"><span></span><span></span><span></span></div>
+                    <span id="typingText">typing...</span>
+                </div>
+            </div>
+
             <div class="chat-input-area">
                 <form id="messageForm">
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="receiver_id" value="<?= $other_id ?>">
-                    <div class="flex items-end gap-3">
+                    <div class="flex items-end gap-2">
+                        <button type="button" id="emojiBtn" class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style="color:var(--color-text-muted);background:none;border:none;cursor:pointer;" title="Emoji">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </button>
+                        <button type="button" id="attachBtn" class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style="color:var(--color-text-muted);background:none;border:none;cursor:pointer;" title="Attach file">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        </button>
+                        <input type="file" id="fileInput" name="attachment" style="display:none" accept="image/*,.pdf,.docx,.zip,.rar,.txt,.csv,.xlsx,.pptx">
                         <div class="flex-1 min-w-0">
                             <textarea id="messageInput" rows="1" placeholder="<?= e(__('chat.placeholder')) ?>"
                                 class="w-full px-4 py-3 text-sm rounded-2xl resize-none focus:outline-none transition-all"
                                 style="max-height:120px; background:var(--color-bg); border:1px solid var(--color-border); color:var(--color-text-primary);"
-                                oninput="autoResize(this)"
-                                onfocus="this.style.borderColor='#6366f1';this.style.boxShadow='0 0 0 3px rgba(99,102,241,0.1)'"
-                                onblur="this.style.borderColor='var(--color-border)';this.style.boxShadow='none'"></textarea>
+                                oninput="autoResize(this)"></textarea>
                         </div>
-                        <button type="submit" class="send-btn" id="sendBtn" disabled>
+                        <button type="submit" class="send-btn" id="sendBtn">
                             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
                         </button>
                     </div>
                 </form>
+                <div id="filePreview" class="hidden mt-2"></div>
             </div>
 
         <?php else: ?>
-            <!-- Empty state -->
             <div class="empty-state">
                 <div class="w-28 h-28 rounded-full flex items-center justify-center mb-6" style="background:linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))">
                     <svg class="w-14 h-14 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
@@ -431,38 +421,6 @@ $unread_total = get_unread_count($conn, $user_id);
 
 <script>
 (function() {
-    // Theme toggle
-    var themeToggle = document.getElementById('theme-toggle');
-    var html = document.documentElement;
-    if (themeToggle) {
-        themeToggle.addEventListener('click', function() {
-            var isDark = html.classList.toggle('dark');
-            localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        });
-    }
-
-    // Conversation search
-    var searchInput = document.getElementById('convSearch');
-    if (searchInput) {
-        var searchTimeout;
-        searchInput.addEventListener('input', function() {
-            var q = this.value.trim().toLowerCase();
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(function() {
-                var items = document.querySelectorAll('.conv-item');
-                items.forEach(function(item) {
-                    var name = item.getAttribute('data-name') || '';
-                    var msg = item.getAttribute('data-message') || '';
-                    if (q === '' || name.indexOf(q) !== -1 || msg.indexOf(q) !== -1) {
-                        item.style.display = '';
-                    } else {
-                        item.style.display = 'none';
-                    }
-                });
-            }, 200);
-        });
-    }
-
     <?php if ($other_id > 0 && $partner): ?>
     var currentUserId = <?= $user_id ?>;
     var otherUserId = <?= $other_id ?>;
@@ -470,7 +428,8 @@ $unread_total = get_unread_count($conn, $user_id);
     var isAdmin = <?= $role === 'admin' ? 'true' : 'false' ?>;
     var pollInterval = null;
     var lastMessageIds = '';
-    var lastCount = 0;
+    var typingTimeout = null;
+    var isTyping = false;
 
     function escapeHtml(text) {
         if (!text) return '';
@@ -481,9 +440,9 @@ $unread_total = get_unread_count($conn, $user_id);
 
     function formatTime(ts) {
         if (!ts) return '';
-        var t = ts.substring(11, 16);
-        var h = parseInt(t.substring(0, 2));
-        var m = t.substring(2);
+        var hhmm = ts.substring(11, 16);
+        var h = parseInt(hhmm.substring(0, 2), 10);
+        var m = hhmm.substring(3, 5);
         var ampm = h >= 12 ? 'PM' : 'AM';
         h = h % 12 || 12;
         return h + ':' + m + ' ' + ampm;
@@ -495,17 +454,47 @@ $unread_total = get_unread_count($conn, $user_id);
         var today = new Date();
         var yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-
         if (d.toDateString() === today.toDateString()) return 'Today';
         if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
         var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
     }
 
+    function buildAttachmentHtml(msg) {
+        var html = '';
+        if (msg.attachments && msg.attachments.length > 0) {
+            msg.attachments.forEach(function(file) {
+                var ext = (file.file_name.split('.').pop() || '').toLowerCase();
+                var isImage = ['jpg','jpeg','png','gif','webp','svg'].indexOf(ext) !== -1;
+                var fileUrl = file.file_url || (baseUrl + 'uploads/' + (file.file_path || ''));
+                var displaySize = file.file_size_formatted || '';
+
+                html += '<div class="mb-1">';
+                if (isImage && fileUrl) {
+                    html += '<a href="' + fileUrl + '" target="_blank" class="block rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 mb-1">';
+                    html += '<img src="' + fileUrl + '" alt="' + escapeHtml(file.file_name) + '" class="msg-img-attachment w-full" loading="lazy">';
+                    html += '</a>';
+                }
+                html += '<a href="' + fileUrl + '" target="_blank" class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium transition-colors" style="background:rgba(255,255,255,0.15);color:inherit">';
+                html += '<span>' + (isImage ? '🖼️' : '📎') + '</span>';
+                html += '<span>' + escapeHtml(file.file_name) + '</span>';
+                if (displaySize) html += '<span class="opacity-60">(' + displaySize + ')</span>';
+                html += '</a></div>';
+            });
+        }
+        return html;
+    }
+
     function buildMessageHtml(msg) {
         var isSent = parseInt(msg.sender_id) === currentUserId;
         var time = formatTime(msg.created_at);
         var name = msg.sender_username || 'Unknown';
+        var isSystem = msg.message_type === 'system';
+        var hasAttachments = msg.attachments && msg.attachments.length > 0;
+
+        if (isSystem) {
+            return '<div class="text-center my-3"><span class="inline-block px-3 py-1 text-xs rounded-full" style="background:var(--color-card);color:var(--color-text-muted);border:1px solid var(--color-border)">' + escapeHtml(msg.message) + '</span></div>';
+        }
 
         var html = '<div class="mb-3 flex items-end gap-2 ' + (isSent ? 'justify-end' : 'justify-start') + '" data-id="' + msg.id + '">';
 
@@ -519,26 +508,27 @@ $unread_total = get_unread_count($conn, $user_id);
             html += '</div>';
         }
 
-        html += '<div class="max-w-[70%]">';
+        html += '<div class="max-w-[75%]">';
         if (!isSent) {
             html += '<p class="text-xs mb-1 ml-1 font-medium" style="color:var(--color-text-muted)">' + escapeHtml(name) + '</p>';
         }
         html += '<div class="msg-bubble ' + (isSent ? 'msg-sent' : 'msg-received') + '">';
-        html += '<div class="text-sm leading-relaxed">' + escapeHtml(msg.message) + '</div>';
+        if (hasAttachments) {
+            html += buildAttachmentHtml(msg);
+        }
+        if (msg.message) {
+            html += '<div class="text-sm leading-relaxed ' + (hasAttachments ? 'mt-1' : '') + '">' + escapeHtml(msg.message) + '</div>';
+        }
         html += '<div class="flex items-center gap-1 mt-1 ' + (isSent ? 'justify-end' : 'justify-start') + '">';
         html += '<span class="text-xs opacity-60">' + time + '</span>';
         if (isSent) {
-            if (msg.status === 'read') {
-                html += '<span class="text-xs" style="color:rgba(196,181,253,0.9)">&#10003;&#10003;</span>';
-            } else {
-                html += '<span class="text-xs" style="color:rgba(196,181,253,0.5)">&#10003;</span>';
-            }
+            html += '<span class="text-xs" style="color:' + (msg.status === 'read' ? 'rgba(196,181,253,0.9)' : 'rgba(196,181,253,0.5)') + '">' + (msg.status === 'read' ? '\u2713\u2713' : '\u2713') + '</span>';
         }
         html += '</div></div></div></div>';
         return html;
     }
 
-    function loadMessages(scroll) {
+    function loadMessages(scrollToBottom) {
         fetch('<?= e(base_url('api/chat.php')) ?>?action=get_messages&user_id=' + otherUserId, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
@@ -547,24 +537,24 @@ $unread_total = get_unread_count($conn, $user_id);
             var loading = document.getElementById('loadingMessages');
             if (loading) loading.style.display = 'none';
 
+            var container = document.getElementById('chatMessages');
+
             if (!data.messages || data.messages.length === 0) {
-                var container = document.getElementById('chatMessages');
                 container.innerHTML = '<div class="empty-state py-12"><div class="w-16 h-16 rounded-full flex items-center justify-center mb-3" style="background:linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))"><svg class="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></div><p class="text-sm font-medium" style="color:var(--color-text-muted)">No messages yet</p><p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Say hello!</p></div>';
                 lastMessageIds = '';
-                lastCount = 0;
                 return;
             }
 
             var newIds = data.messages.map(function(m) { return m.id; }).join(',');
-            var newCount = data.messages.length;
             if (newIds === lastMessageIds) return;
-
             lastMessageIds = newIds;
-            lastCount = newCount;
+
+            var wasAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 80;
+            var prevScrollTop = container.scrollTop;
+            var prevScrollHeight = container.scrollHeight;
 
             var html = '';
             var lastDate = '';
-
             data.messages.forEach(function(msg) {
                 var msgDate = formatDateSeparator(msg.created_at);
                 if (msgDate !== lastDate) {
@@ -574,66 +564,279 @@ $unread_total = get_unread_count($conn, $user_id);
                 html += buildMessageHtml(msg);
             });
 
-            var container = document.getElementById('chatMessages');
-            var wasAtBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 50;
             container.innerHTML = html;
 
-            if (scroll !== false || wasAtBottom) {
+            if (scrollToBottom === true) {
                 container.scrollTop = container.scrollHeight;
+            } else if (wasAtBottom) {
+                container.scrollTop = container.scrollHeight;
+            } else {
+                container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
             }
+
+            // Mark as read
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '<?= e(base_url('api/chat.php')) ?>', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.send(JSON.stringify({ action: 'mark_read', user_id: otherUserId, csrf_token: csrfToken }));
         })
         .catch(function(err) {
             console.error('Chat error:', err);
         });
     }
 
+    function sendTyping(isTypingNow) {
+        if (typeof ChatWS !== 'undefined' && ChatWS.isConnected && ChatWS.isConnected() && !ChatWS.isFallback()) {
+            ChatWS.send({ action: 'typing', partner_id: otherUserId, is_typing: isTypingNow ? 1 : 0 });
+        } else {
+            fetch('<?= e(base_url('api/chat.php')) ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ action: 'set_typing', partner_id: otherUserId, is_typing: isTypingNow ? 1 : 0, csrf_token: csrfToken })
+            }).catch(function() {});
+        }
+    }
+
+    function showTypingIndicator(partnerName) {
+        var el = document.getElementById('typingIndicator');
+        if (el) {
+            el.classList.remove('hidden');
+            document.getElementById('typingText').textContent = partnerName + ' typing...';
+        }
+    }
+
+    function hideTypingIndicator() {
+        var el = document.getElementById('typingIndicator');
+        if (el) el.classList.add('hidden');
+    }
+
+    function clearSendInput() {
+        var input = document.getElementById('messageInput');
+        input.value = '';
+        input.style.height = 'auto';
+        var btn = document.getElementById('sendBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>';
+        var fi = document.getElementById('fileInput');
+        if (fi) { fi.value = ''; }
+        clearFilePreview();
+    }
+
     function sendMessage(e) {
-        e.preventDefault();
+        if (e) e.preventDefault();
         var input = document.getElementById('messageInput');
         var message = input.value.trim();
-        if (!message) return;
+        var fileInput = document.getElementById('fileInput');
+        var file = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
+
+        if (!message && !file) return;
 
         var btn = document.getElementById('sendBtn');
         btn.disabled = true;
         btn.innerHTML = '<div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>';
 
-        fetch('<?= e(base_url('api/chat.php')) ?>', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ action: 'send_message', receiver_id: otherUserId, message: message, csrf_token: csrfToken })
-        })
-        .then(function(r) {
-            if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Failed'); });
-            return r.json();
-        })
-        .then(function(data) {
-            if (data.success) {
-                input.value = '';
-                input.style.height = 'auto';
-                loadMessages(true);
-            } else {
-                alert(data.error || 'Failed to send message');
-            }
-        })
-        .catch(function(err) {
-            alert(err.message || 'Connection error');
-            console.error('Send error:', err);
-        })
-        .finally(function() {
-            btn.innerHTML = '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>';
-            btn.disabled = !document.getElementById('messageInput').value.trim();
-        });
+        if (file) {
+            var formData = new FormData();
+            formData.append('action', 'send_message');
+            formData.append('receiver_id', otherUserId);
+            formData.append('message', message);
+            formData.append('attachment', file);
+            formData.append('csrf_token', csrfToken);
+            formData.append('message_type', 'file');
+
+            fetch('<?= e(base_url('api/chat.php')) ?>', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    clearSendInput();
+                    loadMessages(true);
+                } else {
+                    alert(data.error || 'Failed to send file');
+                }
+            })
+            .catch(function(err) {
+                console.error('Upload error:', err);
+            })
+            .finally(function() {
+                btn.innerHTML = '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>';
+            });
+        } else if (typeof ChatWS !== 'undefined' && ChatWS.isConnected && ChatWS.isConnected() && !ChatWS.isFallback()) {
+            ChatWS.send({
+                action: 'message',
+                receiver_id: otherUserId,
+                message: message,
+                message_type: 'text',
+                temp_id: 'tmp_' + Date.now()
+            });
+            clearSendInput();
+        } else {
+            fetch('<?= e(base_url('api/chat.php')) ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ action: 'send_message', receiver_id: otherUserId, message: message, csrf_token: csrfToken })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    clearSendInput();
+                    loadMessages(true);
+                } else {
+                    alert(data.error || 'Failed to send message');
+                }
+            })
+            .catch(function(err) {
+                alert(err.message || 'Connection error');
+                console.error('Send error:', err);
+            })
+            .finally(function() {
+                btn.innerHTML = '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>';
+            });
+        }
     }
 
     function autoResize(el) {
         el.style.height = 'auto';
         el.style.height = Math.min(el.scrollHeight, 120) + 'px';
         var btn = document.getElementById('sendBtn');
-        btn.disabled = !el.value.trim();
+        var fileInput = document.getElementById('fileInput');
+        btn.disabled = !el.value.trim() && (!fileInput || fileInput.files.length === 0);
+
+        if (el.value.trim() && !isTyping) {
+            isTyping = true;
+            sendTyping(true);
+        }
+        if (typingTimeout) clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(function() {
+            if (isTyping) {
+                isTyping = false;
+                sendTyping(false);
+            }
+        }, 2000);
     }
     window.autoResize = autoResize;
 
-    // Init
+    // === EMOJI PICKER ===
+    var emojiBtn = document.getElementById('emojiBtn');
+    if (emojiBtn) {
+        emojiBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (typeof EmojiPicker !== 'undefined' && EmojiPicker.toggle) {
+                EmojiPicker.toggle(emojiBtn, function(emoji) {
+                    var input = document.getElementById('messageInput');
+                    var start = input.selectionStart;
+                    var end = input.selectionEnd;
+                    var text = input.value;
+                    input.value = text.substring(0, start) + emoji + text.substring(end);
+                    input.selectionStart = input.selectionEnd = start + emoji.length;
+                    input.focus();
+                    autoResize(input);
+                });
+            }
+        });
+    }
+
+    // === FILE ATTACHMENT ===
+    var attachBtn = document.getElementById('attachBtn');
+    var fileInput = document.getElementById('fileInput');
+    if (attachBtn && fileInput) {
+        attachBtn.addEventListener('click', function() {
+            fileInput.click();
+        });
+        fileInput.addEventListener('change', function() {
+            var file = this.files[0];
+            if (!file) { clearFilePreview(); return; }
+            showFilePreview(file);
+            document.getElementById('sendBtn').disabled = false;
+        });
+    }
+
+    function showFilePreview(file) {
+        var preview = document.getElementById('filePreview');
+        if (!preview) return;
+        preview.classList.remove('hidden');
+        var isImage = file.type.startsWith('image/');
+        var size = (file.size / 1024).toFixed(1) + ' KB';
+        if (file.size > 1048576) size = (file.size / 1048576).toFixed(1) + ' MB';
+
+        var html = '<div class="flex items-center gap-3 p-2 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">';
+        if (isImage) {
+            html += '<div class="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100"><img src="' + URL.createObjectURL(file) + '" class="w-full h-full object-cover"></div>';
+        } else {
+            html += '<div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 text-lg" style="background:linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1))">📎</div>';
+        }
+        html += '<div class="flex-1 min-w-0"><p class="text-xs font-medium truncate" style="color:var(--color-text-primary)">' + escapeHtml(file.name) + '</p><p class="text-xs" style="color:var(--color-text-muted)">' + size + '</p></div>';
+        html += '<button type="button" onclick="clearFilePreview()" class="flex-shrink-0 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" style="color:var(--color-text-muted)"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>';
+        html += '</div>';
+        preview.innerHTML = html;
+    }
+
+    window.clearFilePreview = function() {
+        var preview = document.getElementById('filePreview');
+        if (preview) { preview.classList.add('hidden'); preview.innerHTML = ''; }
+        if (fileInput) fileInput.value = '';
+        var btn = document.getElementById('sendBtn');
+        btn.disabled = !document.getElementById('messageInput').value.trim();
+    };
+
+    // === WEBSOCKET EVENTS ===
+    if (typeof ChatWS !== 'undefined') {
+        ChatWS.init({
+            user_id: currentUserId,
+            csrf_token: csrfToken,
+            ws_url: 'ws://localhost:8080',
+            fallback: false
+        });
+
+        ChatWS.on('new_message', function(data) {
+            if (data.from_user_id === otherUserId) {
+                loadMessages(true);
+            }
+        });
+
+        ChatWS.on('message_sent', function(data) {
+            loadMessages(true);
+        });
+
+        ChatWS.on('typing', function(data) {
+            if (data.user_id === otherUserId) {
+                if (data.is_typing) {
+                    showTypingIndicator('<?= e($partner['display_name'] ?? $partner['username']) ?>');
+                } else {
+                    hideTypingIndicator();
+                }
+            }
+        });
+
+        ChatWS.on('user_status', function(data) {
+            if (data.user_id === otherUserId) {
+                var statusEl = document.querySelector('.chat-main .online-dot');
+                if (statusEl) {
+                    statusEl.className = 'online-dot ' + (data.is_online ? 'online' : 'offline');
+                }
+            }
+        });
+    }
+
+    // === SCROLL MARK READ ===
+    var chatMessages = document.getElementById('chatMessages');
+    if (chatMessages) {
+        chatMessages.addEventListener('scroll', function() {
+            if (this.scrollTop + this.clientHeight >= this.scrollHeight - 100) {
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '<?= e(base_url('api/chat.php')) ?>', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                xhr.send(JSON.stringify({ action: 'mark_read', user_id: otherUserId, csrf_token: csrfToken }));
+            }
+        });
+    }
+
+    // === INIT ===
     loadMessages(true);
     document.getElementById('messageForm').addEventListener('submit', sendMessage);
     document.getElementById('messageInput').addEventListener('keydown', function(e) {
@@ -642,16 +845,37 @@ $unread_total = get_unread_count($conn, $user_id);
             sendMessage(e);
         }
     });
+    document.getElementById('messageInput').focus();
 
-    // Poll every 3 seconds
-    pollInterval = setInterval(function() { loadMessages(false); }, 3000);
+    pollInterval = setInterval(function() {
+        if (typeof ChatWS === 'undefined' || ChatWS.isFallback() || !ChatWS.isConnected()) {
+            loadMessages(false);
+        }
+    }, 2000);
 
     window.addEventListener('beforeunload', function() {
         if (pollInterval) clearInterval(pollInterval);
+        if (typeof ChatWS !== 'undefined' && ChatWS.disconnect) ChatWS.disconnect();
     });
     <?php endif; ?>
 
-    // Mobile toggle
+    // Search
+    var searchInput = document.getElementById('convSearch');
+    if (searchInput) {
+        var searchTimeout;
+        searchInput.addEventListener('input', function() {
+            var q = this.value.trim().toLowerCase();
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                document.querySelectorAll('.conv-item').forEach(function(item) {
+                    var name = item.getAttribute('data-name') || '';
+                    var msg = item.getAttribute('data-message') || '';
+                    item.style.display = (q === '' || name.indexOf(q) !== -1 || msg.indexOf(q) !== -1) ? '' : 'none';
+                });
+            }, 200);
+        });
+    }
+
     window.toggleMobileView = function() {
         var sidebar = document.getElementById('convSidebar');
         var main = document.getElementById('chatMain');

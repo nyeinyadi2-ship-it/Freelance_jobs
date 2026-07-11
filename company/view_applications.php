@@ -159,7 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $stmt->close();
 
                 if ($fl_user) {
-                    create_notification($conn, (int) $fl_user['id'], 'payment', "Payment of \${$amount} for \"{$job['title']}\" has been processed.", 'freelancer/my_tasks.php');
+                    create_notification($conn, (int) $fl_user['id'], 'work_approved', "Your work for \"{$job['title']}\" has been approved.", 'freelancer/my_tasks.php');
+                    create_notification($conn, (int) $fl_user['id'], 'payment_released', "Payment of \${$amount} for \"{$job['title']}\" has been released.", 'freelancer/my_tasks.php');
                 }
 
                 $conn->commit();
@@ -170,6 +171,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             }
         } else {
             set_flash('error', __('error.assignment_not_ready'));
+        }
+    } elseif ($action === 'request_revision') {
+        $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
+
+        $stmt = $conn->prepare("
+            SELECT a.id, a.status, j.title
+            FROM assignments a
+            JOIN jobs j ON a.job_id = j.id
+            WHERE a.id = ? AND a.job_id = ? AND j.company_id = ? AND a.status = 'submitted'
+        ");
+        $stmt->bind_param('iii', $assignment_id, $job_id, $company_id);
+        $stmt->execute();
+        $assignment = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($assignment) {
+            $stmt = $conn->prepare("UPDATE assignments SET status = 'assigned', submission_link = NULL WHERE id = ?");
+            $stmt->bind_param('i', $assignment_id);
+            $stmt->execute();
+            $stmt->close();
+
+            $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.id = ?");
+            $stmt->bind_param('i', $assignment_id);
+            $stmt->execute();
+            $fl_user = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if ($fl_user) {
+                create_notification($conn, (int) $fl_user['id'], 'revision_requested', "Revision requested for \"{$job['title']}\". Please update and resubmit your work.", 'freelancer/my_tasks.php');
+            }
+
+            set_flash('success', 'Revision requested. Freelancer has been notified.');
+        } else {
+            set_flash('error', 'Assignment is not in submitted status.');
         }
     }
 
@@ -240,15 +275,26 @@ require __DIR__ . '/../includes/header.php';
         <?php endif; ?>
 
         <?php if ($assignment['status'] === 'submitted'): ?>
-            <form method="POST" class="mt-4">
-                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                <input type="hidden" name="job_id" value="<?= $job_id ?>">
-                <input type="hidden" name="action" value="complete_payment">
-                <input type="hidden" name="assignment_id" value="<?= (int) $assignment['id'] ?>">
-                <button type="submit" class="btn-primary" onclick="return confirm('<?= __('company.confirm_pay') ?>')">
-                    <?= __('company.approve_pay', [':amount' => number_format((float) $job['budget'], 2)]) ?>
-                </button>
-            </form>
+            <div class="flex flex-wrap items-center gap-3 mt-4">
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                    <input type="hidden" name="action" value="complete_payment">
+                    <input type="hidden" name="assignment_id" value="<?= (int) $assignment['id'] ?>">
+                    <button type="submit" class="btn-primary" onclick="return confirm('<?= __('company.confirm_pay') ?>')">
+                        <?= __('company.approve_pay', [':amount' => number_format((float) $job['budget'], 2)]) ?>
+                    </button>
+                </form>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                    <input type="hidden" name="action" value="request_revision">
+                    <input type="hidden" name="assignment_id" value="<?= (int) $assignment['id'] ?>">
+                    <button type="submit" class="btn-secondary" onclick="return confirm('Request revision? The freelancer will be notified to revise the work.')">
+                        Request Revision
+                    </button>
+                </form>
+            </div>
         <?php elseif ($payment): ?>
             <p class="mt-2 text-sm" style="color:var(--color-text-secondary)">
                 <?= __('company.payment') ?>: <?= status_badge($payment['status']) ?>

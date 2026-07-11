@@ -275,6 +275,43 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php
+// Recent notifications
+$admin_user = current_user();
+$admin_notifs = [];
+if ($admin_user) {
+    try {
+        $admin_notifs = get_notifications($conn, (int) $admin_user['user_id'], 5);
+    } catch (Exception $e) {}
+}
+?>
+<div class="card admin-fade mb-8">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold" style="color:var(--color-text-primary)">Recent Notifications</h3>
+        <a href="<?= e(base_url('notifications.php')) ?>" class="text-xs text-indigo-600 hover:underline">View All →</a>
+    </div>
+    <?php if (empty($admin_notifs)): ?>
+        <p class="text-sm text-center py-8" style="color:var(--color-text-muted)">No notifications yet.</p>
+    <?php else: ?>
+        <div class="space-y-0">
+            <?php foreach ($admin_notifs as $n): ?>
+                <div class="activity-item <?= $n['is_read'] ? '' : 'bg-indigo-50/50 dark:bg-indigo-900/20' ?>">
+                    <div class="flex-shrink-0"><?= notification_icon($n['type']) ?></div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm truncate <?= $n['is_read'] ? '' : 'font-semibold' ?>" style="color:var(--color-text-primary)"><?= e($n['message']) ?></p>
+                        <p class="text-xs" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
+                    </div>
+                    <?php if ($n['link']): ?>
+                        <a href="<?= e(base_url($n['link'])) ?>" class="text-indigo-600 hover:text-indigo-700 flex-shrink-0">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                        </a>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
 <script>
 (function() {
     // Admin fade-in animations

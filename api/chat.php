@@ -51,7 +51,7 @@ if ($method === 'GET') {
         if ($role !== 'admin') {
             mark_as_read($conn, $user_id, $other_id);
         }
-        echo json_encode(['messages' => get_messages($conn, $user_id, $other_id, $offset)]);
+        echo json_encode(['messages' => get_messages_enhanced($conn, $user_id, $other_id, $offset)]);
         exit;
     }
 
@@ -72,7 +72,11 @@ if ($method === 'GET') {
             echo json_encode(['error' => 'Access denied']);
             exit;
         }
-        echo json_encode(['user' => get_partner_info($conn, $user_id, $other_id)]);
+        $partner = get_partner_info($conn, $user_id, $other_id);
+        if ($partner) {
+            $partner['last_seen_text'] = get_last_seen_text($partner['last_activity'], $partner['is_online'] ?? null);
+        }
+        echo json_encode(['user' => $partner]);
         exit;
     }
 
@@ -82,14 +86,44 @@ if ($method === 'GET') {
         exit;
     }
 
+    if ($action === 'typing_status') {
+        $partner_id = (int) ($_GET['partner_id'] ?? 0);
+        if ($partner_id <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid partner ID']);
+            exit;
+        }
+        echo json_encode(['is_typing' => get_typing_status($conn, $user_id, $partner_id)]);
+        exit;
+    }
+
+    if ($action === 'get_notifications') {
+        require_once __DIR__ . '/../config/notifications.php';
+        $limit = min((int) ($_GET['limit'] ?? 5), 20);
+        echo json_encode([
+            'notifications' => get_notifications($conn, $user_id, $limit),
+            'count' => get_unread_notification_count($conn, $user_id)
+        ]);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(['error' => 'Invalid action']);
     exit;
 }
 
 if ($method === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) $input = $_POST;
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    $input = [];
+
+    if (strpos($contentType, 'multipart/form-data') !== false) {
+        $input = $_POST;
+    } else {
+        $json = json_decode(file_get_contents('php://input'), true);
+        if ($json) $input = $json;
+        else $input = $_POST;
+    }
+
     $action = $input['action'] ?? '';
 
     if (!empty($input['csrf_token'])) {
@@ -102,11 +136,12 @@ if ($method === 'POST') {
         exit;
     }
 
-    if ($action === 'send_message') {
+    if ($action === 'send_message' || $action === 'send_file') {
         $receiver_id = (int) ($input['receiver_id'] ?? 0);
         $message = trim($input['message'] ?? '');
+        $message_type = $input['message_type'] ?? ($action === 'send_file' ? 'file' : 'text');
 
-        if ($receiver_id <= 0 || $message === '') {
+        if ($receiver_id <= 0 || ($message === '' && empty($_FILES['attachment']))) {
             http_response_code(400);
             echo json_encode(['error' => 'Receiver and message required']);
             exit;
@@ -118,7 +153,13 @@ if ($method === 'POST') {
             exit;
         }
 
-        $message_id = send_message($conn, $user_id, $receiver_id, $message);
+        // If file present, auto-set message_type to 'file'
+        if (!empty($_FILES['attachment'])) {
+            $message_type = 'file';
+        }
+
+        $file = !empty($_FILES['attachment']) ? $_FILES['attachment'] : null;
+        $message_id = send_message_with_attachment($conn, $user_id, $receiver_id, $message, $file, $message_type);
 
         if ($message_id) {
             $partner = get_partner_info($conn, $user_id, $receiver_id);
@@ -132,8 +173,8 @@ if ($method === 'POST') {
                 create_notification($conn, $receiver_id, 'new_message', 'New message from ' . $_SESSION['username'] . ' about "' . $job_title . '"', 'chat/index.php?user_id=' . $user_id);
             }
 
-            $msg = get_messages($conn, $user_id, $receiver_id, 0, 1);
-            echo json_encode(['success' => true, 'message_id' => $message_id, 'message' => $msg[0] ?? null]);
+            $msgs = get_messages_enhanced($conn, $user_id, $receiver_id, 0, 1);
+            echo json_encode(['success' => true, 'message_id' => $message_id, 'message' => $msgs[0] ?? null]);
         } else {
             http_response_code(500);
             echo json_encode(['error' => 'Failed to send message']);
@@ -142,7 +183,7 @@ if ($method === 'POST') {
     }
 
     if ($action === 'mark_read') {
-        $other_id = (int) ($input['user_id'] ?? 0);
+        $other_id = (int) ($input['user_id'] ?? $input['partner_id'] ?? 0);
         if ($other_id > 0) {
             mark_as_read($conn, $user_id, $other_id);
         }
@@ -155,6 +196,42 @@ if ($method === 'POST') {
         $stmt->bind_param('i', $user_id);
         $stmt->execute();
         $stmt->close();
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
+    if ($action === 'typing') {
+        $partner_id = (int) ($input['partner_id'] ?? 0);
+        $is_typing = !empty($input['is_typing']);
+        if ($partner_id > 0) {
+            set_typing_status($conn, $user_id, $partner_id, $is_typing);
+        }
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
+    if ($action === 'upload_attachment') {
+        if (empty($_FILES['file'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'No file uploaded']);
+            exit;
+        }
+        $result = upload_chat_attachment($_FILES['file']);
+        if ($result === null) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid file type or too large']);
+            exit;
+        }
+        echo json_encode(['success' => true, 'file' => $result]);
+        exit;
+    }
+
+    if ($action === 'mark_notif_read') {
+        require_once __DIR__ . '/../config/notifications.php';
+        $nid = (int) ($input['notification_id'] ?? 0);
+        if ($nid > 0) {
+            mark_notification_read($conn, $nid, $user_id);
+        }
         echo json_encode(['success' => true]);
         exit;
     }

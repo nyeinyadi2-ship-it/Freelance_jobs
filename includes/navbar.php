@@ -153,6 +153,7 @@ $is_dark = isset($_COOKIE['theme']) && $_COOKIE['theme'] === 'dark';
     </div>
 </nav>
 
+<script src="<?= e(base_url('assets/js/notification-sse.js')) ?>"></script>
 <script>
 (function() {
     // Notification dropdowns
@@ -233,7 +234,12 @@ $is_dark = isset($_COOKIE['theme']) && $_COOKIE['theme'] === 'dark';
         });
     });
 
-    // Notification polling
+    // SSE real-time notification badge updates
+    if (typeof NotificationSSE !== 'undefined') {
+        NotificationSSE.init({ user_id: <?= (int) ($user['user_id'] ?? 0) ?> });
+    }
+
+    // Fallback polling every 15s
     setInterval(function() {
         fetch('<?= e(base_url("api/notifications.php")) ?>?action=count', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -247,7 +253,7 @@ $is_dark = isset($_COOKIE['theme']) && $_COOKIE['theme'] === 'dark';
             }
         })
         .catch(function() {});
-    }, 30000);
+    }, 15000);
 
     // Chat unread polling
     var chatBadge = document.querySelector('.chat-unread-badge');

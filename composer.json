@@ -1,0 +1,13 @@
+{
+    "name": "freelance/chat-server",
+    "description": "Real-time WebSocket chat server for HireWork freelance platform",
+    "require": {
+        "cboden/ratchet": "^0.4",
+        "react/event-loop": "^1.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Freelance\\": "server/"
+        }
+    }
+}
