@@ -89,7 +89,7 @@ try {
 } catch (mysqli_sql_exception $e) {}
 
 $page_title = __('admin.manage_users_title');
-require __DIR__ . '/../includes/header.php';
+require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Page Header -->
@@ -245,7 +245,7 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 <?php endif; ?>
 
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+<?php require __DIR__ . '/includes/admin_footer.php'; ?>
 
 <script>
 (function() {

@@ -1,9 +1,23 @@
 <?php
+// Ensure any PHP error results in a JSON response
+header('Content-Type: application/json');
+
+set_error_handler(function($severity, $message, $file, $line) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Server error', 'detail' => $message]);
+    exit;
+});
+
+set_exception_handler(function($e) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Server error', 'detail' => $e->getMessage()]);
+    exit;
+});
+
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/notifications.php';
 require_once __DIR__ . '/../config/chat.php';
-
-header('Content-Type: application/json');
 
 if (empty($_SESSION['user_id'])) {
     http_response_code(401);

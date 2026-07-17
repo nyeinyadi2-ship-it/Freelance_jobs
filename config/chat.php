@@ -25,7 +25,7 @@ function can_chat(mysqli $conn, int $user_id, int $other_user_id): bool
     $stmt = $conn->prepare("
         SELECT 1 FROM assignments a
         JOIN jobs j ON a.job_id = j.id
-        WHERE a.status IN ('assigned', 'submitted', 'completed')
+        WHERE a.status IN ('assigned', 'working', 'submitted', 'completed')
         AND (
             (j.company_id = (SELECT id FROM companies WHERE user_id = ?) AND a.freelancer_id = (SELECT id FROM freelancers WHERE user_id = ?))
             OR
@@ -88,7 +88,7 @@ function get_conversations(mysqli $conn, int $user_id, ?string $search = null): 
         AND EXISTS (
             SELECT 1 FROM assignments a
             JOIN jobs j ON a.job_id = j.id
-            WHERE a.status IN ('assigned', 'submitted', 'completed')
+            WHERE a.status IN ('assigned', 'working', 'submitted', 'completed')
             AND (
                 (j.company_id = (SELECT id FROM companies WHERE user_id = ?) AND a.freelancer_id = (SELECT id FROM freelancers WHERE user_id = u.id))
                 OR

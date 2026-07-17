@@ -63,7 +63,7 @@ body {
 }
 
 .card:hover {
-    background: var(--color-card-hover);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 .btn-primary {
@@ -481,3 +481,16 @@ select.form-input option {
 .admin-fade.delay-2 { transition-delay: 0.1s; }
 .admin-fade.delay-3 { transition-delay: 0.15s; }
 .admin-fade.delay-4 { transition-delay: 0.2s; }
+
+/* ===== ADMIN LAYOUT ===== */
+
+.animate-fadeIn {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== NAVBAR (managed in includes/navbar.php) ===== */

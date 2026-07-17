@@ -43,9 +43,10 @@ while (true) {
     $stmt = $conn->prepare("
         SELECT COUNT(*) as total 
         FROM notifications n
-        LEFT JOIN notification_reads nr ON n.id = nr.notification_id AND nr.user_id = ?
-        WHERE (n.recipient_id = ? OR n.recipient_id = 0)
-        AND nr.id IS NULL
+        WHERE n.user_id = ?
+        AND n.id NOT IN (
+            SELECT nr.notification_id FROM notification_reads nr WHERE nr.user_id = ?
+        )
     ");
     $stmt->bind_param('ii', $userId, $userId);
     $stmt->execute();
@@ -56,7 +57,7 @@ while (true) {
     $unreadCount = (int) ($row['total'] ?? 0);
 
     // Get latest notification ID
-    $stmt2 = $conn->prepare("SELECT MAX(id) as max_id FROM notifications WHERE recipient_id = ? OR recipient_id = 0");
+    $stmt2 = $conn->prepare("SELECT MAX(id) as max_id FROM notifications WHERE user_id = ?");
     $stmt2->bind_param('i', $userId);
     $stmt2->execute();
     $res2 = $stmt2->get_result();

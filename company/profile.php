@@ -10,7 +10,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
     set_flash('error', __('error.company_not_found'));
-    redirect('index.php');
+    redirect('login.php');
 }
 
 $stmt = $conn->prepare("
@@ -26,7 +26,7 @@ $stmt->close();
 
 if (!$profile) {
     set_flash('error', __('profile.not_found'));
-    redirect('index.php');
+    redirect('login.php');
 }
 
 $error = '';
@@ -117,8 +117,9 @@ require __DIR__ . '/../includes/header.php';
 <div class="max-w-3xl mx-auto">
     <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-4">
-            <?php $profileImgUrl = profile_image_url($profile['profile_image']); ?>
-            <?php if ($profileImgUrl): ?>
+            <?php if (!empty($profile['logo_image'])): ?>
+                <img src="<?= e(base_url('uploads/' . $profile['logo_image'])) ?>" alt="" class="w-14 h-14 rounded-xl object-contain border bg-white dark:bg-gray-800" style="border-color:var(--color-border)">
+            <?php elseif ($profileImgUrl = profile_image_url($profile['profile_image'])): ?>
                 <img src="<?= e($profileImgUrl) ?>" alt="" class="w-14 h-14 rounded-full object-cover border" style="border-color:var(--color-border)">
             <?php else: ?>
                 <div class="w-14 h-14 rounded-full flex items-center justify-center text-indigo-600 font-bold text-xl border" style="background:rgba(99,102,241,0.2);border-color:var(--color-border)">
@@ -236,7 +237,7 @@ require __DIR__ . '/../includes/header.php';
                     <?php if ($profile['website']): ?>
                     <div class="flex justify-between">
                         <dt class="text-gray-500">Website</dt>
-                        <dd class="font-medium text-gray-900"><a href="<?= e($profile['website']) ?>" target="_blank" class="text-indigo-600 hover:underline"><?= e($profile['website']) ?></a></dd>
+                        <dd class="font-medium"><a href="<?= e($profile['website']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#127760; Visit Website</a></dd>
                     </div>
                     <?php endif; ?>
                     <?php if ($profile['phone']): ?>
@@ -294,29 +295,67 @@ require __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
-        <div class="mt-6 card">
-            <h2 class="text-lg font-semibold mb-4">Recent Activity</h2>
+        <div class="mt-6">
             <?php
             $stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM jobs WHERE company_id = ?");
             $stmt->bind_param('i', $company_id);
             $stmt->execute();
-            $job_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+            $total_jobs = (int) $stmt->get_result()->fetch_assoc()['cnt'];
             $stmt->close();
 
-            $stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.status IN ('assigned', 'submitted', 'completed')");
+            $stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.status = 'completed'");
             $stmt->bind_param('i', $company_id);
             $stmt->execute();
-            $active_assignments = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+            $hired_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+            $stmt->close();
+
+            $stmt = $conn->prepare("SELECT COALESCE(SUM(j.budget), 0) AS total FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.status = 'completed'");
+            $stmt->bind_param('i', $company_id);
+            $stmt->execute();
+            $total_paid = (float) $stmt->get_result()->fetch_assoc()['total'];
             $stmt->close();
             ?>
-            <div class="grid grid-cols-2 gap-4 text-center">
-                <div class="p-4 bg-indigo-50 rounded-lg">
-                    <p class="text-2xl font-bold text-indigo-600"><?= $job_count ?></p>
-                    <p class="text-xs text-gray-500">Jobs Posted</p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <!-- Total Jobs Posted -->
+                <div class="group relative overflow-hidden rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg" style="background:var(--color-card);border:1px solid var(--color-border)">
+                    <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full opacity-[0.07] bg-indigo-500 transition-opacity group-hover:opacity-[0.12]"></div>
+                    <div class="relative">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style="background:rgba(99,102,241,0.1)">
+                            <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                        </div>
+                        <p class="text-3xl font-extrabold tracking-tight" style="color:var(--color-text-primary)"><?= number_format($total_jobs) ?></p>
+                        <p class="text-sm mt-1" style="color:var(--color-text-muted)">Total Jobs Posted</p>
+                    </div>
                 </div>
-                <div class="p-4 bg-green-50 rounded-lg">
-                    <p class="text-2xl font-bold text-green-600"><?= $active_assignments ?></p>
-                    <p class="text-xs text-gray-500">Active Assignments</p>
+
+                <!-- Total Jobs Hired -->
+                <div class="group relative overflow-hidden rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg" style="background:var(--color-card);border:1px solid var(--color-border)">
+                    <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full opacity-[0.07] bg-emerald-500 transition-opacity group-hover:opacity-[0.12]"></div>
+                    <div class="relative">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style="background:rgba(16,185,129,0.1)">
+                            <svg class="w-6 h-6 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <p class="text-3xl font-extrabold tracking-tight" style="color:var(--color-text-primary)"><?= number_format($hired_count) ?></p>
+                        <p class="text-sm mt-1" style="color:var(--color-text-muted)">Total Jobs Hired</p>
+                    </div>
+                </div>
+
+                <!-- Total Amount Paid -->
+                <div class="group relative overflow-hidden rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg" style="background:var(--color-card);border:1px solid var(--color-border)">
+                    <div class="absolute top-0 right-0 w-24 h-24 rounded-bl-full opacity-[0.07] bg-violet-500 transition-opacity group-hover:opacity-[0.12]"></div>
+                    <div class="relative">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style="background:rgba(139,92,246,0.1)">
+                            <svg class="w-6 h-6 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/>
+                            </svg>
+                        </div>
+                        <p class="text-3xl font-extrabold tracking-tight" style="color:var(--color-text-primary)">$<?= number_format($total_paid, 2) ?></p>
+                        <p class="text-sm mt-1" style="color:var(--color-text-muted)">Total Amount Paid</p>
+                    </div>
                 </div>
             </div>
         </div>

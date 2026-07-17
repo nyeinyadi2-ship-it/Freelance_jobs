@@ -103,7 +103,7 @@ CREATE TABLE assignments (
     id INT PRIMARY KEY AUTO_INCREMENT,
     job_id INT UNIQUE,
     freelancer_id INT,
-    status ENUM('assigned', 'submitted', 'completed') DEFAULT 'assigned',
+    status ENUM('assigned', 'working', 'submitted', 'completed') DEFAULT 'assigned',
     submission_link VARCHAR(255),
     assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
@@ -130,12 +130,56 @@ CREATE TABLE notifications (
 -- 9. Payments Table
 CREATE TABLE payments (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    assignment_id INT UNIQUE,
+    assignment_id INT,
     amount DECIMAL(10, 2),
     status ENUM('pending', 'paid') DEFAULT 'pending',
     paid_at TIMESTAMP NULL,
     FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE
 );
+
+-- 12. Reviews Table
+CREATE TABLE reviews (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    assignment_id INT,
+    freelancer_id INT NOT NULL,
+    company_user_id INT NOT NULL,
+    rating TINYINT NOT NULL,
+    comment TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_reviews_freelancer (freelancer_id),
+    INDEX idx_reviews_assignment (assignment_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 13. Milestones Table
+CREATE TABLE milestones (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    job_id INT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT DEFAULT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    status ENUM('draft','funded','in_progress','submitted','approved','revision_requested') DEFAULT 'draft',
+    submission_link VARCHAR(255) DEFAULT NULL,
+    submission_file VARCHAR(255) DEFAULT NULL,
+    submission_note TEXT DEFAULT NULL,
+    submitted_at TIMESTAMP NULL,
+    approved_at TIMESTAMP NULL,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_milestones_job (job_id),
+    INDEX idx_milestones_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 14. Escrow Table
+CREATE TABLE escrow (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    milestone_id INT UNIQUE NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    status ENUM('held','released','refunded') DEFAULT 'held',
+    funded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    released_at TIMESTAMP NULL,
+    INDEX idx_escrow_milestone (milestone_id),
+    INDEX idx_escrow_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 11. Messages Table (Simple Chat System)
 ALTER TABLE users ADD COLUMN last_activity TIMESTAMP NULL AFTER created_at;

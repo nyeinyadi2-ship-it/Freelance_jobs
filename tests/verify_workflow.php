@@ -68,27 +68,20 @@ assert_true($freelancer_id > 0, 'Freelancer profile created');
 $title = 'Test Job';
 $desc = 'Test description';
 $budget = 500.00;
-$status = 'pending';
+$status = 'approved';
 $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, description, budget, status) VALUES (?, ?, ?, ?, ?)');
 $stmt->bind_param('issds', $company_id, $title, $desc, $budget, $status);
 $stmt->execute();
 $job_id = $stmt->insert_id;
 $stmt->close();
-assert_true($job_id > 0, 'Job posted as pending');
-
-// Admin approves
-$approved = 'approved';
-$stmt = $conn->prepare("UPDATE jobs SET status = ? WHERE id = ?");
-$stmt->bind_param('si', $approved, $job_id);
-$stmt->execute();
-$stmt->close();
+assert_true($job_id > 0, 'Job posted as approved');
 
 $stmt = $conn->prepare('SELECT status FROM jobs WHERE id = ?');
 $stmt->bind_param('i', $job_id);
 $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
 $stmt->close();
-assert_true($row['status'] === 'approved', 'Job approved');
+assert_true($row['status'] === 'approved', 'Job is immediately approved');
 
 // Freelancer applies
 $stmt = $conn->prepare('INSERT INTO job_applications (job_id, freelancer_id) VALUES (?, ?)');

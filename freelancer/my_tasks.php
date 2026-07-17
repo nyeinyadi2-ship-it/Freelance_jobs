@@ -1,41 +1,177 @@
 <?php
 $page_title = 'My Tasks';
 require __DIR__ . '/../includes/freelancer_init.php';
+require_once __DIR__ . '/../config/upload.php';
 
+// Handle milestone actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
-    $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
-    $submission_link = trim($_POST['submission_link'] ?? '');
-    if ($assignment_id <= 0 || $submission_link === '') { set_flash('error', __('error.submission_link_required')); }
-    elseif (!filter_var($submission_link, FILTER_VALIDATE_URL)) { set_flash('error', __('error.invalid_url')); }
-    else {
-        $st = $conn->prepare("UPDATE assignments SET submission_link=?, status='submitted' WHERE id=? AND freelancer_id=? AND status='assigned'");
-        $st->bind_param('sii', $submission_link, $assignment_id, $fl_freelancer_id); $st->execute();
-        if ($st->affected_rows > 0) {
-            $ns = $conn->prepare("SELECT j.title, c.user_id FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id WHERE a.id=?");
-            $ns->bind_param('i', $assignment_id); $ns->execute();
-            $ni = $ns->get_result()->fetch_assoc(); $ns->close();
-            if ($ni) {
-                $js = $conn->prepare('SELECT job_id FROM assignments WHERE id=?');
-                $js->bind_param('i', $assignment_id); $js->execute();
-                $jr = $js->get_result()->fetch_assoc(); $js->close();
-                $jid = $jr ? (int) $jr['job_id'] : 0;
-                create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " has submitted work for \"{$ni['title']}\".", $jid > 0 ? 'company/view_applications.php?id=' . $jid : null);
-            }
-            set_flash('success', __('success.work_submitted'));
-        } else { set_flash('error', __('error.could_not_submit')); }
+    $ms_action = $_POST['ms_action'] ?? '';
+    $milestone_id = (int) ($_POST['milestone_id'] ?? 0);
+
+    if ($ms_action === 'start' && $milestone_id > 0) {
+        // Funded → In Progress
+        $st = $conn->prepare("
+            SELECT m.id, m.job_id, m.status
+            FROM milestones m
+            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
+            WHERE m.id = ? AND m.status = 'funded'
+        ");
+        $st->bind_param('ii', $fl_freelancer_id, $milestone_id);
+        $st->execute();
+        $ms = $st->get_result()->fetch_assoc();
         $st->close();
+
+        if ($ms) {
+            $conn->begin_transaction();
+            try {
+                $st = $conn->prepare("UPDATE milestones SET status = 'in_progress' WHERE id = ?");
+                $st->bind_param('i', $milestone_id);
+                $st->execute();
+                $st->close();
+
+                // Update assignment status to working
+                $st = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'assigned'");
+                $st->bind_param('i', $ms['job_id']);
+                $st->execute();
+                $st->close();
+
+                $conn->commit();
+                set_flash('success', 'Milestone started! You can now work on it.');
+            } catch (Exception $e) {
+                $conn->rollback();
+                set_flash('error', 'Failed to start milestone.');
+            }
+        } else {
+            set_flash('error', 'Milestone not found or not funded yet.');
+        }
+    } elseif ($ms_action === 'submit' && $milestone_id > 0) {
+        // In Progress / Revision Requested → Submitted
+        $st = $conn->prepare("
+            SELECT m.id, m.job_id, m.status
+            FROM milestones m
+            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
+            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested')
+        ");
+        $st->bind_param('ii', $fl_freelancer_id, $milestone_id);
+        $st->execute();
+        $ms = $st->get_result()->fetch_assoc();
+        $st->close();
+
+        if ($ms) {
+            $submission_link = trim($_POST['submission_link'] ?? '');
+            $submission_note = trim($_POST['submission_note'] ?? '');
+            $submission_file = null;
+
+            // Handle file upload
+            if (!empty($_FILES['submission_file']['name'])) {
+                $submission_file = upload_attachment($_FILES['submission_file']);
+                if ($submission_file === null) {
+                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 10MB.');
+                    redirect('freelancer/my_tasks.php');
+                }
+            }
+
+            if ($submission_link === '' && $submission_file === null) {
+                set_flash('error', 'Please provide a submission link or upload a file.');
+                redirect('freelancer/my_tasks.php');
+            }
+
+            $conn->begin_transaction();
+            try {
+                $now = date('Y-m-d H:i:s');
+                $st = $conn->prepare("UPDATE milestones SET submission_link=?, submission_file=?, submission_note=?, status='submitted', submitted_at=? WHERE id=?");
+                $st->bind_param('ssssi', $submission_link, $submission_file, $submission_note, $now, $milestone_id);
+                $st->execute();
+                $st->close();
+
+                // Update assignment status to submitted
+                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND status='working'");
+                $st->bind_param('i', $ms['job_id']);
+                $st->execute();
+                $st->close();
+
+                // Notify company
+                $ns = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.id=?");
+                $ns->bind_param('i', $ms['job_id']);
+                $ns->execute();
+                $ni = $ns->get_result()->fetch_assoc();
+                $ns->close();
+                if ($ni) {
+                    create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id']);
+                }
+
+                $conn->commit();
+                set_flash('success', 'Work submitted for review!');
+            } catch (Exception $e) {
+                $conn->rollback();
+                set_flash('error', 'Failed to submit work. Please try again.');
+            }
+        } else {
+            set_flash('error', 'Milestone not found or not ready for submission.');
+        }
     }
     redirect('freelancer/my_tasks.php');
 }
 
+// Fetch assigned jobs with milestones
 $tasks = [];
-$st = $conn->prepare("SELECT a.id,a.status,a.submission_link,a.assigned_at,j.title,j.description,j.budget,c.company_name,c.logo_image FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id WHERE a.freelancer_id=? ORDER BY a.assigned_at DESC");
-$st->bind_param('i', $fl_freelancer_id); $st->execute();
-$r = $st->get_result(); while ($row = $r->fetch_assoc()) $tasks[] = $row; $st->close();
+$st = $conn->prepare("
+    SELECT a.id AS assignment_id, a.status AS assignment_status, a.assigned_at,
+           j.id AS job_id, j.title, j.description, j.budget, j.status AS job_status,
+           c.company_name, c.logo_image
+    FROM assignments a
+    JOIN jobs j ON a.job_id = j.id
+    JOIN companies c ON j.company_id = c.id
+    WHERE a.freelancer_id = ?
+    ORDER BY a.assigned_at DESC
+");
+$st->bind_param('i', $fl_freelancer_id);
+$st->execute();
+$r = $st->get_result();
+while ($row = $r->fetch_assoc()) { $tasks[] = $row; }
+$st->close();
+
+// Fetch milestones for each task
+foreach ($tasks as &$task) {
+    $task['milestones'] = [];
+    $ms = $conn->prepare("SELECT * FROM milestones WHERE job_id = ? ORDER BY sort_order ASC");
+    $ms->bind_param('i', $task['job_id']);
+    $ms->execute();
+    $mr = $ms->get_result();
+    while ($m = $mr->fetch_assoc()) { $task['milestones'][] = $m; }
+    $ms->close();
+}
+unset($task);
+
 require __DIR__ . '/../includes/freelancer_layout.php';
 ?>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+<style>
+.ms-status { display:inline-flex; align-items:center; gap:0.25rem; padding:0.25rem 0.65rem; border-radius:9999px; font-size:0.7rem; font-weight:600; }
+.ms-draft { background:rgba(107,114,128,0.1); color:#6b7280; }
+.ms-funded { background:rgba(245,158,11,0.1); color:#f59e0b; }
+.ms-in_progress { background:rgba(99,102,241,0.1); color:#6366f1; }
+.ms-submitted { background:rgba(139,92,246,0.1); color:#8b5cf6; }
+.ms-approved { background:rgba(16,185,129,0.1); color:#10b981; }
+.ms-revision_requested { background:rgba(239,68,68,0.1); color:#ef4444; }
+
+.ms-timeline { display:flex; align-items:center; gap:0; margin:0.75rem 0; }
+.ms-timeline-step { display:flex; align-items:center; gap:0.375rem; }
+.ms-timeline-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+.ms-timeline-line { width:24px; height:2px; flex-shrink:0; }
+.ms-tl-active { background:linear-gradient(135deg,#6366f1,#8b5cf6); }
+.ms-tl-done { background:#10b981; }
+.ms-tl-pending { background:var(--color-border); }
+.ms-tl-line-active { background:linear-gradient(90deg,#10b981,#6366f1); }
+.ms-tl-line-done { background:#10b981; }
+.ms-tl-line-pending { background:var(--color-border); }
+
+.upload-zone { border:2px dashed var(--color-border); border-radius:0.75rem; padding:1.25rem; text-align:center; cursor:pointer; transition:all .3s; }
+.upload-zone:hover { border-color:#6366f1; background:rgba(99,102,241,0.03); }
+.upload-zone.has-file { border-color:#10b981; background:rgba(16,185,129,0.03); }
+</style>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-12">
 <?php if (empty($tasks)): ?>
     <div class="glass rounded-2xl text-center py-20" style="color:var(--color-text-placeholder)">
         <svg class="w-24 h-24 mx-auto mb-6 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
@@ -43,28 +179,135 @@ require __DIR__ . '/../includes/freelancer_layout.php';
         <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="btn-grad inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-xl text-white mt-3">Browse available jobs</a>
     </div>
 <?php else: ?>
-    <div class="space-y-4">
-        <?php foreach ($tasks as $task): ?>
+    <div class="space-y-6">
+        <?php foreach ($tasks as $task):
+            $total_ms = count($task['milestones']);
+            $approved_ms = 0;
+            foreach ($task['milestones'] as $m) {
+                if ($m['status'] === 'approved') $approved_ms++;
+            }
+            $all_approved = $total_ms > 0 && $approved_ms === $total_ms;
+            $progress = $total_ms > 0 ? round(($approved_ms / $total_ms) * 100) : 0;
+        ?>
             <div class="glass rounded-2xl p-6 hover-lift reveal">
+                <!-- Header -->
                 <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
                     <div class="flex items-center gap-3">
                         <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/' . $task['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
-                        <div><p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p><h2 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($task['title']) ?></h2></div>
+                        <div>
+                            <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p>
+                            <h2 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($task['title']) ?></h2>
+                        </div>
                     </div>
-                    <?= status_badge($task['status']) ?>
+                    <?php if ($all_approved): ?>
+                        <span class="ms-status ms-approved">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                            Project Completed
+                        </span>
+                    <?php else: ?>
+                        <?= status_badge($task['assignment_status']) ?>
+                    <?php endif; ?>
                 </div>
+
                 <p class="text-sm mb-3 leading-relaxed" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($task['description'] ?? '', 0, 200, '...')) ?></p>
-                <div class="flex items-center gap-4 text-sm mb-4"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600">$<?= number_format((float) $task['budget'], 2) ?></strong></span><span style="color:var(--color-text-placeholder)">Assigned <?= date('M j, Y', strtotime($task['assigned_at'])) ?></span></div>
-                <?php if ($task['status'] === 'assigned'): ?>
-                    <div class="pt-4 border-t" style="border-color:var(--color-border)">
-                        <form method="POST" class="flex flex-col sm:flex-row gap-3 items-end">
-                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>"><input type="hidden" name="assignment_id" value="<?= (int) $task['id'] ?>">
-                            <div class="flex-1 min-w-[200px]"><label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Submission Link</label><input type="url" name="submission_link" required class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="https://drive.google.com/..."></div>
-                            <button type="submit" class="btn-grad px-5 py-2.5 text-sm font-semibold rounded-xl text-white flex-shrink-0">Submit Work</button>
-                        </form>
+
+                <!-- Progress bar -->
+                <?php if ($total_ms > 0): ?>
+                <div class="mb-4">
+                    <div class="flex items-center justify-between text-xs mb-1.5">
+                        <span style="color:var(--color-text-muted)">Project Progress</span>
+                        <span class="font-bold" style="color:var(--color-text-primary)"><?= $approved_ms ?>/<?= $total_ms ?> milestones &middot; <?= $progress ?>%</span>
                     </div>
-                <?php elseif ($task['submission_link']): ?>
-                    <div class="pt-4 border-t flex items-center gap-2" style="border-color:var(--color-border)"><svg class="w-4 h-4 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg><span class="text-sm" style="color:var(--color-text-muted)">Submitted: <a href="<?= e($task['submission_link']) ?>" target="_blank" class="text-primary-600 hover:underline">View Link</a></span></div>
+                    <div class="w-full h-2.5 rounded-full overflow-hidden" style="background:var(--color-border)">
+                        <div class="h-full rounded-full transition-all duration-700" style="width:<?= $progress ?>%;background:linear-gradient(135deg,#6366f1,#8b5cf6)"></div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <div class="flex items-center gap-4 text-sm mb-4">
+                    <span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600">$<?= number_format((float) $task['budget'], 2) ?></strong></span>
+                    <span style="color:var(--color-text-placeholder)">Assigned <?= date('M j, Y', strtotime($task['assigned_at'])) ?></span>
+                </div>
+
+                <!-- Milestones -->
+                <?php if (!empty($task['milestones'])): ?>
+                <div class="pt-4 border-t" style="border-color:var(--color-border)">
+                    <h3 class="text-sm font-bold mb-4" style="color:var(--color-text-primary)">Milestones</h3>
+                    <div class="space-y-4">
+                        <?php foreach ($task['milestones'] as $ms):
+                            $status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved','revision_requested'=>'Revision Requested'];
+                            $status_class = 'ms-' . $ms['status'];
+                        ?>
+                        <div class="rounded-xl overflow-hidden transition-all hover:shadow-md" style="border:1px solid var(--color-border)">
+                            <!-- Milestone Header (clickable) -->
+                            <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="block p-4 transition-colors" style="background:var(--color-bg);text-decoration:none">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div class="flex items-start gap-3">
+                                        <?php if ($ms['status'] === 'approved'): ?>
+                                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style="background:rgba(16,185,129,0.1)">
+                                                <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                            </div>
+                                        <?php else: ?>
+                                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-bold" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-muted)"><?= $ms['sort_order'] ?></div>
+                                        <?php endif; ?>
+                                        <div>
+                                            <p class="text-sm font-bold" style="color:var(--color-text-primary)"><?= e($ms['title']) ?></p>
+                                            <?php if ($ms['description']): ?><p class="text-xs mt-0.5" style="color:var(--color-text-muted)"><?= e(mb_strimwidth($ms['description'], 0, 80, '...')) ?></p><?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-bold" style="color:#f59e0b">$<?= number_format((float) $ms['amount'], 2) ?></span>
+                                        <span class="ms-status <?= $status_class ?>"><?= $status_labels[$ms['status']] ?? $ms['status'] ?></span>
+                                        <svg class="w-4 h-4 flex-shrink-0" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                                    </div>
+                                </div>
+
+                                <!-- Status Timeline -->
+                                <div class="ms-timeline mt-3">
+                                    <?php
+                                    $steps = ['funded', 'in_progress', 'submitted', 'approved'];
+                                    $step_labels = ['Funded', 'Working', 'Submitted', 'Approved'];
+                                    $current_idx = array_search($ms['status'], $steps);
+                                    if ($ms['status'] === 'revision_requested') $current_idx = 1;
+                                    ?>
+                                    <?php for ($si = 0; $si < count($steps); $si++): ?>
+                                        <div class="ms-timeline-step">
+                                            <div class="ms-timeline-dot <?= $si < $current_idx ? 'ms-tl-done' : ($si === $current_idx ? 'ms-tl-active' : 'ms-tl-pending') ?>"></div>
+                                            <span class="text-[10px] font-semibold <?= $si <= $current_idx ? '' : 'opacity-40' ?>" style="color:<?= $si <= $current_idx ? 'var(--color-text-primary)' : 'var(--color-text-muted)' ?>"><?= $step_labels[$si] ?></span>
+                                        </div>
+                                        <?php if ($si < count($steps) - 1): ?>
+                                            <div class="ms-timeline-line <?= $si < $current_idx ? 'ms-tl-line-done' : ($si === $current_idx ? 'ms-tl-line-active' : 'ms-tl-line-pending') ?>"></div>
+                                        <?php endif; ?>
+                                    <?php endfor; ?>
+                                </div>
+                            </a>
+
+                            <!-- Milestone Body -->
+                            <?php if ($ms['status'] === 'funded'): ?>
+                                <div class="p-3 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
+                                    <span class="text-xs font-medium" style="color:var(--color-text-muted)">Escrow funded — ready to start</span>
+                                    <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">Start Working</a>
+                                </div>
+                            <?php elseif ($ms['status'] === 'in_progress' || $ms['status'] === 'revision_requested'): ?>
+                                <div class="p-3 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
+                                    <span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= $ms['status'] === 'revision_requested' ? 'Revision needed — resubmit work' : 'Working on this milestone' ?></span>
+                                    <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)">Submit Work</a>
+                                </div>
+                            <?php elseif ($ms['status'] === 'submitted'): ?>
+                                <div class="p-3 flex items-center gap-2" style="border-top:1px solid var(--color-border)">
+                                    <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
+                                    <span class="text-xs font-medium" style="color:var(--color-text-muted)">Under review — awaiting decision</span>
+                                </div>
+                            <?php elseif ($ms['status'] === 'approved'): ?>
+                                <div class="p-3 flex items-center gap-2" style="border-top:1px solid var(--color-border);background:rgba(16,185,129,0.03)">
+                                    <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                    <span class="text-xs font-medium text-emerald-600">Approved — payment released</span>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
                 <?php endif; ?>
             </div>
         <?php endforeach; ?>

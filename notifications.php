@@ -121,7 +121,7 @@ require __DIR__ . '/includes/header.php';
 
                     <!-- Unread dot -->
                     <?php if (!$n['is_read']): ?>
-                        <div class="mt-2 w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></div>
+                        <div class="mt-2 w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0 unread-dot"></div>
                     <?php else: ?>
                         <div class="mt-2 w-2 h-2 flex-shrink-0"></div>
                     <?php endif; ?>
@@ -142,19 +142,26 @@ require __DIR__ . '/includes/header.php';
                     <!-- Actions -->
                     <div class="flex items-center gap-2 flex-shrink-0">
                         <?php if ($n['link']): ?>
-                            <a href="<?= e(base_url($n['link'])) ?>" class="text-sm text-indigo-600 hover:underline whitespace-nowrap">
-                                <?= __('notif.view_all') ?>
-                            </a>
+                            <?php if (!$n['is_read']): ?>
+                                <button type="button" class="text-sm text-indigo-600 hover:underline whitespace-nowrap view-notif-btn"
+                                        data-id="<?= (int) $n['id'] ?>"
+                                        data-url="<?= e(base_url($n['link'])) ?>"
+                                        data-csrf="<?= e(csrf_token()) ?>">
+                                    <?= __('notif.view_all') ?>
+                                </button>
+                            <?php else: ?>
+                                <a href="<?= e(base_url($n['link'])) ?>" class="text-sm text-indigo-600 hover:underline whitespace-nowrap">
+                                    <?= __('notif.view_all') ?>
+                                </a>
+                            <?php endif; ?>
                         <?php endif; ?>
                         <?php if (!$n['is_read']): ?>
-                            <form method="POST" class="inline">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="action" value="mark_read">
-                                <input type="hidden" name="notification_id" value="<?= (int) $n['id'] ?>">
-                                <button type="submit" class="text-sm whitespace-nowrap" style="color:var(--color-text-muted)" title="<?= e(__('notif.dismiss')) ?>">
-                                    <?= __('notif.dismiss') ?>
-                                </button>
-                            </form>
+                            <button type="button" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium whitespace-nowrap mark-read-btn"
+                                    data-id="<?= (int) $n['id'] ?>"
+                                    data-csrf="<?= e(csrf_token()) ?>"
+                                    title="<?= e(__('notif.mark_read')) ?>">
+                                <?= __('notif.mark_read') ?>
+                            </button>
                         <?php endif; ?>
                         <form method="POST" class="inline">
                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
@@ -174,31 +181,94 @@ require __DIR__ . '/includes/header.php';
 </div>
 
 <script>
-// Poll for new notifications every 30 seconds
 (function() {
-    var pollInterval = 30000;
     var csrfToken = '<?= e(csrf_token()) ?>';
+    var apiUrl = '<?= e(base_url("api/notifications.php")) ?>';
 
+    // Mark a single notification as read via AJAX and update badge
+    function markAsRead(notificationId, csrf, callback) {
+        fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({
+                action: 'mark_read',
+                notification_id: notificationId,
+                csrf_token: csrf
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                updateBadge(data.count);
+            }
+            if (callback) callback();
+        })
+        .catch(function() {
+            if (callback) callback();
+        });
+    }
+
+    // Update the notification badge count
+    function updateBadge(count) {
+        var badge = document.querySelector('.notification-badge');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : count;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    }
+
+    // View button: mark as read then redirect
+    document.querySelectorAll('.view-notif-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = parseInt(this.getAttribute('data-id'));
+            var url = this.getAttribute('data-url');
+            var csrf = this.getAttribute('data-csrf');
+            markAsRead(id, csrf, function() {
+                window.location.href = url;
+            });
+        });
+    });
+
+    // Mark Read button: mark as read and update UI inline
+    document.querySelectorAll('.mark-read-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = parseInt(this.getAttribute('data-id'));
+            var csrf = this.getAttribute('data-csrf');
+            var self = this;
+            markAsRead(id, csrf, function() {
+                // Update the notification row UI
+                var row = document.getElementById('notif-' + id);
+                if (row) {
+                    row.classList.remove('border-l-4', 'border-l-indigo-500');
+                    row.style.background = '';
+                    var dot = row.querySelector('.unread-dot');
+                    if (dot) dot.remove();
+                }
+                self.remove();
+            });
+        });
+    });
+
+    // Poll for new notifications every 30 seconds
     function pollNotifications() {
-        fetch('<?= e(base_url("api/notifications.php")) ?>?action=count', {
+        fetch(apiUrl + '?action=count', {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            var badge = document.querySelector('.notification-badge');
-            if (badge) {
-                if (data.count > 0) {
-                    badge.textContent = data.count > 99 ? '99+' : data.count;
-                    badge.style.display = 'flex';
-                } else {
-                    badge.style.display = 'none';
-                }
-            }
+            updateBadge(data.count);
         })
         .catch(function() {});
     }
 
-    setInterval(pollNotifications, pollInterval);
+    setInterval(pollNotifications, 30000);
 })();
 </script>
 

@@ -10,7 +10,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
     set_flash('error', __('error.company_not_found'));
-    redirect('index.php');
+    redirect('login.php');
 }
 
 // Fetch all skills for multi-select
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $budget = (float) $old['budget'];
                 $deadline = $old['deadline'] !== '' ? $old['deadline'] : null;
                 $freelancers_needed = max(1, (int) $old['freelancers_needed']);
-                $status = 'pending';
+                $status = 'approved';
 
                 $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, budget, deadline, duration, freelancers_needed, visibility, attachment, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                 $stmt->bind_param('isssssdssisss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $budget, $deadline, $old['duration'], $freelancers_needed, $old['visibility'], $attachment_name, $status);
@@ -94,10 +94,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $skill_stmt->close();
                 }
 
+                // Insert milestones
+                $ms_titles = $_POST['ms_title'] ?? [];
+                $ms_amounts = $_POST['ms_amount'] ?? [];
+                $ms_descs = $_POST['ms_desc'] ?? [];
+                if (!empty($ms_titles) && $job_id > 0) {
+                    $ms_stmt = $conn->prepare('INSERT INTO milestones (job_id, title, description, amount, sort_order) VALUES (?, ?, ?, ?, ?)');
+                    foreach ($ms_titles as $idx => $ms_title) {
+                        $ms_title = trim($ms_title);
+                        $ms_amount = (float) ($ms_amounts[$idx] ?? 0);
+                        $ms_desc = trim($ms_descs[$idx] ?? '');
+                        if ($ms_title !== '' && $ms_amount > 0) {
+                            $order = $idx + 1;
+                            $ms_stmt->bind_param('issdi', $job_id, $ms_title, $ms_desc, $ms_amount, $order);
+                            $ms_stmt->execute();
+                        }
+                    }
+                    $ms_stmt->close();
+                }
+
                 // Notify admin
                 $admin_id = get_admin_user_id($conn);
                 if ($admin_id) {
-                    create_notification($conn, $admin_id, 'new_job', "New job \"{$old['title']}\" posted by " . e($user['username']) . " and needs approval.", "admin/approve_jobs.php");
+                    create_notification($conn, $admin_id, 'new_job', "New job \"{$old['title']}\" posted by " . e($user['username']) . " and is now live.", "admin/approve_jobs.php");
                 }
 
                 set_flash('success', __('success.job_posted'));
@@ -185,6 +204,10 @@ require __DIR__ . '/../includes/header.php';
             </div>
             <div class="step-dot" data-step="4">
                 <span class="dot">4</span>
+                <span class="label">Milestones</span>
+            </div>
+            <div class="step-dot" data-step="5">
+                <span class="dot">5</span>
                 <span class="label">Review</span>
             </div>
         </div>
@@ -363,14 +386,67 @@ require __DIR__ . '/../includes/header.php';
                     Back
                 </button>
                 <button type="button" onclick="goStep(4)" class="btn-gradient flex items-center gap-2">
+                    Next: Milestones
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- STEP 4: Milestones -->
+        <div class="step-panel" data-panel="4">
+            <div class="rounded-2xl p-6 mb-6" style="background:var(--color-card);border:1px solid var(--color-border);box-shadow:0 4px 20px rgba(0,0,0,0.04)">
+                <h2 class="text-lg font-bold mb-2 flex items-center gap-2" style="color:var(--color-text-primary)">
+                    <svg class="w-5 h-5" style="color:#f59e0b" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                    Payment Milestones
+                </h2>
+                <p class="text-xs mb-5" style="color:var(--color-text-muted)">Break your project into milestones. Each milestone will be funded separately via Escrow before work begins.</p>
+
+                <div id="milestonesContainer" class="space-y-4">
+                    <div class="milestone-item p-4 rounded-xl relative" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-xs font-bold uppercase tracking-wider" style="color:var(--color-text-muted)">Milestone 1</span>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Title *</label>
+                                <input type="text" name="ms_title[]" required placeholder="e.g. Design Mockups" class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Amount ($) *</label>
+                                <input type="number" name="ms_amount[]" step="0.01" min="1" required placeholder="0.00" class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 milestone-amount" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)" oninput="updateMilestoneTotal()">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Description</label>
+                                <input type="text" name="ms_desc[]" placeholder="Brief description" class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" onclick="addMilestone()" class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors" style="border:1.5px dashed var(--color-border);color:var(--color-text-secondary)">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                    Add Milestone
+                </button>
+
+                <div class="mt-4 p-3 rounded-xl flex items-center justify-between" style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2)">
+                    <span class="text-sm font-medium" style="color:var(--color-text-secondary)">Total Milestones:</span>
+                    <span class="text-lg font-bold" style="color:#f59e0b" id="milestoneTotal">$0.00</span>
+                </div>
+            </div>
+            <div class="flex justify-between">
+                <button type="button" onclick="goStep(3)" class="btn-outline flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    Back
+                </button>
+                <button type="button" onclick="goStep(5)" class="btn-gradient flex items-center gap-2">
                     Next: Review
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
                 </button>
             </div>
         </div>
 
-        <!-- STEP 4: Review -->
-        <div class="step-panel" data-panel="4">
+        <!-- STEP 5: Review -->
+        <div class="step-panel" data-panel="5">
             <div class="rounded-2xl p-6 mb-6" style="background:var(--color-card);border:1px solid var(--color-border);box-shadow:0 4px 20px rgba(0,0,0,0.04)">
                 <h2 class="text-lg font-bold mb-5 flex items-center gap-2" style="color:var(--color-text-primary)">
                     <svg class="w-5 h-5" style="color:#f59e0b" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -426,6 +502,10 @@ require __DIR__ . '/../includes/header.php';
                         <span class="text-sm font-medium block mb-1" style="color:var(--color-text-muted)">Skills</span>
                         <div class="flex flex-wrap gap-1.5" id="reviewSkills"></div>
                     </div>
+                    <div class="py-2 border-b" style="border-color:var(--color-border)">
+                        <span class="text-sm font-medium block mb-1" style="color:var(--color-text-muted)">Milestones</span>
+                        <div id="reviewMilestones" class="space-y-2"></div>
+                    </div>
                     <div class="flex justify-between py-2">
                         <span class="text-sm font-medium" style="color:var(--color-text-muted)">Attachment</span>
                         <span class="text-sm" style="color:var(--color-text-primary)" id="reviewAttachment">None</span>
@@ -440,7 +520,7 @@ require __DIR__ . '/../includes/header.php';
                 </div>
             </div>
             <div class="flex justify-between">
-                <button type="button" onclick="goStep(3)" class="btn-outline flex items-center gap-2">
+                <button type="button" onclick="goStep(4)" class="btn-outline flex items-center gap-2">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
                     Back
                 </button>
@@ -456,7 +536,8 @@ require __DIR__ . '/../includes/header.php';
 <script>
 (function(){
     var currentStep = 1;
-    var totalSteps = 4;
+    var totalSteps = 5;
+    var milestoneCount = 1;
 
     window.goStep = function(step) {
         if (step < 1 || step > totalSteps) return;
@@ -470,8 +551,46 @@ require __DIR__ . '/../includes/header.php';
         document.querySelector('.step-panel[data-panel="'+step+'"]').classList.add('active');
         currentStep = step;
 
-        if (step === 4) buildReview();
+        if (step === 5) buildReview();
         window.scrollTo({top:0,behavior:'smooth'});
+    };
+
+    window.addMilestone = function() {
+        milestoneCount++;
+        var html = '<div class="milestone-item p-4 rounded-xl relative" style="background:var(--color-bg);border:1px solid var(--color-border)">' +
+            '<div class="flex items-center justify-between mb-3">' +
+            '<span class="text-xs font-bold uppercase tracking-wider" style="color:var(--color-text-muted)">Milestone ' + milestoneCount + '</span>' +
+            '<button type="button" onclick="removeMilestone(this)" class="text-red-400 hover:text-red-600 transition-colors" title="Remove">' +
+            '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>' +
+            '</button></div>' +
+            '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' +
+            '<div class="sm:col-span-2"><label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Title *</label>' +
+            '<input type="text" name="ms_title[]" required placeholder="e.g. Design Mockups" class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)"></div>' +
+            '<div><label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Amount ($) *</label>' +
+            '<input type="number" name="ms_amount[]" step="0.01" min="1" required placeholder="0.00" class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 milestone-amount" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)" oninput="updateMilestoneTotal()"></div>' +
+            '<div><label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Description</label>' +
+            '<input type="text" name="ms_desc[]" placeholder="Brief description" class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)"></div>' +
+            '</div></div>';
+        document.getElementById('milestonesContainer').insertAdjacentHTML('beforeend', html);
+        updateMilestoneTotal();
+    };
+
+    window.removeMilestone = function(btn) {
+        btn.closest('.milestone-item').remove();
+        var items = document.querySelectorAll('.milestone-item');
+        items.forEach(function(item, i) {
+            item.querySelector('span').textContent = 'Milestone ' + (i + 1);
+        });
+        milestoneCount = items.length;
+        updateMilestoneTotal();
+    };
+
+    window.updateMilestoneTotal = function() {
+        var total = 0;
+        document.querySelectorAll('.milestone-amount').forEach(function(input) {
+            total += parseFloat(input.value) || 0;
+        });
+        document.getElementById('milestoneTotal').textContent = '$' + total.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     };
 
     function buildReview() {
@@ -494,6 +613,20 @@ require __DIR__ . '/../includes/header.php';
             skillsHtml += '<span class="inline-flex px-2.5 py-1 text-xs font-medium rounded-full" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff">'+c.textContent.trim()+'</span>';
         });
         document.getElementById('reviewSkills').innerHTML = skillsHtml || '<span class="text-xs" style="color:var(--color-text-muted)">No skills selected</span>';
+
+        // Milestones review
+        var msHtml = '';
+        var titles = document.querySelectorAll('[name="ms_title[]"]');
+        var amounts = document.querySelectorAll('[name="ms_amount[]"]');
+        var descs = document.querySelectorAll('[name="ms_desc[]"]');
+        for (var i = 0; i < titles.length; i++) {
+            if (titles[i].value.trim()) {
+                msHtml += '<div class="flex items-center justify-between p-2 rounded-lg" style="background:var(--color-bg)">' +
+                    '<span class="text-xs font-medium" style="color:var(--color-text-secondary)">' + (i+1) + '. ' + (titles[i].value||'Untitled') + '</span>' +
+                    '<span class="text-xs font-bold" style="color:#f59e0b">$' + (parseFloat(amounts[i].value)||0).toFixed(2) + '</span></div>';
+            }
+        }
+        document.getElementById('reviewMilestones').innerHTML = msHtml || '<span class="text-xs" style="color:var(--color-text-muted)">No milestones added</span>';
 
         var fileInput = document.getElementById('attachmentInput');
         document.getElementById('reviewAttachment').textContent = fileInput.files.length > 0 ? fileInput.files[0].name : 'None';
@@ -567,6 +700,15 @@ require __DIR__ . '/../includes/header.php';
         if(!req){ alert('Requirements are required.'); e.preventDefault(); goStep(2); return; }
         if(skills===0){ alert('Please select at least one skill.'); e.preventDefault(); goStep(3); return; }
         if(deadline && new Date(deadline) < new Date()){ alert('Deadline cannot be in the past.'); e.preventDefault(); goStep(2); return; }
+
+        // Validate milestones
+        var msTitles = document.querySelectorAll('[name="ms_title[]"]');
+        var msAmounts = document.querySelectorAll('[name="ms_amount[]"]');
+        var hasMilestone = false;
+        for (var i = 0; i < msTitles.length; i++) {
+            if (msTitles[i].value.trim() && parseFloat(msAmounts[i].value) > 0) { hasMilestone = true; break; }
+        }
+        if (!hasMilestone) { alert('Please add at least one milestone with a title and amount.'); e.preventDefault(); goStep(4); return; }
 
         var fileInput = document.getElementById('attachmentInput');
         if(fileInput.files.length){

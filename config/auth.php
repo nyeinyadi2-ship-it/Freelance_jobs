@@ -70,7 +70,7 @@ function require_role(string $role): void
 
     if (($_SESSION['role'] ?? '') !== $role) {
         set_flash('error', __('error.no_permission'));
-        redirect('index.php');
+        redirect('login.php');
     }
 }
 
@@ -185,6 +185,7 @@ function status_badge(string $status): string
         'completed' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
         'accepted' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
         'assigned' => 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300',
+        'working' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
         'submitted' => 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300',
         'paid' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
         'active' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',

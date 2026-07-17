@@ -7,7 +7,7 @@ require_role('admin');
 
 // Fetch stats
 $stats = [
-    'pending_jobs' => 0,
+    'hidden_jobs' => 0,
     'total_companies' => 0,
     'total_freelancers' => 0,
     'total_jobs' => 0,
@@ -17,8 +17,8 @@ $stats = [
 ];
 
 try {
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'pending'");
-    $stats['pending_jobs'] = (int) $r->fetch_assoc()['cnt'];
+    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'rejected'");
+    $stats['hidden_jobs'] = (int) $r->fetch_assoc()['cnt'];
 } catch (mysqli_sql_exception $e) {}
 
 $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'company'");
@@ -68,7 +68,7 @@ $r = $conn->query("
 if ($r) { while ($row = $r->fetch_assoc()) $recent_users[] = $row; }
 
 $page_title = __('admin.dashboard_title');
-require __DIR__ . '/../includes/header.php';
+require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Page Header -->
@@ -79,21 +79,21 @@ require __DIR__ . '/../includes/header.php';
 
 <!-- Stats Grid -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-    <!-- Pending Jobs -->
+    <!-- Hidden/Moderated Jobs -->
     <div class="admin-stat-card card admin-fade delay-1">
         <div class="flex items-start justify-between">
             <div>
-                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e(__('admin.pending_jobs')) ?></p>
-                <p class="text-3xl font-extrabold mt-1 text-yellow-600 stat-counter" data-target="<?= $stats['pending_jobs'] ?>">0</p>
+                <p class="text-sm font-medium" style="color:var(--color-text-muted)">Hidden Jobs</p>
+                <p class="text-3xl font-extrabold mt-1 text-red-600 stat-counter" data-target="<?= $stats['hidden_jobs'] ?>">0</p>
             </div>
-            <div class="stat-icon bg-yellow-100 dark:bg-yellow-900/30">
-                <svg class="w-6 h-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div class="stat-icon bg-red-100 dark:bg-red-900/30">
+                <svg class="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
             </div>
         </div>
         <div class="mt-3 flex items-center gap-1">
-            <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="text-xs font-medium text-yellow-600 hover:underline"><?= e(__('admin.review_pending')) ?> →</a>
+            <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="text-xs font-medium text-red-600 hover:underline">Review Moderation →</a>
         </div>
-        <div class="stat-glow-effect bg-yellow-400"></div>
+        <div class="stat-glow-effect bg-red-400"></div>
     </div>
 
     <!-- Total Jobs -->
@@ -155,12 +155,12 @@ require __DIR__ . '/../includes/header.php';
         <h3 class="font-bold mb-4" style="color:var(--color-text-primary)"><?= e(__('admin.quick_actions')) ?></h3>
         <div class="space-y-3">
             <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="quick-action-card">
-                <div class="w-10 h-10 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-5 h-5 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div class="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                    <svg class="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                 </div>
                 <div>
-                    <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e(__('admin.review_pending')) ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= $stats['pending_jobs'] ?> <?= e(__('admin.awaiting_review')) ?></p>
+                    <p class="text-sm font-semibold" style="color:var(--color-text-primary)">Moderate Jobs</p>
+                    <p class="text-xs" style="color:var(--color-text-muted)">Review & hide inappropriate posts</p>
                 </div>
             </a>
             <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="quick-action-card">
@@ -172,13 +172,13 @@ require __DIR__ . '/../includes/header.php';
                     <p class="text-xs" style="color:var(--color-text-muted)"><?= $stats['total_users'] ?> <?= e(__('admin.total_users')) ?></p>
                 </div>
             </a>
-            <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="quick-action-card">
+            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="quick-action-card">
                 <div class="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
                     <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
                 </div>
                 <div>
-                    <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e(__('admin.view_analytics')) ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e(__('admin.platform_stats')) ?></p>
+                    <p class="text-sm font-semibold" style="color:var(--color-text-primary)">Platform Stats</p>
+                    <p class="text-xs" style="color:var(--color-text-muted)">View platform overview</p>
                 </div>
             </a>
         </div>
@@ -288,7 +288,7 @@ if ($admin_user) {
 <div class="card admin-fade mb-8">
     <div class="flex items-center justify-between mb-4">
         <h3 class="font-bold" style="color:var(--color-text-primary)">Recent Notifications</h3>
-        <a href="<?= e(base_url('notifications.php')) ?>" class="text-xs text-indigo-600 hover:underline">View All →</a>
+        <a href="<?= e(base_url('admin/notifications.php')) ?>" class="text-xs text-indigo-600 hover:underline">View All →</a>
     </div>
     <?php if (empty($admin_notifs)): ?>
         <p class="text-sm text-center py-8" style="color:var(--color-text-muted)">No notifications yet.</p>
@@ -353,4 +353,4 @@ if ($admin_user) {
 })();
 </script>
 
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+<?php require __DIR__ . '/includes/admin_footer.php'; ?>

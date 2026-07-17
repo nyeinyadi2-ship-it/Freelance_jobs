@@ -16,7 +16,7 @@ require_role('freelancer');
 $fl_user = current_user();
 $fl_uid = (int) $fl_user['user_id'];
 $fl_freelancer_id = get_freelancer_id($conn, $fl_uid);
-if (!$fl_freelancer_id) { set_flash('error', __('error.freelancer_not_found')); redirect('index.php'); }
+if (!$fl_freelancer_id) { set_flash('error', __('error.freelancer_not_found')); redirect('login.php'); }
 
 // Profile
 $fl_stmt = $conn->prepare("SELECT f.*, u.email, u.profile_image, u.username, u.created_at FROM freelancers f JOIN users u ON u.id = f.user_id WHERE f.id = ?");
@@ -40,7 +40,7 @@ $fl_completion = min(100, round(($fl_filled / count($fl_fields)) * 80 + (count($
 // Stats
 $fl_stats = ['pending' => 0, 'active' => 0, 'completed' => 0, 'earnings' => 0];
 try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM job_applications WHERE freelancer_id=? AND status='pending'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['pending'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
-try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status IN ('assigned','submitted')"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['active'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status IN ('assigned','working','submitted')"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['active'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
 try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status='completed'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['completed'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
 try { $s = $conn->prepare("SELECT COALESCE(SUM(p.amount),0) AS t FROM payments p JOIN assignments a ON p.assignment_id=a.id WHERE a.freelancer_id=? AND p.status='paid'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['earnings'] = (float)$s->get_result()->fetch_assoc()['t']; $s->close(); } catch(Exception $e) {}
 

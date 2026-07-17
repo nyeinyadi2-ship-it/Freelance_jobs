@@ -6,8 +6,8 @@ require_once __DIR__ . '/config/notifications.php';
 if (!empty($_SESSION['user_id'])) {
     $role = $_SESSION['role'];
     if ($role === 'admin') redirect('admin/admin_dashboard.php');
-    if ($role === 'company') redirect('company/dashboard.php');
-    if ($role === 'freelancer') redirect('freelancer/dashboard.php');
+    if ($role === 'company') redirect('index.php');
+    if ($role === 'freelancer') redirect('index.php');
 }
 
 $error = '';

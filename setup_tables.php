@@ -81,7 +81,7 @@ $tables = [
         id INT PRIMARY KEY AUTO_INCREMENT,
         job_id INT UNIQUE,
         freelancer_id INT,
-        status ENUM('assigned', 'submitted', 'completed') DEFAULT 'assigned',
+        status ENUM('assigned', 'working', 'submitted', 'completed') DEFAULT 'assigned',
         submission_link VARCHAR(255),
         assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,

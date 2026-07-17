@@ -10,7 +10,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
     set_flash('error', __('error.company_not_found'));
-    redirect('index.php');
+    redirect('login.php');
 }
 
 // Fetch company profile
@@ -56,7 +56,7 @@ try {
     $stmt = $conn->prepare("
         SELECT COUNT(*) AS cnt FROM assignments a
         JOIN jobs j ON a.job_id = j.id
-        WHERE j.company_id = ? AND a.status IN ('assigned', 'submitted')
+        WHERE j.company_id = ? AND a.status IN ('assigned', 'working', 'submitted')
     ");
     $stmt->bind_param('i', $company_id);
     $stmt->execute();
@@ -269,9 +269,14 @@ require __DIR__ . '/../includes/header.php';
 <div class="mb-6">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div class="flex items-center gap-3">
-      <?php $logoUrl = $company['logo_image'] ? base_url('uploads/' . $company['logo_image']) : null; ?>
-      <?php if ($logoUrl): ?>
-        <img src="<?= e($logoUrl) ?>" alt="" class="h-10 w-auto object-contain border rounded-lg p-1" style="border-color:var(--color-border)">
+      <?php if (!empty($company['logo_image'])): ?>
+        <img src="<?= e(base_url('uploads/' . $company['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border bg-white dark:bg-gray-800" style="border-color:var(--color-border)">
+      <?php elseif ($dashImg = profile_image_url($user['profile_image'])): ?>
+        <img src="<?= e($dashImg) ?>" alt="" class="w-10 h-10 rounded-full object-cover border" style="border-color:var(--color-border)">
+      <?php else: ?>
+        <div class="w-10 h-10 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm border" style="background:rgba(99,102,241,0.2);border-color:var(--color-border)">
+          <?= e(_first_char($company['company_name'] ?? $user['username'])) ?>
+        </div>
       <?php endif; ?>
       <div>
         <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= e($company['company_name'] ?? $user['username']) ?></h1>

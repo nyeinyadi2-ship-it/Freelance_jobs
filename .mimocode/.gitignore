@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+bun.lockb
+package-lock.json
+
+# Environment / Local system locks
+.mimocode/
+
+# User Uploads (Ignore the files, but keep the folder structure)
+uploads/attachments/*
+uploads/img_*
+!uploads/.gitkeep

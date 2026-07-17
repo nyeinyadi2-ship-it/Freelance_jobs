@@ -4,7 +4,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 
 // Ongoing tasks
 $ongoing_tasks = [];
-try { $s = $conn->prepare("SELECT a.id,a.status,a.submission_link,a.assigned_at,j.title,j.description,j.budget,j.id AS job_id,c.company_name,c.logo_image FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id WHERE a.freelancer_id=? AND a.status IN ('assigned','submitted') ORDER BY a.assigned_at DESC"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $ongoing_tasks[] = $row; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT a.id,a.status,a.submission_link,a.assigned_at,j.title,j.description,j.budget,j.id AS job_id,c.company_name,c.logo_image FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id WHERE a.freelancer_id=? AND a.status IN ('assigned','working','submitted') ORDER BY a.assigned_at DESC"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $ongoing_tasks[] = $row; $s->close(); } catch(Exception $e) {}
 
 // Completed tasks
 $completed_list = [];

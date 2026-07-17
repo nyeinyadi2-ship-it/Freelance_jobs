@@ -163,7 +163,7 @@ if ($target_user['role'] === 'company') {
 $status = $target_user['account_status'] ?? 'active';
 
 $page_title = __('admin.view_user_title') . ' - ' . e($target_user['username']);
-require __DIR__ . '/../includes/header.php';
+require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Breadcrumb -->
@@ -237,7 +237,7 @@ require __DIR__ . '/../includes/header.php';
                     <?php if ($profile['website']): ?>
                         <div>
                             <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.website')) ?></p>
-                            <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['website']) ?></p>
+                            <a href="<?= e($profile['website']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#127760; Visit Website</a>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['location']): ?>
@@ -336,7 +336,7 @@ require __DIR__ . '/../includes/header.php';
                 <?php if ($profile['portfolio_url']): ?>
                     <div class="mt-4">
                         <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e(__('profile.portfolio_url')) ?></p>
-                        <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['portfolio_url']) ?></p>
+                        <a href="<?= e($profile['portfolio_url']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#128193; View Portfolio</a>
                     </div>
                 <?php endif; ?>
                 <?php if ($profile['bio']): ?>
@@ -429,7 +429,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+<?php require __DIR__ . '/includes/admin_footer.php'; ?>
 
 <script>
 (function() {

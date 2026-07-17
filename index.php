@@ -1,6 +1,79 @@
 <?php
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/notifications.php';
+require_once __DIR__ . '/config/chat.php';
+
+// Handle login POST from home page
+$login_error = '';
+$login_success = false;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['home_login'])) {
+    if (!verify_csrf()) {
+        $login_error = __('error.invalid_request');
+    } else {
+        $email = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        if ($email === '' || $password === '') {
+            $login_error = __('error.email_password_required');
+        } else {
+            $has_status_col = has_account_status_column();
+            $sql = $has_status_col
+                ? 'SELECT id, username, email, password, role, profile_image, account_status FROM users WHERE email = ?'
+                : 'SELECT id, username, email, password, role, profile_image FROM users WHERE email = ?';
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param('s', $email);
+            $stmt->execute();
+            $user = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if ($user && password_verify($password, $user['password'])) {
+                $account_status = $has_status_col ? ($user['account_status'] ?? 'active') : 'active';
+                if ($account_status === 'suspended') {
+                    $login_error = __('error.account_suspended');
+                } elseif ($account_status === 'blocked') {
+                    $login_error = __('error.account_blocked');
+                } else {
+                    $_SESSION['user_id'] = (int) $user['id'];
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['email'] = $user['email'];
+                    $_SESSION['role'] = $user['role'];
+                    $_SESSION['profile_image'] = $user['profile_image'];
+
+                    $admin_id = get_admin_user_id($conn);
+                    if ($admin_id && $admin_id !== (int) $user['id']) {
+                        $role_label = ucfirst($user['role']);
+                        create_notification($conn, $admin_id, 'login_event', "{$role_label} \"{$user['username']}\" has logged in.", null);
+                    }
+
+                    if ($user['role'] === 'company') {
+                        $_SESSION['profile_id'] = get_company_id($conn, (int) $user['id']);
+                        $stmt = $conn->prepare('SELECT logo_image FROM companies WHERE user_id = ?');
+                        $stmt->bind_param('i', $user['id']);
+                        $stmt->execute();
+                        $company = $stmt->get_result()->fetch_assoc();
+                        $_SESSION['logo_image'] = $company['logo_image'] ?? null;
+                        $stmt->close();
+                    } elseif ($user['role'] === 'freelancer') {
+                        $_SESSION['profile_id'] = get_freelancer_id($conn, (int) $user['id']);
+                        $_SESSION['logo_image'] = null;
+                    } else {
+                        $_SESSION['profile_id'] = null;
+                        $_SESSION['logo_image'] = null;
+                        redirect('admin/admin_dashboard.php');
+                    }
+                    // Stay on home page — page will re-render with logged-in navbar
+                }
+            } else {
+                $login_error = __('error.invalid_credentials');
+            }
+        }
+    }
+}
+
+// Check login state for footer links
+$is_logged_in = !empty($_SESSION['user_id']) && in_array($_SESSION['role'] ?? '', ['company', 'freelancer'], true);
 
 // Fetch stats
 $stats = [
@@ -21,7 +94,8 @@ $stats['completed'] = (int) $r->fetch_assoc()['cnt'];
 // Fetch latest jobs
 $latest_jobs = [];
 $r = $conn->query("
-    SELECT j.id, j.company_id, j.title, j.budget, j.created_at, j.description, c.company_name, c.logo_image,
+    SELECT j.id, j.company_id, j.title, j.budget, j.created_at, j.description, j.attachment, j.deadline, j.category,
+           c.company_name, c.logo_image,
            (SELECT GROUP_CONCAT(s.skill_name SEPARATOR ', ') FROM job_applications ja JOIN freelancers f ON ja.freelancer_id = f.id JOIN freelancer_skills fs ON fs.freelancer_id = f.id JOIN skills s ON fs.skill_id = s.id WHERE ja.job_id = j.id GROUP BY ja.job_id LIMIT 3) AS applied_skills
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
@@ -47,11 +121,38 @@ if (!empty($latest_jobs)) {
     unset($job);
 }
 
+// Check if current user is a freelancer and get applied job IDs
+$current_user_role = $_SESSION['role'] ?? null;
+$current_user_id = (int) ($_SESSION['user_id'] ?? 0);
+$is_freelancer = ($current_user_role === 'freelancer');
+$freelancer_id = 0;
+$applied_job_ids = [];
+
+if ($is_freelancer && $current_user_id) {
+    $fr = $conn->prepare('SELECT id FROM freelancers WHERE user_id = ?');
+    $fr->bind_param('i', $current_user_id);
+    $fr->execute();
+    $fr_row = $fr->get_result()->fetch_assoc();
+    $fr->close();
+    if ($fr_row) {
+        $freelancer_id = (int) $fr_row['id'];
+        $ar = $conn->prepare('SELECT job_id FROM job_applications WHERE freelancer_id = ?');
+        $ar->bind_param('i', $freelancer_id);
+        $ar->execute();
+        $ar_result = $ar->get_result();
+        while ($ar_row = $ar_result->fetch_assoc()) {
+            $applied_job_ids[] = (int) $ar_row['job_id'];
+        }
+        $ar->close();
+    }
+}
+
 // Fetch top freelancers
 $top_freelancers = [];
 $r = $conn->query("
     SELECT f.id, f.full_name, f.title, f.hourly_rate, f.experience_years, u.profile_image,
-           (SELECT COUNT(*) FROM job_applications WHERE freelancer_id = f.id AND status = 'accepted') AS completed_projects,
+           (SELECT COUNT(*) FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE a.freelancer_id = f.id AND a.status = 'completed') AS completed_projects,
+           (SELECT COUNT(DISTINCT j.company_id) FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE a.freelancer_id = f.id AND a.status = 'completed') AS companies_worked,
            (SELECT COUNT(*) FROM freelancer_skills WHERE freelancer_id = f.id) AS skill_count
     FROM freelancers f
     JOIN users u ON f.user_id = u.id
@@ -395,27 +496,89 @@ $page_title = __('app.tagline');
             border-radius: 50%;
         }
 
-        /* Premium nav link */
-        .nav-link {
+        /* Nav link items */
+        .nav-link-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.5rem 0.875rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+            color: var(--color-text-secondary, #6b7280);
             position: relative;
-            transition: color 0.2s ease;
         }
-
-        .nav-link::after {
+        .nav-link-item:hover {
+            color: var(--color-primary, #4f46e5);
+            background: rgba(99, 102, 241, 0.06);
+        }
+        .nav-link-item.active {
+            color: var(--color-primary, #4f46e5);
+            background: rgba(99, 102, 241, 0.08);
+        }
+        .nav-link-item.active::after {
             content: '';
             position: absolute;
-            bottom: -4px;
+            bottom: -1px;
             left: 50%;
-            width: 0;
+            width: 60%;
             height: 2px;
             background: linear-gradient(90deg, #6366f1, #a855f7);
             border-radius: 1px;
-            transition: all 0.3s ease;
             transform: translateX(-50%);
         }
 
-        .nav-link:hover::after {
-            width: 100%;
+        /* Nav icon buttons */
+        .nav-icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+            color: var(--color-text-secondary, #6b7280);
+        }
+        .nav-icon-btn:hover {
+            background: rgba(99, 102, 241, 0.06);
+            color: var(--color-primary, #4f46e5);
+        }
+
+        /* Mobile nav links */
+        .mobile-nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 0.75rem;
+            transition: all 0.2s ease;
+            color: var(--color-text-secondary, #6b7280);
+        }
+        .mobile-nav-link:hover {
+            background: rgba(99, 102, 241, 0.06);
+            color: var(--color-primary, #4f46e5);
+        }
+        .mobile-nav-link.active {
+            color: var(--color-primary, #4f46e5);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        /* Profile menu items */
+        .profile-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.625rem 1rem;
+            font-size: 0.875rem;
+            transition: all 0.15s ease;
+            color: var(--color-text-secondary, #6b7280);
+        }
+        .profile-menu-item:hover {
+            background: rgba(99, 102, 241, 0.06);
+            color: var(--color-primary, #4f46e5);
         }
 
         /* CTA gradient border */
@@ -442,57 +605,7 @@ $page_title = __('app.tagline');
 
 <body class="bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30 min-h-screen">
 
-    <!-- ===== STICKY NAVIGATION ===== -->
-    <nav class="fixed top-0 left-0 right-0 z-50 navbar-blur border-b border-white/20 dark:border-white/5" id="main-nav">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-20">
-                <!-- Logo -->
-                <a href="<?= e(base_url('index.php')) ?>" class="flex items-center gap-2 group">
-                    <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-accent-500 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/30 group-hover:shadow-primary-500/50 transition-shadow">
-                        <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                    <span class="text-xl font-bold bg-gradient-to-r from-primary-600 to-accent-600 bg-clip-text text-transparent">HireWork</span>
-                </a>
-
-                <!-- Center Nav -->
-                <div class="hidden lg:flex items-center gap-1">
-                    <a href="<?= e(base_url('index.php')) ?>" class="nav-link px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg">Home</a>
-                    <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="nav-link px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg">Find Jobs</a>
-                    <a href="<?= e(base_url('register.php')) ?>" class="nav-link px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg">Freelancers</a>
-                    <a href="#categories" class="nav-link px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg">Categories</a>
-                    <a href="#why-us" class="nav-link px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg">About</a>
-                    <a href="#testimonials" class="nav-link px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg">Contact</a>
-                </div>
-
-                <!-- Right: Auth -->
-                <div class="flex items-center gap-3">
-                    <a href="<?= e(base_url('login.php')) ?>" class="hidden sm:inline-flex items-center px-5 py-2.5 text-sm font-semibold text-primary-600 dark:text-primary-400 border-2 border-primary-200 dark:border-primary-800 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-all">Login</a>
-                    <a href="<?= e(base_url('register.php')) ?>" class="btn-gradient inline-flex items-center px-5 py-2.5 text-sm font-semibold text-white rounded-xl shadow-lg shadow-primary-500/25">Register</a>
-
-                    <!-- Mobile menu toggle -->
-                    <button id="mobile-toggle" class="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                        <svg class="w-6 h-6 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Mobile Menu -->
-        <div id="mobile-menu" class="hidden lg:hidden border-t border-gray-100 dark:border-gray-800">
-            <div class="px-4 py-4 space-y-2">
-                <a href="<?= e(base_url('index.php')) ?>" class="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-colors">Home</a>
-                <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-colors">Find Jobs</a>
-                <a href="<?= e(base_url('register.php')) ?>" class="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-colors">Freelancers</a>
-                <a href="#categories" class="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-colors">Categories</a>
-                <a href="#why-us" class="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-colors">About</a>
-                <a href="#testimonials" class="block px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-colors">Contact</a>
-            </div>
-        </div>
-    </nav>
+    <?php require __DIR__ . '/includes/navbar.php'; ?>
 
     <!-- ===== HERO SECTION ===== -->
     <section class="hero-premium min-h-screen flex items-center pt-24 pb-16 relative">
@@ -707,10 +820,10 @@ $page_title = __('app.tagline');
                     if (!isset($category_data[$skill['skill_name']])) continue;
                     $cd = $category_data[$skill['skill_name']];
                     $shown++;
-                    $cnt_r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs j JOIN companies c ON j.company_id = c.id JOIN freelancer_skills fs ON fs.freelancer_id IN (SELECT id FROM freelancers WHERE user_id = c.user_id) JOIN skills s ON fs.skill_id = s.id WHERE s.skill_name = '" . $conn->real_escape_string($skill['skill_name']) . "' AND j.status = 'approved'");
+                    $cnt_r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs j JOIN job_skills js ON js.job_id = j.id JOIN skills s ON js.skill_id = s.id WHERE s.skill_name = '" . $conn->real_escape_string($skill['skill_name']) . "' AND j.status = 'approved'");
                     $job_cnt = $cnt_r ? (int) $cnt_r->fetch_assoc()['cnt'] : 0;
                 ?>
-                    <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="group relative overflow-hidden rounded-2xl p-6 bg-gradient-to-br <?= $cd['color'] ?> text-white text-center lift-hover reveal reveal-d<?= ($shown % 5) + 1 ?>">
+                    <a href="<?= e(base_url('freelancer/skill_jobs.php?skill=' . urlencode($skill['skill_name']))) ?>" class="group relative overflow-hidden rounded-2xl p-6 bg-gradient-to-br <?= $cd['color'] ?> text-white text-center lift-hover reveal reveal-d<?= ($shown % 5) + 1 ?>">
                         <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                             <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><?= $cd['icon'] ?></svg>
                         </div>
@@ -724,7 +837,7 @@ $page_title = __('app.tagline');
     </section>
 
     <!-- ===== FEATURED JOBS ===== -->
-    <section class="py-24">
+    <section id="find-jobs" class="py-24">
         <div class="max-w-7xl mx-auto px-4">
             <div class="flex flex-wrap items-end justify-between mb-14 reveal">
                 <div>
@@ -750,16 +863,67 @@ $page_title = __('app.tagline');
                     <p class="text-gray-500 dark:text-gray-400 text-lg">No jobs available yet. Check back soon!</p>
                 </div>
             <?php else: ?>
-                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-7">
-                    <?php foreach ($latest_jobs as $i => $job): ?>
-                        <div class="glass-card rounded-2xl p-7 lift-hover reveal reveal-d<?= ($i % 3) + 1 ?> cursor-pointer group" onclick="window.location='<?= e(base_url('freelancer/browse_jobs.php')) ?>'">
-                            <!-- Header -->
-                            <div class="flex items-start justify-between mb-5">
-                                <div class="flex items-center gap-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-7">
+                    <?php foreach ($latest_jobs as $i => $job):
+                        $job_id = (int) $job['id'];
+                        $already_applied = in_array($job_id, $applied_job_ids);
+                        $view_url = e(base_url('freelancer/view_job.php?id=' . $job_id));
+
+                        // Determine thumbnail
+                        $is_image = false;
+                        $thumb_url = null;
+                        if (!empty($job['attachment'])) {
+                            $ext = strtolower(pathinfo($job['attachment'], PATHINFO_EXTENSION));
+                            $is_image = in_array($ext, ['jpg','jpeg','png','gif','webp']);
+                            $thumb_url = e(base_url('uploads/attachments/' . $job['attachment']));
+                        }
+                    ?>
+                        <div class="glass-card rounded-2xl overflow-hidden lift-hover reveal reveal-d<?= ($i % 2) + 1 ?> group">
+                            <!-- Thumbnail -->
+                            <div class="relative w-full h-52 overflow-hidden bg-gradient-to-br from-primary-50 to-accent-50 dark:from-primary-900/20 dark:to-accent-900/20">
+                                <?php if ($is_image && $thumb_url): ?>
+                                    <img src="<?= $thumb_url ?>" alt="<?= e($job['title']) ?>" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105">
+                                <?php else: ?>
+                                    <div class="w-full h-full flex items-center justify-center">
+                                        <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" class="opacity-40">
+                                            <rect width="72" height="72" rx="18" fill="url(#grad_home)" fill-opacity="0.15"/>
+                                            <path d="M25 32L32 25L39 32" stroke="url(#grad_home)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <path d="M32 25V41" stroke="url(#grad_home)" stroke-width="2.5" stroke-linecap="round"/>
+                                            <path d="M43 41V32H48V41C48 43.76 45.76 46 43 46H29C26.24 46 24 43.76 24 41" stroke="url(#grad_home)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                            <defs>
+                                                <linearGradient id="grad_home" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
+                                                    <stop stop-color="#6366f1"/>
+                                                    <stop offset="1" stop-color="#8b5cf6"/>
+                                                </linearGradient>
+                                            </defs>
+                                        </svg>
+                                    </div>
+                                <?php endif; ?>
+                                <!-- Badges -->
+                                <div class="absolute top-3 left-3 flex gap-2 flex-wrap">
+                                    <?php if (!empty($job['category'])): ?>
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/90 dark:bg-gray-900/80 text-primary-700 dark:text-primary-300 backdrop-blur-sm shadow-sm">
+                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                                            <?= e($job['category']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="absolute top-3 right-3">
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/90 text-white backdrop-blur-sm shadow-sm">
+                                        <span class="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
+                                        Open
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Body -->
+                            <div class="p-6">
+                                <!-- Company -->
+                                <div class="flex items-center gap-3 mb-4">
                                     <?php if (!empty($job['logo_image'])): ?>
-                                        <img src="<?= e(base_url('uploads/' . $job['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-cover border-2 border-white dark:border-gray-700 shadow-md">
+                                        <img src="<?= e(base_url('uploads/' . $job['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-cover border-2 border-white dark:border-gray-700 shadow-sm">
                                     <?php else: ?>
-                                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-900/40 dark:to-accent-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-lg shadow-md">
+                                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-900/40 dark:to-accent-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-sm shadow-sm">
                                             <?= e(_first_char($job['company_name'] ?? 'C')) ?>
                                         </div>
                                     <?php endif; ?>
@@ -768,41 +932,66 @@ $page_title = __('app.tagline');
                                         <p class="text-xs text-gray-400 dark:text-gray-500">Posted recently</p>
                                     </div>
                                 </div>
-                                <div class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer" onclick="event.stopPropagation()">
-                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                    </svg>
-                                </div>
-                            </div>
 
-                            <!-- Title & Description -->
-                            <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors leading-snug"><?= e($job['title']) ?></h3>
-                            <p class="text-sm text-gray-500 dark:text-gray-400 mb-5 line-clamp-2 leading-relaxed"><?= e(mb_strimwidth($job['description'] ?? '', 0, 120, '...')) ?></p>
+                                <!-- Title & Description -->
+                                <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-2 leading-snug line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors"><?= e($job['title']) ?></h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 line-clamp-2 leading-relaxed"><?= e(mb_strimwidth($job['description'] ?? '', 0, 120, '...')) ?></p>
 
-                            <!-- Skills -->
-                            <?php if (!empty($job['applied_skills'])): ?>
-                                <div class="flex flex-wrap gap-2 mb-5">
-                                    <?php $skills_arr = array_slice(explode(', ', $job['applied_skills']), 0, 3); ?>
-                                    <?php foreach ($skills_arr as $skill_tag): ?>
-                                        <span class="skill-tag inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border border-primary-100 dark:border-primary-800/50"><?= e($skill_tag) ?></span>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php endif; ?>
-
-                            <!-- Footer -->
-                            <div class="flex items-center justify-between pt-5 border-t border-gray-100 dark:border-gray-700/50">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
-                                        <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                                        </svg>
+                                <!-- Skills -->
+                                <?php if (!empty($job['applied_skills'])): ?>
+                                    <div class="flex flex-wrap gap-2 mb-4">
+                                        <?php $skills_arr = array_slice(explode(', ', $job['applied_skills']), 0, 3); ?>
+                                        <?php foreach ($skills_arr as $skill_tag): ?>
+                                            <span class="inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border border-primary-100 dark:border-primary-800/50"><?= e($skill_tag) ?></span>
+                                        <?php endforeach; ?>
                                     </div>
-                                    <span class="text-lg font-bold text-gray-900 dark:text-white">$<?= e(number_format((float) $job['budget'], 0)) ?></span>
+                                <?php endif; ?>
+
+                                <!-- Budget & Deadline -->
+                                <div class="flex items-center justify-between mb-5">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-sm">
+                                            <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                                            </svg>
+                                        </div>
+                                        <span class="text-lg font-bold text-gray-900 dark:text-white">$<?= e(number_format((float) $job['budget'], 0)) ?></span>
+                                    </div>
+                                    <?php if (!empty($job['deadline'])): ?>
+                                        <span class="inline-flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                            <?= e(date('M j', strtotime($job['deadline']))) ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
-                                <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
-                                    <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5 animate-pulse"></span>
-                                    Open
-                                </span>
+
+                                <!-- Action Buttons -->
+                                <div class="flex items-center gap-3 pt-5 border-t border-gray-100 dark:border-gray-700/50">
+                                    <a href="<?= $view_url ?>" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-primary-600 dark:text-primary-400 border-2 border-primary-200 dark:border-primary-800 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-all">
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                        View Details
+                                    </a>
+                                    <?php if ($already_applied): ?>
+                                        <span class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 border-2 border-emerald-200 dark:border-emerald-800/50 cursor-default">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                            Applied
+                                        </span>
+                                    <?php elseif ($is_freelancer): ?>
+                                        <form method="POST" action="<?= e(base_url('freelancer/view_job.php?id=' . $job_id)) ?>" class="flex-1" onclick="event.stopPropagation()">
+                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                            <input type="hidden" name="action" value="apply">
+                                            <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 shadow-lg shadow-primary-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+                                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                                Apply Now
+                                            </button>
+                                        </form>
+                                    <?php else: ?>
+                                        <a href="<?= e(base_url('login.php')) ?>" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 shadow-lg shadow-primary-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all" onclick="event.stopPropagation()">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+                                            Apply Now
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -812,7 +1001,7 @@ $page_title = __('app.tagline');
     </section>
 
     <!-- ===== TOP FREELANCERS ===== -->
-    <section class="py-24 bg-gradient-to-b from-white/50 to-indigo-50/30 dark:from-slate-800/30 dark:to-slate-900/50">
+    <section id="freelancers" class="py-24 bg-gradient-to-b from-white/50 to-indigo-50/30 dark:from-slate-800/30 dark:to-slate-900/50">
         <div class="max-w-7xl mx-auto px-4">
             <div class="text-center mb-16 reveal">
                 <span class="inline-flex items-center gap-2 text-primary-600 font-semibold text-sm uppercase tracking-widest mb-4">
@@ -825,56 +1014,75 @@ $page_title = __('app.tagline');
 
             <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-7">
                 <?php foreach ($top_freelancers as $i => $fl): ?>
-                    <div class="glass-card rounded-2xl p-7 text-center lift-hover reveal reveal-d<?= ($i % 4) + 1 ?>">
+                    <div class="glass-card rounded-2xl overflow-hidden lift-hover reveal reveal-d<?= ($i % 4) + 1 ?> group">
                         <!-- Avatar -->
-                        <div class="avatar-ring inline-block mb-5">
-                            <div class="w-24 h-24 rounded-full overflow-hidden">
-                                <?php if (!empty($fl['profile_image'])): ?>
-                                    <img src="<?= e(base_url('uploads/' . $fl['profile_image'])) ?>" alt="" class="w-full h-full object-cover">
-                                <?php else: ?>
-                                    <div class="w-full h-full bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-800/40 dark:to-accent-800/40 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-2xl">
-                                        <?= e(_first_char($fl['full_name'] ?? 'F')) ?>
+                        <div class="relative pt-8 pb-4 text-center">
+                            <div class="inline-block mb-4">
+                                <div class="avatar-ring">
+                                    <div class="w-24 h-24 rounded-full overflow-hidden">
+                                        <?php if (!empty($fl['profile_image'])): ?>
+                                            <img src="<?= e(base_url('uploads/' . $fl['profile_image'])) ?>" alt="" class="w-full h-full object-cover">
+                                        <?php else: ?>
+                                            <div class="w-full h-full bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-800/40 dark:to-accent-800/40 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-2xl">
+                                                <?= e(_first_char($fl['full_name'] ?? 'F')) ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </div>
-                                <?php endif; ?>
+                                </div>
+                            </div>
+
+                            <!-- Info -->
+                            <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-1 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors"><?= e($fl['full_name']) ?></h3>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 mb-3"><?= e($fl['title'] ?? 'Freelancer') ?></p>
+
+                            <!-- Rating -->
+                            <div class="flex items-center justify-center gap-1 mb-4">
+                                <?php for ($s = 0; $s < 5; $s++): ?>
+                                    <svg class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                <?php endfor; ?>
+                                <span class="text-sm font-semibold text-gray-700 dark:text-gray-300 ml-1">5.0</span>
                             </div>
                         </div>
 
-                        <!-- Info -->
-                        <h3 class="font-bold text-lg text-gray-900 dark:text-white mb-1"><?= e($fl['full_name']) ?></h3>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-3"><?= e($fl['title'] ?? 'Freelancer') ?></p>
-
-                        <!-- Rating -->
-                        <div class="flex items-center justify-center gap-1 mb-4">
-                            <?php for ($s = 0; $s < 5; $s++): ?>
-                                <svg class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                            <?php endfor; ?>
-                            <span class="text-sm font-semibold text-gray-700 dark:text-gray-300 ml-1">5.0</span>
-                        </div>
-
-                        <!-- Stats -->
-                        <div class="flex items-center justify-center gap-4 mb-5">
-                            <div class="text-center">
-                                <p class="text-lg font-bold text-gray-900 dark:text-white"><?= (int) $fl['completed_projects'] ?></p>
-                                <p class="text-xs text-gray-400 dark:text-gray-500">Projects</p>
-                            </div>
-                            <div class="w-px h-8 bg-gray-200 dark:bg-gray-700"></div>
-                            <div class="text-center">
-                                <p class="text-lg font-bold text-gray-900 dark:text-white"><?= (int) $fl['experience_years'] ?>y</p>
-                                <p class="text-xs text-gray-400 dark:text-gray-500">Experience</p>
+                        <!-- Stats Badges -->
+                        <div class="px-7 pb-5">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="relative overflow-hidden rounded-xl p-3 text-center" style="background:rgba(99,102,241,0.06)">
+                                    <div class="absolute top-0 right-0 w-10 h-10 rounded-bl-full opacity-[0.1] bg-indigo-500"></div>
+                                    <div class="relative">
+                                        <div class="w-7 h-7 rounded-lg flex items-center justify-center mx-auto mb-1.5" style="background:rgba(99,102,241,0.12)">
+                                            <svg class="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                                        </div>
+                                        <p class="text-base font-extrabold text-gray-900 dark:text-white"><?= (int) $fl['completed_projects'] ?></p>
+                                        <p class="text-xs text-gray-400 dark:text-gray-500">Projects</p>
+                                    </div>
+                                </div>
+                                <div class="relative overflow-hidden rounded-xl p-3 text-center" style="background:rgba(16,185,129,0.06)">
+                                    <div class="absolute top-0 right-0 w-10 h-10 rounded-bl-full opacity-[0.1] bg-emerald-500"></div>
+                                    <div class="relative">
+                                        <div class="w-7 h-7 rounded-lg flex items-center justify-center mx-auto mb-1.5" style="background:rgba(16,185,129,0.12)">
+                                            <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                                        </div>
+                                        <p class="text-base font-extrabold text-gray-900 dark:text-white"><?= (int) $fl['companies_worked'] ?></p>
+                                        <p class="text-xs text-gray-400 dark:text-gray-500">Companies</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Rate & CTA -->
-                        <div class="flex items-center justify-between pt-5 border-t border-gray-100 dark:border-gray-700/50">
-                            <div>
-                                <p class="text-xs text-gray-400 dark:text-gray-500">Hourly Rate</p>
-                                <p class="text-lg font-bold text-primary-600 dark:text-primary-400">$<?= e(number_format((float) ($fl['hourly_rate'] ?? 0), 0)) ?></p>
+                        <div class="px-7 pb-7">
+                            <div class="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700/50">
+                                <div>
+                                    <p class="text-xs text-gray-400 dark:text-gray-500">Hourly Rate</p>
+                                    <p class="text-lg font-bold text-primary-600 dark:text-primary-400">$<?= e(number_format((float) ($fl['hourly_rate'] ?? 0), 0)) ?></p>
+                                </div>
+                                <a href="<?= e(base_url('register.php')) ?>" class="btn-gradient px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-md shadow-primary-500/20">
+                                    Hire Now
+                                </a>
                             </div>
-                            <a href="<?= e(base_url('register.php')) ?>" class="btn-gradient px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-md shadow-primary-500/20">
-                                Hire Now
-                            </a>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -966,42 +1174,169 @@ $page_title = __('app.tagline');
                 <p class="mt-4 text-gray-500 dark:text-gray-400 max-w-xl mx-auto">See what our community has to say about working with HireWork</p>
             </div>
 
-            <div class="grid md:grid-cols-3 gap-7">
-                <?php
-                $testimonials = [
-                    ['name' => 'Sarah Chen', 'role' => 'Startup Founder', 'text' => 'HireWork helped us find an amazing developer in just 2 days. The platform is intuitive and the payment system gives us total peace of mind.', 'color' => 'from-blue-400 to-indigo-500'],
-                    ['name' => 'David Park', 'role' => 'Full-Stack Developer', 'text' => "I've earned over $15,000 through this platform. The job matching is great and I love the built-in messaging feature for client communication.", 'color' => 'from-purple-400 to-accent-500'],
-                    ['name' => 'Emily Rodriguez', 'role' => 'Marketing Agency', 'text' => "We've hired 12 freelancers through HireWork. The quality of talent is outstanding and the admin team keeps everything running smoothly.", 'color' => 'from-emerald-400 to-teal-500'],
-                ];
-                foreach ($testimonials as $i => $t):
-                ?>
-                    <div class="glass-card rounded-2xl p-8 lift-hover reveal reveal-d<?= ($i % 3) + 1 ?>">
-                        <!-- Stars -->
-                        <div class="flex items-center gap-1 mb-5">
-                            <?php for ($s = 0; $s < 5; $s++): ?>
-                                <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                            <?php endfor; ?>
-                        </div>
+            <!-- Carousel -->
+            <div class="relative" id="testimonial-carousel">
+                <!-- Track -->
+                <div class="overflow-hidden">
+                    <div id="testimonial-track" class="flex transition-transform duration-500 ease-out">
+                        <?php
+                        $testimonials = [
+                            ['name' => 'Sarah Chen', 'role' => 'Startup Founder', 'text' => 'HireWork helped us find an amazing developer in just 2 days. The platform is intuitive and the payment system gives us total peace of mind.', 'color' => 'from-blue-400 to-indigo-500'],
+                            ['name' => 'David Park', 'role' => 'Full-Stack Developer', 'text' => "I've earned over $15,000 through this platform. The job matching is great and I love the built-in messaging feature for client communication.", 'color' => 'from-purple-400 to-accent-500'],
+                            ['name' => 'Emily Rodriguez', 'role' => 'Marketing Agency', 'text' => "We've hired 12 freelancers through HireWork. The quality of talent is outstanding and the admin team keeps everything running smoothly.", 'color' => 'from-emerald-400 to-teal-500'],
+                        ];
+                        foreach ($testimonials as $i => $t):
+                        ?>
+                            <div class="w-full md:w-1/3 flex-shrink-0 px-3">
+                                <div class="glass-card rounded-2xl p-8 h-full flex flex-col">
+                                    <!-- Stars -->
+                                    <div class="flex items-center gap-1 mb-5">
+                                        <?php for ($s = 0; $s < 5; $s++): ?>
+                                            <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                            </svg>
+                                        <?php endfor; ?>
+                                    </div>
 
-                        <!-- Quote -->
-                        <p class="text-gray-600 dark:text-gray-300 mb-7 leading-relaxed text-sm italic">"<?= e($t['text']) ?>"</p>
+                                    <!-- Quote -->
+                                    <p class="text-gray-600 dark:text-gray-300 mb-7 leading-relaxed text-sm italic flex-1">"<?= e($t['text']) ?>"</p>
 
-                        <!-- User -->
-                        <div class="flex items-center gap-3 pt-5 border-t border-gray-100 dark:border-gray-700/50">
-                            <div class="w-12 h-12 rounded-full bg-gradient-to-br <?= $t['color'] ?> flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                                <?= e(_first_char($t['name'])) ?>
+                                    <!-- User -->
+                                    <div class="flex items-center gap-3 pt-5 border-t border-gray-100 dark:border-gray-700/50">
+                                        <div class="w-12 h-12 rounded-full bg-gradient-to-br <?= $t['color'] ?> flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                            <?= e(_first_char($t['name'])) ?>
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-gray-900 dark:text-white text-sm"><?= e($t['name']) ?></p>
+                                            <p class="text-xs text-gray-400 dark:text-gray-500"><?= e($t['role']) ?></p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <p class="font-semibold text-gray-900 dark:text-white text-sm"><?= e($t['name']) ?></p>
-                                <p class="text-xs text-gray-400 dark:text-gray-500"><?= e($t['role']) ?></p>
-                            </div>
-                        </div>
+                        <?php endforeach; ?>
                     </div>
-                <?php endforeach; ?>
+                </div>
+
+                <!-- Previous Button -->
+                <button id="carousel-prev" class="absolute top-1/2 -translate-y-1/2 -left-4 w-12 h-12 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-600 transition-all z-10 hidden md:flex" aria-label="Previous">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+
+                <!-- Next Button -->
+                <button id="carousel-next" class="absolute top-1/2 -translate-y-1/2 -right-4 w-12 h-12 bg-white dark:bg-gray-800 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-600 transition-all z-10 hidden md:flex" aria-label="Next">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </button>
+
+                <!-- Dots -->
+                <div class="flex justify-center gap-2 mt-8" id="carousel-dots"></div>
             </div>
         </div>
+
+        <script>
+        (function() {
+            const track = document.getElementById('testimonial-track');
+            const prevBtn = document.getElementById('carousel-prev');
+            const nextBtn = document.getElementById('carousel-next');
+            const dotsContainer = document.getElementById('carousel-dots');
+            const cards = track.children;
+            const total = cards.length;
+            let current = 0;
+            let perPage = 3;
+            let autoInterval;
+
+            function getPerPage() {
+                if (window.innerWidth < 768) return 1;
+                if (window.innerWidth < 1024) return 2;
+                return 3;
+            }
+
+            function totalPages() {
+                return Math.max(1, Math.ceil(total / perPage));
+            }
+
+            function buildDots() {
+                dotsContainer.innerHTML = '';
+                const pages = totalPages();
+                for (let i = 0; i < pages; i++) {
+                    const dot = document.createElement('button');
+                    dot.className = 'w-3 h-3 rounded-full transition-all duration-300 ' + (i === 0 ? 'bg-primary-500 scale-110' : 'bg-gray-300 dark:bg-gray-600 hover:bg-primary-300');
+                    dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+                    dot.addEventListener('click', function() { goTo(i); });
+                    dotsContainer.appendChild(dot);
+                }
+            }
+
+            function updateDots() {
+                const dots = dotsContainer.children;
+                for (let i = 0; i < dots.length; i++) {
+                    dots[i].className = 'w-3 h-3 rounded-full transition-all duration-300 ' + (i === current ? 'bg-primary-500 scale-110' : 'bg-gray-300 dark:bg-gray-600 hover:bg-primary-300');
+                }
+            }
+
+            function goTo(index) {
+                const pages = totalPages();
+                current = ((index % pages) + pages) % pages;
+                const cardWidth = 100 / perPage;
+                const offset = current * perPage * cardWidth;
+                track.style.transform = 'translateX(-' + offset + '%)';
+                updateDots();
+                resetAuto();
+            }
+
+            function next() { goTo(current + 1); }
+            function prev() { goTo(current - 1); }
+
+            function startAuto() {
+                stopAuto();
+                autoInterval = setInterval(next, 4000);
+            }
+
+            function stopAuto() {
+                if (autoInterval) clearInterval(autoInterval);
+            }
+
+            function resetAuto() {
+                stopAuto();
+                startAuto();
+            }
+
+            prevBtn.addEventListener('click', function() { prev(); });
+            nextBtn.addEventListener('click', function() { next(); });
+
+            // Touch/swipe support
+            let touchStartX = 0;
+            let touchEndX = 0;
+            track.addEventListener('touchstart', function(e) {
+                touchStartX = e.changedTouches[0].screenX;
+                stopAuto();
+            }, { passive: true });
+            track.addEventListener('touchend', function(e) {
+                touchEndX = e.changedTouches[0].screenX;
+                const diff = touchStartX - touchEndX;
+                if (Math.abs(diff) > 50) {
+                    diff > 0 ? next() : prev();
+                }
+                startAuto();
+            }, { passive: true });
+
+            // Pause on hover
+            document.getElementById('testimonial-carousel').addEventListener('mouseenter', stopAuto);
+            document.getElementById('testimonial-carousel').addEventListener('mouseleave', startAuto);
+
+            // Responsive
+            function onResize() {
+                perPage = getPerPage();
+                buildDots();
+                goTo(current);
+            }
+
+            window.addEventListener('resize', onResize);
+            perPage = getPerPage();
+            buildDots();
+            goTo(0);
+            startAuto();
+        })();
+        </script>
     </section>
 
     <!-- ===== CTA BANNER ===== -->
@@ -1076,8 +1411,8 @@ $page_title = __('app.tagline');
                     <h4 class="text-white font-bold mb-5">For Companies</h4>
                     <ul class="space-y-3">
                         <li><a href="<?= e(base_url('register.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Post a Job</a></li>
-                        <li><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Browse Freelancers</a></li>
-                        <li><a href="<?= e(base_url('login.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Login</a></li>
+                        <li><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Browse Jobs</a></li>
+                        <li><a href="<?= $is_logged_in ? e(base_url('company/dashboard.php')) : 'javascript:void(0)' ?>" <?= $is_logged_in ? '' : 'onclick="document.getElementById(\'loginModal\').classList.remove(\'hidden\')"' ?> class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Login</a></li>
                     </ul>
                 </div>
 
@@ -1087,7 +1422,7 @@ $page_title = __('app.tagline');
                     <ul class="space-y-3">
                         <li><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Find Work</a></li>
                         <li><a href="<?= e(base_url('register.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Create Profile</a></li>
-                        <li><a href="<?= e(base_url('login.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Login</a></li>
+                        <li><a href="<?= $is_logged_in ? e(base_url('freelancer/dashboard.php')) : 'javascript:void(0)' ?>" <?= $is_logged_in ? '' : 'onclick="document.getElementById(\'loginModal\').classList.remove(\'hidden\')"' ?> class="text-gray-400 hover:text-primary-400 text-sm transition-colors">Login</a></li>
                     </ul>
                 </div>
 
@@ -1137,47 +1472,79 @@ $page_title = __('app.tagline');
         </svg>
     </button>
 
-    <!-- ===== DARK MODE TOGGLE (Fixed) ===== -->
-    <button id="theme-toggle" class="fixed bottom-8 left-8 w-12 h-12 bg-white dark:bg-gray-800 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-black/30 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:shadow-xl hover:-translate-y-1 transition-all z-50 border border-gray-100 dark:border-gray-700" aria-label="Toggle theme">
-        <svg class="w-5 h-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-        </svg>
-        <svg class="w-5 h-5 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-        </svg>
-    </button>
+    <!-- ===== LOGIN MODAL ===== -->
+    <div id="loginModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="relative w-full max-w-md mx-4 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" style="animation: modalEntry 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+            <!-- Close button -->
+            <button type="button" onclick="document.getElementById('loginModal').classList.add('hidden')" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors z-10">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+
+            <!-- Header -->
+            <div class="px-8 pt-8 pb-4 text-center">
+                <div class="w-14 h-14 mx-auto mb-4 rounded-2xl flex items-center justify-center text-white text-xl" style="background:linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                </div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Welcome Back</h2>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Sign in to continue to HireWork</p>
+            </div>
+
+            <!-- Error -->
+            <?php if ($login_error): ?>
+            <div class="mx-8 mb-4 p-3 rounded-xl flex items-center gap-2.5 text-sm font-medium" style="background:rgba(239,68,68,0.08);color:#dc2626;border:1px solid rgba(239,68,68,0.15);">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span><?= e($login_error) ?></span>
+            </div>
+            <?php endif; ?>
+
+            <!-- Form -->
+            <form method="POST" class="px-8 pb-8 space-y-4" onsubmit="return handleHomeLogin(event)">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="home_login" value="1">
+
+                <div>
+                    <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Email</label>
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        <input type="email" name="email" required class="w-full pl-10 pr-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:border-indigo-500 focus:ring-0 focus:outline-none transition-colors" placeholder="you@example.com">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Password</label>
+                    <div class="relative">
+                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        <input type="password" name="password" id="homeLoginPassword" required class="w-full pl-10 pr-10 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:border-indigo-500 focus:ring-0 focus:outline-none transition-colors" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;">
+                        <button type="button" onclick="toggleHomePassword()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                            <svg id="homeEyeOpen" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            <svg id="homeEyeClosed" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full py-3 rounded-xl text-white text-sm font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg" style="background:linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    Login
+                </button>
+            </form>
+
+            <div class="px-8 pb-8 text-center">
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    Don't have an account?
+                    <a href="<?= e(base_url('register.php')) ?>" class="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors">Register</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        @keyframes modalEntry {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+    </style>
 
     <script>
         (function() {
-            // Theme toggle
-            var themeToggle = document.getElementById('theme-toggle');
-            var html = document.documentElement;
-            if (themeToggle) {
-                themeToggle.addEventListener('click', function() {
-                    var isDark = html.classList.toggle('dark');
-                    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-                });
-            }
-
-            // Mobile menu
-            var mobileToggle = document.getElementById('mobile-toggle');
-            var mobileMenu = document.getElementById('mobile-menu');
-            if (mobileToggle && mobileMenu) {
-                mobileToggle.addEventListener('click', function() {
-                    mobileMenu.classList.toggle('hidden');
-                });
-            }
-
-            // Sticky navbar scroll effect
-            var nav = document.getElementById('main-nav');
-            window.addEventListener('scroll', function() {
-                if (window.scrollY > 50) {
-                    nav.classList.add('scrolled');
-                } else {
-                    nav.classList.remove('scrolled');
-                }
-            });
-
             // Scroll reveal
             var revealEls = document.querySelectorAll('.reveal');
             var revealObserver = new IntersectionObserver(function(entries) {
@@ -1186,13 +1553,8 @@ $page_title = __('app.tagline');
                         entry.target.classList.add('visible');
                     }
                 });
-            }, {
-                threshold: 0.1,
-                rootMargin: '0px 0px -60px 0px'
-            });
-            revealEls.forEach(function(el) {
-                revealObserver.observe(el);
-            });
+            }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+            revealEls.forEach(function(el) { revealObserver.observe(el); });
 
             // Counter animation
             var counters = document.querySelectorAll('.counter-val');
@@ -1203,7 +1565,6 @@ $page_title = __('app.tagline');
                         var target = parseInt(el.getAttribute('data-target')) || 0;
                         var duration = 2000;
                         var startTime = null;
-
                         function step(timestamp) {
                             if (!startTime) startTime = timestamp;
                             var progress = Math.min((timestamp - startTime) / duration, 1);
@@ -1216,28 +1577,20 @@ $page_title = __('app.tagline');
                         counterObserver.unobserve(el);
                     }
                 });
-            }, {
-                threshold: 0.5
-            });
-            counters.forEach(function(el) {
-                counterObserver.observe(el);
-            });
+            }, { threshold: 0.5 });
+            counters.forEach(function(el) { counterObserver.observe(el); });
 
             // Back to top
             var backToTop = document.getElementById('back-to-top');
             window.addEventListener('scroll', function() {
-                if (window.scrollY > 500) {
-                    backToTop.classList.add('show');
-                } else {
-                    backToTop.classList.remove('show');
+                if (backToTop) {
+                    if (window.scrollY > 500) backToTop.classList.add('show');
+                    else backToTop.classList.remove('show');
                 }
             });
             if (backToTop) {
                 backToTop.addEventListener('click', function() {
-                    window.scrollTo({
-                        top: 0,
-                        behavior: 'smooth'
-                    });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 });
             }
 
@@ -1250,15 +1603,50 @@ $page_title = __('app.tagline');
                     input.focus();
                 }
             };
-
-            // Enter key on hero search
             var heroSearchInput = document.getElementById('hero-search');
             if (heroSearchInput) {
                 heroSearchInput.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') window.heroSearch();
                 });
             }
+
+            // Login modal
+            var loginModal = document.getElementById('loginModal');
+            if (loginModal) {
+                loginModal.addEventListener('click', function(e) {
+                    if (e.target === loginModal) loginModal.classList.add('hidden');
+                });
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && loginModal && !loginModal.classList.contains('hidden')) {
+                    loginModal.classList.add('hidden');
+                }
+            });
         })();
+
+        function toggleHomePassword() {
+            var pwd = document.getElementById('homeLoginPassword');
+            var open = document.getElementById('homeEyeOpen');
+            var closed = document.getElementById('homeEyeClosed');
+            if (pwd.type === 'password') {
+                pwd.type = 'text';
+                open.classList.add('hidden');
+                closed.classList.remove('hidden');
+            } else {
+                pwd.type = 'password';
+                open.classList.remove('hidden');
+                closed.classList.add('hidden');
+            }
+        }
+
+        function handleHomeLogin(e) {
+            var btn = e.target.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="inline-flex items-center gap-2"><svg class="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Signing in...</span>';
+            }
+            return true;
+        }
     </script>
 </body>
 
