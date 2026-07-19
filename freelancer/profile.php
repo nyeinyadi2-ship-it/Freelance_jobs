@@ -18,7 +18,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
         $phone = trim($_POST['phone'] ?? '');
         $location = trim($_POST['location'] ?? '');
         $bio = trim($_POST['bio'] ?? '');
-        $portfolio_url = trim($_POST['portfolio_url'] ?? '');
         $experience_years = (int) ($_POST['experience_years'] ?? 0);
         $hourly_rate = (float) ($_POST['hourly_rate'] ?? 0);
         $selected_skills = $_POST['skills'] ?? [];
@@ -38,8 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                     $st->bind_param('si', $new_img, $fl_uid); $st->execute(); $st->close();
                     $ey = $experience_years > 0 ? $experience_years : null;
                     $hr = $hourly_rate > 0 ? $hourly_rate : null;
-                    $st = $conn->prepare("UPDATE freelancers SET full_name=?,title=?,phone=?,location=?,bio=?,portfolio_url=?,experience_years=?,hourly_rate=? WHERE id=?");
-                    $st->bind_param('ssssssidi', $full_name, $title, $phone, $location, $bio, $portfolio_url, $ey, $hr, $fl_freelancer_id);
+                    $st = $conn->prepare("UPDATE freelancers SET full_name=?,title=?,phone=?,location=?,bio=?,experience_years=?,hourly_rate=? WHERE id=?");
+                    $st->bind_param('sssssidi', $full_name, $title, $phone, $location, $bio, $ey, $hr, $fl_freelancer_id);
                     $st->execute(); $st->close();
                     $st = $conn->prepare("DELETE FROM freelancer_skills WHERE freelancer_id=?");
                     $st->bind_param('i', $fl_freelancer_id); $st->execute(); $st->close();
@@ -53,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                     $_SESSION['profile_image'] = $new_img;
                     $success = __('profile.updated');
                     $fl_profile['full_name']=$full_name; $fl_profile['title']=$title; $fl_profile['phone']=$phone;
-                    $fl_profile['location']=$location; $fl_profile['bio']=$bio; $fl_profile['portfolio_url']=$portfolio_url;
+                    $fl_profile['location']=$location; $fl_profile['bio']=$bio;
                     $fl_profile['experience_years']=$ey; $fl_profile['hourly_rate']=$hr; $fl_profile['profile_image']=$new_img;
                     $fl_profile_skills = array_map('intval', $selected_skills);
                 } catch (Exception $e) { $conn->rollback(); $error = $e->getMessage(); }
@@ -92,6 +91,21 @@ $r->execute();
 $rr = $r->get_result();
 while ($row = $rr->fetch_assoc()) { $fl_reviews[] = $row; }
 $r->close();
+
+// Fetch portfolio items (limited to 4 for preview)
+$fl_portfolio_items = [];
+$r = $conn->prepare("SELECT id, title, description, cover_image, project_url FROM portfolio_items WHERE freelancer_id = ? ORDER BY sort_order ASC, id DESC LIMIT 4");
+$r->bind_param('i', $fl_freelancer_id);
+$r->execute();
+$rr = $r->get_result();
+while ($row = $rr->fetch_assoc()) { $fl_portfolio_items[] = $row; }
+$r->close();
+$fl_portfolio_count = 0;
+$r = $conn->prepare("SELECT COUNT(*) AS cnt FROM portfolio_items WHERE freelancer_id = ?");
+$r->bind_param('i', $fl_freelancer_id);
+$r->execute();
+$fl_portfolio_count = (int) $r->get_result()->fetch_assoc()['cnt'];
+$r->close();
 ?>
 
 <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-12">
@@ -116,7 +130,10 @@ $r->close();
             </div>
         </div>
         <div class="flex gap-2">
-            <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="px-5 py-2.5 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)">My Portfolio</a>
+            <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+                View Portfolio
+            </a>
             <?php if ($is_edit): ?><a href="<?= e(base_url('freelancer/profile.php')) ?>" class="px-5 py-2.5 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)">Cancel</a><?php else: ?><a href="<?= e(base_url('freelancer/profile.php?edit=1')) ?>" class="btn-grad px-5 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Edit Profile</a><?php endif; ?>
         </div>
     </div>
@@ -135,7 +152,7 @@ $r->close();
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Location</label><input type="text" name="location" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['location'] ?? '') ?>"></div>
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Experience (Years)</label><input type="number" name="experience_years" min="0" max="100" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['experience_years'] ?? '') ?>"></div>
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Hourly Rate ($)</label><input type="number" name="hourly_rate" min="0" step="0.50" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['hourly_rate'] ?? '') ?>"></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Portfolio URL</label><input type="url" name="portfolio_url" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['portfolio_url'] ?? '') ?>"></div>
+
             </div>
             <div class="mt-4"><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Bio</label><textarea name="bio" rows="4" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="Tell clients about yourself..."><?= e($fl_profile['bio'] ?? '') ?></textarea></div>
         </div>
@@ -176,11 +193,56 @@ $r->close();
                 <?php if ($fl_profile['location']): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Location</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['location']) ?></dd></div><?php endif; ?>
                 <?php if ($fl_profile['experience_years'] !== null): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Experience</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= (int) $fl_profile['experience_years'] ?> year<?= (int) $fl_profile['experience_years'] !== 1 ? 's' : '' ?></dd></div><?php endif; ?>
                 <?php if ($fl_profile['hourly_rate'] !== null): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Hourly Rate</dt><dd class="font-semibold text-emerald-600">$<?= number_format((float) $fl_profile['hourly_rate'], 2) ?> / hr</dd></div><?php endif; ?>
-                <?php if ($fl_profile['portfolio_url']): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Portfolio</dt><dd class="font-semibold"><a href="<?= e($fl_profile['portfolio_url']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#128193; View Portfolio</a></dd></div><?php endif; ?>
+
                 <div class="flex justify-between"><dt style="color:var(--color-text-muted)">Joined</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= date('F j, Y', strtotime($fl_profile['created_at'])) ?></dd></div>
             </dl>
         </div>
     </div>
+
+    <!-- Portfolio Section -->
+    <?php if ($fl_portfolio_count > 0): ?>
+    <div class="mt-6 glass rounded-2xl p-6 hover-lift reveal">
+        <div class="flex items-center justify-between mb-5">
+            <div class="flex items-center gap-3">
+                <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Portfolio</h2>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400"><?= $fl_portfolio_count ?></span>
+            </div>
+            <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/25 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+                View Portfolio
+            </a>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <?php foreach ($fl_portfolio_items as $pi): ?>
+                <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="group block rounded-xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style="border-color:var(--color-border)">
+                    <?php if ($pi['cover_image']): ?>
+                        <div class="aspect-video overflow-hidden bg-gray-100 dark:bg-gray-800">
+                            <img src="<?= e(base_url('uploads/' . $pi['cover_image'])) ?>" alt="<?= e($pi['title']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                        </div>
+                    <?php else: ?>
+                        <div class="aspect-video flex items-center justify-center" style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(168,85,247,0.08))">
+                            <svg class="w-10 h-10 text-indigo-300 dark:text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
+                        </div>
+                    <?php endif; ?>
+                    <div class="p-3">
+                        <p class="text-sm font-semibold truncate group-hover:text-primary-600 transition-colors" style="color:var(--color-text-primary)"><?= e($pi['title']) ?></p>
+                        <?php if ($pi['description']): ?>
+                            <p class="text-xs mt-1 line-clamp-2" style="color:var(--color-text-muted)"><?= e(mb_strimwidth($pi['description'], 0, 60, '...')) ?></p>
+                        <?php endif; ?>
+                    </div>
+                </a>
+            <?php endforeach; ?>
+        </div>
+        <?php if ($fl_portfolio_count > 4): ?>
+            <div class="mt-4 text-center">
+                <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors">
+                    View all <?= $fl_portfolio_count ?> projects
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                </a>
+            </div>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 
     <!-- Reviews Section -->
     <?php if ($fl_total_reviews > 0): ?>

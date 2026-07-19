@@ -24,11 +24,11 @@ $is_home = ($current_script === 'index.php');
 $base = base_url('');
 
 $home_links = [
-    ['label' => 'Home', 'href' => $is_home ? '#' : $base . 'index.php', 'anchor' => ''],
-    ['label' => 'Find Jobs', 'href' => $is_home ? '#find-jobs' : $base . 'index.php#find-jobs', 'anchor' => 'find-jobs'],
-    ['label' => 'Freelancers', 'href' => $is_home ? '#freelancers' : $base . 'index.php#freelancers', 'anchor' => 'freelancers'],
-    ['label' => 'Categories', 'href' => $is_home ? '#categories' : $base . 'index.php#categories', 'anchor' => 'categories'],
-    ['label' => 'About', 'href' => $is_home ? '#why-us' : $base . 'index.php#why-us', 'anchor' => 'why-us'],
+    ['label' => 'Home', 'href' => $is_home ? '#' : base_url('index.php'), 'anchor' => ''],
+    ['label' => 'Find Jobs', 'href' => $is_home ? '#find-jobs' : base_url('index.php#find-jobs'), 'anchor' => 'find-jobs'],
+    ['label' => 'Freelancers', 'href' => $is_home ? '#freelancers' : base_url('index.php#freelancers'), 'anchor' => 'freelancers'],
+    ['label' => 'Categories', 'href' => $is_home ? '#categories' : base_url('index.php#categories'), 'anchor' => 'categories'],
+    ['label' => 'About', 'href' => $is_home ? '#why-us' : base_url('index.php#why-us'), 'anchor' => 'why-us'],
 ];
 
 $role_links = [];
@@ -323,53 +323,219 @@ html.dark .ml.on{background:rgba(99,102,241,.12);color:#818cf8}
 <script src="<?= e(base_url('assets/js/notification-sse.js')) ?>"></script>
 <script>
 (function(){
+    /* ===== Scroll shadow ===== */
     var nav=document.getElementById('main-nav');
-    if(nav)window.addEventListener('scroll',function(){nav.classList.toggle('sh',window.scrollY>10)},{passive:true});
+    if(nav) window.addEventListener('scroll',function(){nav.classList.toggle('sh',window.scrollY>10)},{passive:true});
 
+    /* ===== Mobile menu ===== */
     window.closeMobileMenu=function(){
-        document.getElementById('mobile-overlay')?.classList.remove('show');
-        document.getElementById('mobile-panel')?.classList.remove('show');
-        document.querySelector('.ham')?.classList.remove('hidden');
-        document.querySelector('.cls')?.classList.add('hidden');
+        var o=document.getElementById('mobile-overlay'),p=document.getElementById('mobile-panel');
+        if(o)o.classList.remove('show');
+        if(p)p.classList.remove('show');
+        var h=document.querySelector('.ham'),c=document.querySelector('.cls');
+        if(h)h.classList.remove('hidden');
+        if(c)c.classList.add('hidden');
         document.body.style.overflow='';
     };
 
     var mt=document.getElementById('mobile-toggle');
-    if(mt)mt.addEventListener('click',function(){
-        var p=document.getElementById('mobile-panel'),open=p?.classList.contains('show');
-        if(open){closeMobileMenu()}else{
-            document.getElementById('mobile-overlay')?.classList.add('show');
-            p?.classList.add('show');
-            document.querySelector('.ham')?.classList.add('hidden');
-            document.querySelector('.cls')?.classList.remove('hidden');
-            document.body.style.overflow='hidden';
+    if(mt) mt.addEventListener('click',function(){
+        var p=document.getElementById('mobile-panel');
+        if(p&&p.classList.contains('show')){closeMobileMenu();return;}
+        var o=document.getElementById('mobile-overlay');
+        if(o)o.classList.add('show');
+        if(p)p.classList.add('show');
+        var h=document.querySelector('.ham'),c=document.querySelector('.cls');
+        if(h)h.classList.add('hidden');
+        if(c)c.classList.remove('hidden');
+        document.body.style.overflow='hidden';
+    });
+
+    /* ===== Close all dropdowns ===== */
+    function closeAllDropdowns(){
+        document.querySelectorAll('.dd.show').forEach(function(d){d.classList.remove('show')});
+        var ld=document.getElementById('lang-dropdown');
+        if(ld)ld.classList.add('hidden');
+        var ch=document.getElementById('profile-chevron');
+        if(ch)ch.style.transform='';
+    }
+
+    /* ===== Profile dropdown ===== */
+    var profileBtn=document.getElementById('profile-dropdown-toggle');
+    var profileMenu=document.getElementById('profile-dropdown-menu');
+    var profileChevron=document.getElementById('profile-chevron');
+
+    if(profileBtn && profileMenu){
+        profileBtn.addEventListener('click',function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            var isOpen=profileMenu.classList.contains('show');
+            closeAllDropdowns();
+            if(!isOpen){
+                profileMenu.classList.add('show');
+                if(profileChevron) profileChevron.style.transform='rotate(180deg)';
+            }
+        });
+    }
+
+    /* ===== Notification dropdown ===== */
+    document.querySelectorAll('.notification-container').forEach(function(container){
+        var toggleBtn=container.querySelector('.notification-toggle');
+        var dropdown=container.querySelector('.notification-dropdown');
+        if(toggleBtn && dropdown){
+            toggleBtn.addEventListener('click',function(e){
+                e.preventDefault();
+                e.stopPropagation();
+                var isOpen=dropdown.classList.contains('show');
+                closeAllDropdowns();
+                if(!isOpen) dropdown.classList.add('show');
+            });
         }
     });
 
-    document.querySelectorAll('.notification-container').forEach(function(c){
-        var t=c.querySelector('.notification-toggle'),d=c.querySelector('.notification-dropdown');
-        if(t&&d)t.addEventListener('click',function(e){e.stopPropagation();var o=d.classList.contains('show');closeAll();if(!o)d.classList.add('show')});
+    /* ===== Language dropdown ===== */
+    var langBtn=document.querySelector('[aria-label="Language"]');
+    var langDrop=document.getElementById('lang-dropdown');
+    if(langBtn && langDrop){
+        langBtn.addEventListener('click',function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            var isOpen=!langDrop.classList.contains('hidden');
+            closeAllDropdowns();
+            if(!isOpen) langDrop.classList.remove('hidden');
+        });
+    }
+
+    /* ===== Click outside to close ===== */
+    document.addEventListener('click',function(e){
+        var anyOpen=document.querySelector('.dd.show');
+        if(anyOpen && !anyOpen.contains(e.target)){
+            var inToggle=e.target.closest('#profile-dropdown-toggle')||e.target.closest('.notification-toggle')||e.target.closest('[aria-label="Language"]');
+            if(!inToggle) closeAllDropdowns();
+        }
+        var ld=document.getElementById('lang-dropdown');
+        if(ld && !ld.classList.contains('hidden') && !e.target.closest('#lang-switcher')){
+            ld.classList.add('hidden');
+        }
     });
 
-    var pt=document.getElementById('profile-dropdown-toggle'),pm=document.getElementById('profile-dropdown-menu'),pc=document.getElementById('profile-chevron');
-    if(pt&&pm)pt.addEventListener('click',function(e){e.stopPropagation();var o=pm.classList.contains('show');closeAll();if(!o){pm.classList.add('show');if(pc)pc.style.transform='rotate(180deg)'}});
-
-    function closeAll(){
-        document.querySelectorAll('.dd').forEach(function(d){d.classList.remove('show')});
-        document.getElementById('lang-dropdown')?.classList.add('hidden');
-        if(pc)pc.style.transform='';
+    /* ===== Theme toggle ===== */
+    var themeToggle=document.getElementById('theme-toggle');
+    if(themeToggle){
+        themeToggle.addEventListener('click',function(){
+            document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme',document.documentElement.classList.contains('dark')?'dark':'light');
+        });
     }
-    document.addEventListener('click',closeAll);
 
-    document.querySelectorAll('.notification-mark-all').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();fetch('<?= e(base_url("api/notifications.php")) ?>',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({action:'mark_all_read',csrf_token:this.getAttribute('data-csrf')})}).then(function(r){return r.json()}).then(function(d){if(d.success){document.querySelectorAll('.notification-item').forEach(function(i){i.classList.remove('bg-indigo-50/50','dark:bg-indigo-900/15');var m=i.querySelector('p');if(m){m.classList.remove('font-medium');m.style.color=''}});['notifBadge','notifBadgeMobile'].forEach(function(id){var bd=document.getElementById(id);if(bd)bd.style.display='none'});var mb=document.querySelector('.notification-mark-all');if(mb)mb.style.display='none'}}).catch(function(){})})});
+    /* ===== Notification: mark all read ===== */
+    document.querySelectorAll('.notification-mark-all').forEach(function(btn){
+        btn.addEventListener('click',function(e){
+            e.preventDefault();
+            var csrf=this.getAttribute('data-csrf');
+            fetch('<?= e(base_url("api/notifications.php")) ?>',{
+                method:'POST',
+                headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+                body:JSON.stringify({action:'mark_all_read',csrf_token:csrf})
+            }).then(function(r){return r.json()}).then(function(d){
+                if(!d.success) return;
+                document.querySelectorAll('.notification-item').forEach(function(item){
+                    item.classList.remove('bg-indigo-50/50','dark:bg-indigo-900/15');
+                    var m=item.querySelector('p');
+                    if(m){m.classList.remove('font-medium');m.style.color='';}
+                });
+                ['notifBadge','notifBadgeMobile'].forEach(function(id){
+                    var b=document.getElementById(id);
+                    if(b)b.style.display='none';
+                });
+                btn.style.display='none';
+            }).catch(function(){});
+        });
+    });
 
-    document.querySelectorAll('.notification-delete-btn').forEach(function(b){b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();var id=this.getAttribute('data-id'),cs=this.getAttribute('data-csrf'),it=this.closest('.notification-item');fetch('<?= e(base_url("api/notifications.php")) ?>',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({action:'delete',notification_id:parseInt(id),csrf_token:cs})}).then(function(r){return r.json()}).then(function(d){if(d.success&&it){it.style.transition='opacity .2s,transform .2s';it.style.opacity='0';it.style.transform='translateX(16px)';setTimeout(function(){it.remove()},200);var t=d.count>99?'99+':d.count;var s=d.count>0?'flex':'none';['notifBadge','notifBadgeMobile'].forEach(function(nid){var bd=document.getElementById(nid);if(bd){bd.textContent=t;bd.style.display=s}})}}).catch(function(){})})});
+    /* ===== Notification: delete ===== */
+    document.querySelectorAll('.notification-delete-btn').forEach(function(btn){
+        btn.addEventListener('click',function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            var id=parseInt(this.getAttribute('data-id'));
+            var csrf=this.getAttribute('data-csrf');
+            var item=this.closest('.notification-item');
+            fetch('<?= e(base_url("api/notifications.php")) ?>',{
+                method:'POST',
+                headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+                body:JSON.stringify({action:'delete',notification_id:id,csrf_token:csrf})
+            }).then(function(r){return r.json()}).then(function(d){
+                if(!d.success||!item) return;
+                item.style.transition='opacity .2s,transform .2s';
+                item.style.opacity='0';
+                item.style.transform='translateX(16px)';
+                setTimeout(function(){item.remove()},200);
+                var t=d.count>99?'99+':d.count;
+                var s=d.count>0?'flex':'none';
+                ['notifBadge','notifBadgeMobile'].forEach(function(nid){
+                    var b=document.getElementById(nid);
+                    if(b){b.textContent=t;b.style.display=s;}
+                });
+            }).catch(function(){});
+        });
+    });
 
-    document.querySelectorAll('.notif-link').forEach(function(l){l.addEventListener('click',function(e){var id=parseInt(this.getAttribute('data-id')),cs=this.getAttribute('data-csrf'),ur=this.getAttribute('data-url'),it=this.closest('.notification-item');if(id>0&&it&&it.classList.contains('bg-indigo-50/50')){e.preventDefault();fetch('<?= e(base_url("api/notifications.php")) ?>',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},body:JSON.stringify({action:'mark_read',notification_id:id,csrf_token:cs})}).then(function(r){return r.json()}).then(function(d){if(d.success){it.classList.remove('bg-indigo-50/50','dark:bg-indigo-900/15');var m=it.querySelector('p');if(m)m.classList.remove('font-medium');var t=d.count>99?'99+':d.count;var s=d.count>0?'flex':'none';['notifBadge','notifBadgeMobile'].forEach(function(nid){var bd=document.getElementById(nid);if(bd){bd.textContent=t;bd.style.display=s}})}}window.location.href=ur}).catch(function(){window.location.href=ur})}})});
+    /* ===== Notification: click to mark read & navigate ===== */
+    document.querySelectorAll('.notif-link').forEach(function(link){
+        link.addEventListener('click',function(e){
+            var id=parseInt(this.getAttribute('data-id'));
+            var csrf=this.getAttribute('data-csrf');
+            var url=this.getAttribute('data-url');
+            var item=this.closest('.notification-item');
+            if(id>0 && item && item.classList.contains('bg-indigo-50/50')){
+                e.preventDefault();
+                fetch('<?= e(base_url("api/notifications.php")) ?>',{
+                    method:'POST',
+                    headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+                    body:JSON.stringify({action:'mark_read',notification_id:id,csrf_token:csrf})
+                }).then(function(r){return r.json()}).then(function(d){
+                    if(d.success){
+                        item.classList.remove('bg-indigo-50/50','dark:bg-indigo-900/15');
+                        var m=item.querySelector('p');
+                        if(m) m.classList.remove('font-medium');
+                        var t=d.count>99?'99+':d.count;
+                        var s=d.count>0?'flex':'none';
+                        ['notifBadge','notifBadgeMobile'].forEach(function(nid){
+                            var b=document.getElementById(nid);
+                            if(b){b.textContent=t;b.style.display=s;}
+                        });
+                    }
+                }).catch(function(){});
+                window.location.href=url;
+            }
+        });
+    });
 
-    if(typeof NotificationSSE!=='undefined')NotificationSSE.init({user_id:<?= (int)($user['user_id'] ?? 0) ?>});
+    /* ===== SSE notifications ===== */
+    if(typeof NotificationSSE!=='undefined') NotificationSSE.init({user_id:<?= (int)($user['user_id'] ?? 0) ?>});
 
-    setInterval(function(){fetch('<?= e(base_url("api/notifications.php")) ?>?action=count',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(r){return r.json()}).then(function(d){var t=d.count>99?'99+':d.count;var s=d.count>0?'flex':'none';['notifBadge','notifBadgeMobile'].forEach(function(id){var b=document.getElementById(id);if(b){b.textContent=t;b.style.display=s}})}).catch(function(){})},15000);
-    setInterval(function(){fetch('<?= e(base_url("api/chat.php")) ?>?action=get_unread_count',{headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function(r){return r.json()}).then(function(d){document.querySelectorAll('.badge[style*="10b981"]').forEach(function(b){b.textContent=d.count>99?'99+':d.count;b.style.display=d.count>0?'flex':'none'})}).catch(function(){})},15000);
+    /* ===== Polling for counts ===== */
+    setInterval(function(){
+        fetch('<?= e(base_url("api/notifications.php")) ?>?action=count',{headers:{'X-Requested-With':'XMLHttpRequest'}})
+        .then(function(r){return r.json()}).then(function(d){
+            var t=d.count>99?'99+':d.count;
+            var s=d.count>0?'flex':'none';
+            ['notifBadge','notifBadgeMobile'].forEach(function(id){
+                var b=document.getElementById(id);
+                if(b){b.textContent=t;b.style.display=s;}
+            });
+        }).catch(function(){});
+    },15000);
+
+    setInterval(function(){
+        fetch('<?= e(base_url("api/chat.php")) ?>?action=get_unread_count',{headers:{'X-Requested-With':'XMLHttpRequest'}})
+        .then(function(r){return r.json()}).then(function(d){
+            document.querySelectorAll('.badge[style*="10b981"]').forEach(function(b){
+                b.textContent=d.count>99?'99+':d.count;
+                b.style.display=d.count>0?'flex':'none';
+            });
+        }).catch(function(){});
+    },15000);
 })();
 </script>

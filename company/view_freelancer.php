@@ -10,7 +10,7 @@ require_once __DIR__ . '/../config/upload.php';
 $fid = (int) ($_GET['id'] ?? 0);
 if ($fid <= 0) { redirect('index.php'); }
 
-$st = $conn->prepare("SELECT f.id, f.full_name, f.title, f.location, f.bio, f.experience_years, f.hourly_rate, f.portfolio_url, f.phone, u.profile_image, u.username, u.email, u.created_at
+$st = $conn->prepare("SELECT f.id, f.full_name, f.title, f.location, f.bio, f.experience_years, f.hourly_rate, f.portfolio_url, f.phone, u.id AS user_id, u.profile_image, u.username, u.email, u.created_at
     FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
 $st->bind_param('i', $fid);
 $st->execute();
@@ -110,6 +110,10 @@ $total_earnings = (float) ($er['total'] ?? 0);
 $r->close();
 
 $is_hired = false;
+$pending_hire = false;
+$hire_success = '';
+$hire_error = '';
+
 if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'company') {
     $logged_in_company = get_company_id($conn, (int) $_SESSION['user_id']);
     if ($logged_in_company) {
@@ -118,6 +122,82 @@ if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'company') {
         $chk->execute();
         $is_hired = $chk->get_result()->num_rows > 0;
         $chk->close();
+
+        // Check for pending direct hire
+        if (!$is_hired) {
+            $chk2 = $conn->prepare("SELECT id FROM assignments WHERE freelancer_id = ? AND assignment_type = 'direct_hire' AND freelancer_response = 'pending' AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)");
+            $chk2->bind_param('ii', $fid, $logged_in_company);
+            $chk2->execute();
+            $pending_hire = $chk2->get_result()->num_rows > 0;
+            $chk2->close();
+        }
+    }
+}
+
+// Handle Direct Hire form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'direct_hire') {
+    if (!verify_csrf()) {
+        $hire_error = 'Invalid request.';
+    } elseif (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'company') {
+        $hire_error = 'You must be logged in as a company.';
+    } else {
+        $company_id = get_company_id($conn, (int) $_SESSION['user_id']);
+        if (!$company_id) {
+            $hire_error = 'Company profile not found.';
+        } else {
+            $title = trim($_POST['project_title'] ?? '');
+            $description = trim($_POST['project_description'] ?? '');
+            $budget = (float) ($_POST['budget'] ?? 0);
+            $deadline = trim($_POST['deadline'] ?? '');
+            $payment_type = $_POST['payment_type'] ?? 'fixed';
+            $notes = trim($_POST['notes'] ?? '');
+
+            // Handle attachment upload
+            $attachment_name = null;
+            if (!empty($_FILES['attachment']['name'])) {
+                $attachment_name = upload_attachment($_FILES['attachment']);
+                if ($attachment_name === null) {
+                    $hire_error = 'Invalid attachment. Allowed: JPG, PNG, PDF, DOCX, ZIP. Max 10MB.';
+                }
+            }
+
+            if ($title === '') {
+                $hire_error = 'Project title is required.';
+            } elseif ($description === '') {
+                $hire_error = 'Project description is required.';
+            } elseif ($budget <= 0) {
+                $hire_error = 'Budget must be greater than zero.';
+            } else {
+                // Create a job record for this direct hire
+                $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'approved', '')");
+                $stmt->bind_param('issds', $company_id, $title, $description, $budget, $deadline);
+                $stmt->execute();
+                $job_id = $stmt->insert_id;
+                $stmt->close();
+
+                if ($job_id > 0) {
+                    // Create assignment with direct_hire type
+                    $deadline_val = $deadline !== '' ? $deadline : null;
+                    $notes_val = $notes !== '' ? $notes : null;
+                    $stmt = $conn->prepare("INSERT INTO assignments (job_id, freelancer_id, assignment_type, status, freelancer_response, project_title, project_description, budget, deadline, payment_type, notes, attachment) VALUES (?, ?, 'direct_hire', 'assigned', 'pending', ?, ?, ?, ?, ?, ?, ?)");
+                    $stmt->bind_param('iisssssss', $job_id, $fid, $title, $description, $budget, $deadline_val, $payment_type, $notes_val, $attachment_name);
+                    $stmt->execute();
+                    $assignment_id = $stmt->insert_id;
+                    $stmt->close();
+
+                    if ($assignment_id > 0) {
+                        // Notify freelancer
+                        create_notification($conn, (int) $freelancer['user_id'], 'direct_hire', "You have a new direct hire request from a company for: {$title}", "freelancer/dashboard.php");
+                        $hire_success = 'Hire request sent successfully! The freelancer will be notified.';
+                        $pending_hire = true;
+                    } else {
+                        $hire_error = 'Failed to create assignment.';
+                    }
+                } else {
+                    $hire_error = 'Failed to create job record.';
+                }
+            }
+        }
     }
 }
 ?>
@@ -129,263 +209,250 @@ if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'company') {
     <title><?= e($freelancer['full_name'] ?? 'Freelancer') ?> - Freelancer Profile - HireWork</title>
     <script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();</script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{poppins:['Poppins','sans-serif']},colors:{brand:{50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a'}}}}}</script>
+    <script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{inter:['Inter','system-ui','sans-serif']},colors:{brand:{50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af',900:'#1e3a8a'}}}}}</script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         *,*::before,*::after{box-sizing:border-box;}
-        body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#f0f4f8;margin:0;color:#1e293b;}
+        body{font-family:'Inter',system-ui,-apple-system,sans-serif;margin:0;color:#1e293b;}
+        html.dark body{background:#0f172a;color:#e2e8f0;}
 
-        /* ===== HEADER ===== */
-        .hero{background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 50%,#3b82f6 100%);position:relative;overflow:hidden;padding:0 0 80px;}
-        .hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");}
+        /* ===== HERO ===== */
+        .fl-hero{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 40%,#2563eb 100%);position:relative;overflow:hidden;}
+        .fl-hero::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2l4 3.5-4 3z'/%3E%3C/g%3E%3C/svg%3E");}
+        .fl-hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(to top,#f8fafc,transparent);}
 
-        /* ===== PROFILE HEADER CARD ===== */
-        .profile-hero{max-width:1100px;margin:-60px auto 0;position:relative;z-index:10;padding:0 24px;}
-        .profile-card-main{background:#fff;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,0.08);display:flex;align-items:flex-end;gap:28px;padding:32px 36px 28px;}
-        .profile-avatar{width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #fff;box-shadow:0 8px 24px rgba(0,0,0,0.12);flex-shrink:0;margin-top:-60px;}
-        .profile-avatar-placeholder{width:120px;height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:40px;font-weight:800;color:#fff;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border:4px solid #fff;box-shadow:0 8px 24px rgba(0,0,0,0.12);flex-shrink:0;margin-top:-60px;}
-        .profile-head-info{flex:1;min-width:0;padding-bottom:4px;}
-        .profile-head-name{font-size:26px;font-weight:800;color:#0f172a;margin:0 0 2px;}
-        .profile-head-title{font-size:15px;font-weight:500;color:#3b82f6;margin-bottom:10px;}
-        .profile-head-meta{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:#64748b;}
-        .profile-head-meta span{display:inline-flex;align-items:center;gap:5px;}
-        .profile-head-meta svg{width:14px;height:14px;flex-shrink:0;}
-        .profile-head-actions{display:flex;gap:10px;align-items:center;padding-bottom:4px;}
+        /* ===== PROFILE CARD ===== */
+        .fl-profile-card{max-width:1100px;margin:-72px auto 0;position:relative;z-index:10;padding:0 24px;}
+        .fl-card{background:#fff;border-radius:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04),0 10px 40px rgba(0,0,0,0.06);overflow:visible;}
+        .fl-card-body{padding:28px 32px;}
+        html.dark .fl-card{background:#1e293b;box-shadow:0 1px 3px rgba(0,0,0,0.2),0 10px 40px rgba(0,0,0,0.3);}
+
+        /* ===== AVATAR ===== */
+        .fl-avatar{width:128px;height:128px;border-radius:50%;object-fit:cover;border:5px solid #fff;box-shadow:0 8px 30px rgba(0,0,0,0.12);flex-shrink:0;margin-top:-64px;position:relative;z-index:2;}
+        .fl-avatar-ph{width:128px;height:128px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;color:#fff;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border:5px solid #fff;box-shadow:0 8px 30px rgba(0,0,0,0.12);flex-shrink:0;margin-top:-64px;position:relative;z-index:2;}
 
         /* ===== BUTTONS ===== */
-        .btn-primary{display:inline-flex;align-items:center;gap:7px;padding:10px 22px;border-radius:12px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;cursor:pointer;text-decoration:none;box-shadow:0 4px 14px rgba(37,99,235,0.3);transition:all .25s;}
-        .btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(37,99,235,0.4);}
-        .btn-outline{display:inline-flex;align-items:center;gap:7px;padding:10px 22px;border-radius:12px;font-size:13px;font-weight:700;background:#fff;color:#3b82f6;border:2px solid #dbeafe;cursor:pointer;text-decoration:none;transition:all .25s;}
-        .btn-outline:hover{background:#eff6ff;border-color:#93c5fd;}
-        .btn-hired{display:inline-flex;align-items:center;gap:7px;padding:10px 22px;border-radius:12px;font-size:13px;font-weight:700;background:#ecfdf5;color:#059669;border:2px solid #d1fae5;cursor:default;}
+        .fl-btn{display:inline-flex;align-items:center;gap:8px;padding:11px 24px;border-radius:12px;font-size:13.5px;font-weight:700;border:none;cursor:pointer;text-decoration:none;transition:all .25s cubic-bezier(.4,0,.2,1);}
+        .fl-btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;box-shadow:0 4px 16px rgba(37,99,235,0.3);}
+        .fl-btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(37,99,235,0.4);}
+        .fl-btn-outline{background:#fff;color:#3b82f6;border:2px solid #e0e7ff;}
+        html.dark .fl-btn-outline{background:#1e293b;color:#60a5fa;border-color:#334155;}
+        .fl-btn-outline:hover{background:#eff6ff;border-color:#93c5fd;}
+        .fl-btn-hired{background:#ecfdf5;color:#059669;border:2px solid #d1fae5;}
 
-        /* ===== LAYOUT ===== */
-        .page-wrap{max-width:1100px;margin:0 auto;padding:24px;}
-        .main-grid{display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start;}
+        /* ===== STATS ===== */
+        .fl-stat{text-align:center;padding:22px 16px;background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:all .3s;}
+        html.dark .fl-stat{background:#1e293b;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
+        .fl-stat:hover{transform:translateY(-4px);box-shadow:0 12px 32px rgba(0,0,0,0.08);}
 
-        /* ===== CARDS ===== */
-        .card{background:#fff;border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;}
-        .card-body{padding:24px 28px;}
-        .card-title{font-size:16px;font-weight:700;color:#0f172a;margin:0 0 16px;display:flex;align-items:center;gap:8px;}
-        .card-title::before{content:'';width:4px;height:18px;border-radius:2px;background:linear-gradient(180deg,#3b82f6,#60a5fa);flex-shrink:0;}
-
-        /* ===== STATS ROW ===== */
-        .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
-        .stat-item{text-align:center;padding:20px 12px;background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,0.04);}
-        .stat-value{font-size:28px;font-weight:800;color:#0f172a;line-height:1;}
-        .stat-label{font-size:12px;color:#64748b;margin-top:4px;font-weight:500;}
-
-        /* ===== ABOUT ===== */
-        .about-text{font-size:14px;color:#475569;line-height:1.8;}
+        /* ===== SECTION TITLE ===== */
+        .fl-section-title{font-size:17px;font-weight:700;color:#0f172a;margin:0 0 20px;display:flex;align-items:center;gap:10px;}
+        html.dark .fl-section-title{color:#f1f5f9;}
+        .fl-section-title::before{content:'';width:4px;height:20px;border-radius:2px;background:linear-gradient(180deg,#3b82f6,#60a5fa);flex-shrink:0;}
 
         /* ===== SKILLS ===== */
-        .skill-item{margin-bottom:16px;}
-        .skill-item:last-child{margin-bottom:0;}
-        .skill-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
-        .skill-name{font-size:13px;font-weight:600;color:#1e293b;}
-        .skill-pct{font-size:12px;font-weight:700;color:#3b82f6;}
-        .skill-bar{height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden;}
-        .skill-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#3b82f6,#60a5fa);transition:width 1.2s cubic-bezier(.4,0,.2,1);}
+        .fl-skill-tag{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;font-size:13px;font-weight:600;background:#f0f7ff;color:#2563eb;border:1px solid #dbeafe;transition:all .2s;}
+        .fl-skill-tag:hover{background:#dbeafe;transform:translateY(-1px);}
+        html.dark .fl-skill-tag{background:rgba(59,130,246,0.1);color:#60a5fa;border-color:rgba(59,130,246,0.2);}
 
         /* ===== PORTFOLIO ===== */
-        .portfolio-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-        .portfolio-card{border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:all .3s;}
-        .portfolio-card:hover{transform:translateY(-4px);box-shadow:0 12px 32px rgba(0,0,0,0.08);}
-        .portfolio-img{width:100%;height:160px;object-fit:cover;}
-        .portfolio-body{padding:14px 16px;}
-        .portfolio-name{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px;}
-        .portfolio-desc{font-size:12px;color:#64748b;line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-        .portfolio-tech{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;}
-        .tech-tag{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;background:#eff6ff;color:#3b82f6;}
-        .portfolio-links{display:flex;gap:10px;}
-        .portfolio-links a{font-size:11px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;}
-        .portfolio-links a.link-primary{color:#3b82f6;}
-        .portfolio-links a.link-muted{color:#94a3b8;}
+        .fl-portfolio-card{border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:all .35s cubic-bezier(.4,0,.2,1);}
+        html.dark .fl-portfolio-card{background:#1e293b;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
+        .fl-portfolio-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(0,0,0,0.1);}
+        .fl-portfolio-img{width:100%;height:180px;object-fit:cover;transition:transform .5s;}
+        .fl-portfolio-card:hover .fl-portfolio-img{transform:scale(1.05);}
 
-        /* ===== COMPANIES ===== */
-        .companies-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:14px;}
-        .company-item{display:flex;flex-direction:column;align-items:center;padding:18px 8px;border-radius:14px;background:#f8fafc;transition:all .3s;}
-        .company-item:hover{background:#eff6ff;transform:translateY(-2px);}
-        .company-logo{width:48px;height:48px;border-radius:12px;object-fit:contain;background:#fff;padding:4px;box-shadow:0 1px 4px rgba(0,0,0,0.04);margin-bottom:8px;}
-        .company-logo-ph{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#3b82f6;background:#eff6ff;margin-bottom:8px;}
-        .company-label{font-size:11px;font-weight:600;color:#334155;text-align:center;line-height:1.3;}
-
-        /* ===== PROJECTS ===== */
-        .project-item{display:flex;align-items:center;gap:14px;padding:14px 0;}
-        .project-item+.project-item{border-top:1px solid #f1f5f9;}
-        .project-icon-box{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#3b82f6,#60a5fa);flex-shrink:0;}
-        .project-icon-box svg{width:18px;height:18px;color:#fff;}
-        .project-info{flex:1;min-width:0;}
-        .project-title{font-size:14px;font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        .project-meta{font-size:12px;color:#94a3b8;margin-top:1px;}
-        .project-amount{font-size:14px;font-weight:700;color:#059669;flex-shrink:0;}
+        /* ===== PROJECT ===== */
+        .fl-project{display:flex;align-items:center;gap:14px;padding:16px 0;}
+        .fl-project+.fl-project{border-top:1px solid #f1f5f9;}
+        html.dark .fl-project+.fl-project{border-color:#334155;}
 
         /* ===== REVIEWS ===== */
-        .rating-overview{display:flex;gap:28px;padding:24px;background:#f8fafc;border-radius:14px;margin-bottom:20px;}
-        .rating-big{text-align:center;min-width:90px;}
-        .rating-num{font-size:48px;font-weight:900;color:#0f172a;line-height:1;}
-        .rating-stars{display:flex;gap:2px;justify-content:center;margin:6px 0 4px;}
-        .rating-count{font-size:12px;color:#94a3b8;}
-        .rating-bars{flex:1;}
-        .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
-        .bar-row:last-child{margin-bottom:0;}
-        .bar-num{font-size:11px;font-weight:600;color:#94a3b8;width:10px;text-align:right;}
-        .bar-track{flex:1;height:7px;background:#e2e8f0;border-radius:99px;overflow:hidden;}
-        .bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#3b82f6,#60a5fa);}
-        .bar-cnt{font-size:11px;color:#94a3b8;width:14px;}
-        .review-item{padding:16px 0;}
-        .review-item+.review-item{border-top:1px solid #f1f5f9;}
-        .review-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-        .review-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;}
-        .review-avatar-ph{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);}
-        .review-author{font-size:13px;font-weight:600;color:#0f172a;}
-        .review-date{font-size:11px;color:#94a3b8;}
-        .review-stars{display:flex;gap:1px;margin-bottom:6px;}
-        .review-text{font-size:13px;color:#475569;line-height:1.7;}
+        .fl-review{padding:20px 0;}
+        .fl-review+.fl-review{border-top:1px solid #f1f5f9;}
+        html.dark .fl-review+.fl-review{border-color:#334155;}
+
+        /* ===== COMPANIES ===== */
+        .fl-company{display:flex;flex-direction:column;align-items:center;padding:20px 10px;border-radius:14px;background:#f8fafc;transition:all .3s;}
+        html.dark .fl-company{background:#1e293b;}
+        .fl-company:hover{background:#eff6ff;transform:translateY(-3px);}
 
         /* ===== CONTACT ===== */
-        .contact-item{display:flex;align-items:center;gap:12px;padding:12px 0;}
-        .contact-item+.contact-item{border-top:1px solid #f1f5f9;}
-        .contact-ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#eff6ff;flex-shrink:0;}
-        .contact-ico svg{width:16px;height:16px;color:#3b82f6;}
-        .contact-detail .cl{font-size:10px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;}
-        .contact-detail .cv{font-size:13px;font-weight:600;color:#0f172a;}
-        .contact-detail .cv a{color:#3b82f6;text-decoration:none;}
-        .contact-detail .cv a:hover{text-decoration:underline;}
+        .fl-contact{display:flex;align-items:center;gap:14px;padding:14px 0;}
+        .fl-contact+.fl-contact{border-top:1px solid #f1f5f9;}
+        html.dark .fl-contact+.fl-contact{border-color:#334155;}
 
         /* ===== MODAL ===== */
-        .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:100;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
-        .modal-bg.open{display:flex;}
-        .modal-bg img{max-width:92vw;max-height:88vh;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.4);}
+        .fl-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+        .fl-modal.open{display:flex;}
+        .fl-modal img{max-width:92vw;max-height:88vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+
+        /* ===== ANIMATIONS ===== */
+        .fl-reveal{opacity:0;transform:translateY(24px);transition:opacity .6s cubic-bezier(.4,0,.2,1),transform .6s cubic-bezier(.4,0,.2,1);}
+        .fl-reveal.visible{opacity:1;transform:translateY(0);}
 
         /* ===== RESPONSIVE ===== */
         @media(max-width:900px){
-            .main-grid{grid-template-columns:1fr;}
-            .profile-card-main{flex-direction:column;align-items:center;text-align:center;padding:28px 24px 24px;}
-            .profile-avatar,.profile-avatar-placeholder{margin-top:-50px;}
-            .profile-head-meta{justify-content:center;}
-            .profile-head-actions{justify-content:center;}
-            .stats-row{grid-template-columns:repeat(2,1fr);}
-            .portfolio-grid{grid-template-columns:1fr;}
-            .companies-grid{grid-template-columns:repeat(3,1fr);}
-            .rating-overview{flex-direction:column;gap:16px;}
+            .fl-grid{grid-template-columns:1fr!important;}
+            .fl-card-main{flex-direction:column;align-items:center;text-align:center;padding:28px 24px 24px;}
+            .fl-avatar,.fl-avatar-ph{margin-top:-56px;}
+            .fl-meta{justify-content:center;}
+            .fl-actions{justify-content:center;}
         }
-        @media(max-width:600px){
-            .hero{padding:0 0 60px;}
-            .profile-hero{padding:0 16px;}
-            .page-wrap{padding:16px;}
-            .card-body{padding:20px;}
-            .stats-row{grid-template-columns:1fr 1fr;gap:10px;}
-            .companies-grid{grid-template-columns:repeat(2,1fr);}
-            .profile-head-name{font-size:22px;}
+        @media(max-width:640px){
+            .fl-hero{padding-bottom:60px;}
+            .fl-profile-card{padding:0 16px;margin-top:-56px;}
+            .fl-card-body{padding:20px;}
+            .fl-stat-grid{grid-template-columns:1fr 1fr!important;gap:12px!important;}
+            .fl-name{font-size:24px!important;}
         }
     </style>
 </head>
-<body>
+<body class="bg-[#f8fafc] dark:bg-[#0f172a]">
 
 <?php require __DIR__ . '/../includes/navbar.php'; ?>
 
-<!-- Hero Banner -->
-<div class="hero" style="padding-top:64px;">
-    <div style="height:120px;"></div>
+<!-- ===== HERO ===== -->
+<div class="fl-hero" style="padding-top:64px;padding-bottom:100px;">
+    <div class="max-w-7xl mx-auto px-6 pt-12 pb-8">
+        <div class="flex items-center gap-3 text-white/60 text-sm">
+            <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="hover:text-white transition-colors">Browse</a>
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+            <span class="text-white/90 font-medium">Freelancer Profile</span>
+        </div>
+    </div>
 </div>
 
-<!-- Profile Header Card -->
-<div class="profile-hero">
-    <div class="profile-card-main">
+<!-- ===== PROFILE HEADER ===== -->
+<div class="fl-profile-card">
+    <div class="fl-card fl-card-main" style="display:flex;align-items:flex-end;gap:28px;padding:32px 36px 28px;">
         <?php if ($profileImgUrl): ?>
-            <img src="<?= e($profileImgUrl) ?>" alt="" class="profile-avatar">
+            <img src="<?= e($profileImgUrl) ?>" alt="" class="fl-avatar">
         <?php else: ?>
-            <div class="profile-avatar-placeholder"><?= strtoupper(mb_substr($freelancer['full_name'] ?? $freelancer['username'], 0, 1)) ?></div>
+            <div class="fl-avatar-ph"><?= strtoupper(mb_substr($freelancer['full_name'] ?? $freelancer['username'], 0, 1)) ?></div>
         <?php endif; ?>
 
-        <div class="profile-head-info">
-            <h1 class="profile-head-name"><?= e($freelancer['full_name'] ?? $freelancer['username']) ?></h1>
-            <p class="profile-head-title"><?= e($freelancer['title'] ?? 'Freelancer') ?></p>
-            <div class="profile-head-meta">
-                <?php if ($freelancer['location']): ?>
-                    <span><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg><?= e($freelancer['location']) ?></span>
-                <?php endif; ?>
-                <?php if ($total_reviews > 0): ?>
-                    <span>
-                        <svg fill="#f59e0b" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                        <?= $avg_rating ?> (<?= $total_reviews ?>)
+        <div style="flex:1;min-width:0;padding-bottom:4px;">
+            <div class="flex items-center gap-3 flex-wrap">
+                <h1 class="fl-name" style="font-size:28px;font-weight:800;color:#0f172a;margin:0;"><?= e($freelancer['full_name'] ?? $freelancer['username']) ?></h1>
+                <?php if ($is_hired): ?>
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>Hired
                     </span>
                 <?php endif; ?>
-                <span><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>Member since <?= date('M Y', strtotime($freelancer['created_at'])) ?></span>
+            </div>
+            <p style="font-size:15px;font-weight:600;color:#3b82f6;margin:4px 0 12px;"><?= e($freelancer['title'] ?? 'Freelancer') ?></p>
+            <div class="fl-meta flex flex-wrap gap-4 text-sm" style="color:#64748b;">
+                <?php if ($freelancer['location']): ?>
+                    <span class="inline-flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg><?= e($freelancer['location']) ?></span>
+                <?php endif; ?>
+                <?php if ($total_reviews > 0): ?>
+                    <span class="inline-flex items-center gap-1.5"><svg class="w-4 h-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><?= $avg_rating ?> (<?= $total_reviews ?> reviews)</span>
+                <?php endif; ?>
+                <span class="inline-flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>Member since <?= date('M Y', strtotime($freelancer['created_at'])) ?></span>
                 <?php if ($freelancer['experience_years']): ?>
-                    <span><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><?= $freelancer['experience_years'] ?> yr<?= $freelancer['experience_years'] > 1 ? 's' : '' ?> exp</span>
+                    <span class="inline-flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><?= $freelancer['experience_years'] ?> yr<?= $freelancer['experience_years'] > 1 ? 's' : '' ?> exp</span>
                 <?php endif; ?>
             </div>
         </div>
 
-        <div class="profile-head-actions">
+        <div class="fl-actions" style="display:flex;gap:12px;align-items:center;padding-bottom:4px;flex-shrink:0;">
             <div style="text-align:right;margin-right:8px;">
-                <div style="font-size:11px;color:#94a3b8;font-weight:500;">Hourly Rate</div>
-                <div style="font-size:24px;font-weight:800;color:#0f172a;">$<?= e(number_format((float)($freelancer['hourly_rate'] ?? 0), 0)) ?><span style="font-size:13px;font-weight:500;color:#94a3b8;">/hr</span></div>
+                <div style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.5px;">Hourly Rate</div>
+                <div style="font-size:26px;font-weight:800;color:#0f172a;">$<?= e(number_format((float)($freelancer['hourly_rate'] ?? 0), 0)) ?><span style="font-size:13px;font-weight:500;color:#94a3b8;">/hr</span></div>
             </div>
             <?php if ($is_hired): ?>
-                <span class="btn-hired"><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Already Hired</span>
+                <span class="fl-btn fl-btn-hired"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Already Hired</span>
+            <?php elseif ($pending_hire): ?>
+                <span class="fl-btn" style="background:#fef3c7;color:#d97706;border:2px solid #fde68a;cursor:default;"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Pending Request</span>
             <?php else: ?>
-                <a href="<?= e(base_url('register.php')) ?>" class="btn-primary"><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>Hire Now</a>
+                <button type="button" onclick="document.getElementById('hireModal').classList.remove('hidden')" class="fl-btn fl-btn-primary"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>Hire Now</button>
             <?php endif; ?>
         </div>
     </div>
 </div>
 
-<!-- Main Content -->
-<div class="page-wrap">
+<!-- ===== MAIN CONTENT ===== -->
+<div class="max-w-[1100px] mx-auto px-6 py-8">
 
     <!-- Stats -->
-    <div class="stats-row">
-        <div class="stat-item"><div class="stat-value"><?= $completed_count ?></div><div class="stat-label">Projects Done</div></div>
-        <div class="stat-item"><div class="stat-value"><?= $total_reviews ?></div><div class="stat-label">Reviews</div></div>
-        <div class="stat-item"><div class="stat-value" style="color:#059669;">$<?= number_format($total_earnings, 0) ?></div><div class="stat-label">Earned</div></div>
-        <div class="stat-item"><div class="stat-value"><?= count($fl_skills) ?></div><div class="stat-label">Skills</div></div>
+    <div class="fl-stat-grid grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="fl-stat fl-reveal">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/20">
+                <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a;line-height:1;" class="dark:text-white"><?= $completed_count ?></div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;font-weight:600;">Projects Done</div>
+        </div>
+        <div class="fl-stat fl-reveal" style="transition-delay:.1s">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-amber-500/20">
+                <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/></svg>
+            </div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a;line-height:1;" class="dark:text-white"><?= $total_reviews ?></div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;font-weight:600;">Reviews</div>
+        </div>
+        <div class="fl-stat fl-reveal" style="transition-delay:.2s">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/20">
+                <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div style="font-size:28px;font-weight:800;color:#059669;line-height:1;">$<?= number_format($total_earnings, 0) ?></div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;font-weight:600;">Total Earned</div>
+        </div>
+        <div class="fl-stat fl-reveal" style="transition-delay:.3s">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-purple-500/20">
+                <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5"/></svg>
+            </div>
+            <div style="font-size:28px;font-weight:800;color:#0f172a;line-height:1;" class="dark:text-white"><?= count($fl_skills) ?></div>
+            <div style="font-size:12px;color:#64748b;margin-top:4px;font-weight:600;">Skills</div>
+        </div>
     </div>
 
-    <div class="main-grid">
-        <!-- LEFT COLUMN -->
-        <div>
+    <!-- Grid: Main + Sidebar -->
+    <div class="fl-grid grid gap-6" style="grid-template-columns:1fr 340px;align-items:start;">
+
+        <!-- ===== LEFT COLUMN ===== -->
+        <div class="space-y-6">
 
             <!-- About -->
             <?php if ($freelancer['bio']): ?>
-            <div class="card" style="margin-bottom:20px;">
-                <div class="card-body">
-                    <h2 class="card-title">About Me</h2>
-                    <p class="about-text"><?= nl2br(e($freelancer['bio'])) ?></p>
+            <div class="fl-card fl-reveal">
+                <div class="fl-card-body">
+                    <h2 class="fl-section-title">About Me</h2>
+                    <p style="font-size:14.5px;color:#475569;line-height:1.85;" class="dark:text-gray-300"><?= nl2br(e($freelancer['bio'])) ?></p>
                 </div>
             </div>
             <?php endif; ?>
 
             <!-- Portfolio -->
             <?php if (!empty($portfolio_items)): ?>
-            <div class="card" style="margin-bottom:20px;">
-                <div class="card-body">
-                    <h2 class="card-title">Portfolio <span style="font-size:12px;font-weight:500;color:#94a3b8;margin-left:4px;"><?= count($portfolio_items) ?> projects</span></h2>
-                    <div class="portfolio-grid">
+            <div class="fl-card fl-reveal">
+                <div class="fl-card-body">
+                    <h2 class="fl-section-title">Portfolio <span class="text-sm font-medium text-gray-400 ml-1"><?= count($portfolio_items) ?> projects</span></h2>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <?php foreach ($portfolio_items as $item):
                             $cover = $item['cover_image'] ? base_url('uploads/' . $item['cover_image']) : null;
                         ?>
-                        <div class="portfolio-card" onclick="<?= $cover ? "openModal(this.querySelector('img')?.src)" : '' ?>">
+                        <div class="fl-portfolio-card group cursor-pointer" onclick="<?= $cover ? "openModal(this.querySelector('img')?.src)" : '' ?>">
                             <?php if ($cover): ?>
-                                <img src="<?= e($cover) ?>" alt="" class="portfolio-img">
+                                <div class="overflow-hidden">
+                                    <img src="<?= e($cover) ?>" alt="" class="fl-portfolio-img">
+                                </div>
                             <?php else: ?>
-                                <div class="portfolio-img" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);display:flex;align-items:center;justify-content:center;">
-                                    <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="#93c5fd" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
+                                <div class="fl-portfolio-img" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);display:flex;align-items:center;justify-content:center;">
+                                    <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="#93c5fd" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
                                 </div>
                             <?php endif; ?>
-                            <div class="portfolio-body">
-                                <p class="portfolio-name"><?= e($item['title']) ?></p>
-                                <?php if ($item['description']): ?><p class="portfolio-desc"><?= e($item['description']) ?></p><?php endif; ?>
+                            <div class="p-4">
+                                <p class="text-sm font-bold text-gray-900 dark:text-white mb-1"><?= e($item['title']) ?></p>
+                                <?php if ($item['description']): ?><p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed mb-2"><?= e($item['description']) ?></p><?php endif; ?>
                                 <?php if (!empty($item['skills'])): ?>
-                                    <div class="portfolio-tech">
-                                        <?php foreach (array_slice($item['skills'], 0, 3) as $sk): ?><span class="tech-tag"><?= e($sk) ?></span><?php endforeach; ?>
+                                    <div class="flex flex-wrap gap-1 mb-2">
+                                        <?php foreach (array_slice($item['skills'], 0, 3) as $sk): ?><span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"><?= e($sk) ?></span><?php endforeach; ?>
                                     </div>
                                 <?php endif; ?>
-                                <div class="portfolio-links">
-                                    <?php if ($item['project_url']): ?><a href="<?= e($item['project_url']) ?>" target="_blank" class="link-primary" onclick="event.stopPropagation()">Live Demo →</a><?php endif; ?>
-                                    <?php if ($item['github_url']): ?><a href="<?= e($item['github_url']) ?>" target="_blank" class="link-muted" onclick="event.stopPropagation()">Source →</a><?php endif; ?>
+                                <div class="flex gap-3">
+                                    <?php if ($item['project_url']): ?><a href="<?= e($item['project_url']) ?>" target="_blank" class="text-xs font-semibold text-blue-600 hover:text-blue-700" onclick="event.stopPropagation()">Live Demo →</a><?php endif; ?>
+                                    <?php if ($item['github_url']): ?><a href="<?= e($item['github_url']) ?>" target="_blank" class="text-xs font-semibold text-gray-400 hover:text-gray-600" onclick="event.stopPropagation()">Source →</a><?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -397,17 +464,19 @@ if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'company') {
 
             <!-- Completed Projects -->
             <?php if (!empty($completed_projects)): ?>
-            <div class="card" style="margin-bottom:20px;">
-                <div class="card-body">
-                    <h2 class="card-title">Completed Projects</h2>
+            <div class="fl-card fl-reveal">
+                <div class="fl-card-body">
+                    <h2 class="fl-section-title">Completed Projects</h2>
                     <?php foreach (array_slice($completed_projects, 0, 5) as $cp): ?>
-                    <div class="project-item">
-                        <div class="project-icon-box"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>
-                        <div class="project-info">
-                            <p class="project-title"><?= e($cp['title']) ?></p>
-                            <p class="project-meta"><?= e($cp['company_name']) ?> · <?= date('M Y', strtotime($cp['assigned_at'])) ?></p>
+                    <div class="fl-project">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-500/20">
+                            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                         </div>
-                        <?php if ($cp['amount']): ?><span class="project-amount">$<?= number_format((float)$cp['amount'], 0) ?></span><?php endif; ?>
+                        <div style="flex:1;min-width:0;">
+                            <p class="text-sm font-semibold text-gray-900 dark:text-white truncate"><?= e($cp['title']) ?></p>
+                            <p class="text-xs text-gray-400 mt-0.5"><?= e($cp['company_name']) ?> · <?= date('M Y', strtotime($cp['assigned_at'])) ?></p>
+                        </div>
+                        <?php if ($cp['amount']): ?><span class="text-sm font-bold text-emerald-600 flex-shrink-0">$<?= number_format((float)$cp['amount'], 0) ?></span><?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                 </div>
@@ -415,93 +484,93 @@ if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'company') {
             <?php endif; ?>
 
             <!-- Reviews -->
-            <div class="card">
-                <div class="card-body">
-                    <h2 class="card-title">Client Reviews</h2>
+            <div class="fl-card fl-reveal">
+                <div class="fl-card-body">
+                    <h2 class="fl-section-title">Client Reviews</h2>
                     <?php if ($total_reviews > 0): ?>
-                    <div class="rating-overview">
-                        <div class="rating-big">
-                            <div class="rating-num"><?= $avg_rating ?></div>
-                            <div class="rating-stars">
-                                <?php for ($s = 1; $s <= 5; $s++): ?><svg width="16" height="16" fill="<?= $s <= $avg_rating ? '#f59e0b' : '#e2e8f0' ?>" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><?php endfor; ?>
+                    <!-- Rating Overview -->
+                    <div class="flex gap-7 p-5 bg-gray-50 dark:bg-slate-800/50 rounded-2xl mb-6">
+                        <div class="text-center min-w-[100px]">
+                            <div style="font-size:52px;font-weight:900;color:#0f172a;line-height:1;" class="dark:text-white"><?= $avg_rating ?></div>
+                            <div class="flex gap-0.5 justify-center my-2">
+                                <?php for ($s = 1; $s <= 5; $s++): ?><svg class="w-4 h-4" fill="<?= $s <= round($avg_rating) ? '#f59e0b' : '#e2e8f0' ?>" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><?php endfor; ?>
                             </div>
-                            <div class="rating-count"><?= $total_reviews ?> reviews</div>
+                            <div class="text-xs text-gray-400 font-medium"><?= $total_reviews ?> reviews</div>
                         </div>
-                        <div class="rating-bars">
+                        <div class="flex-1">
                             <?php for ($star = 5; $star >= 1; $star--):
                                 $cnt = $rating_dist[$star] ?? 0;
                                 $pct = $total_reviews > 0 ? round(($cnt / $total_reviews) * 100) : 0;
                             ?>
-                            <div class="bar-row">
-                                <span class="bar-num"><?= $star ?></span>
-                                <div class="bar-track"><div class="bar-fill" style="width:0%;" data-width="<?= $pct ?>%"></div></div>
-                                <span class="bar-cnt"><?= $cnt ?></span>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-[11px] font-semibold text-gray-400 w-3 text-right"><?= $star ?></span>
+                                <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div class="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-1000" style="width:0%;" data-width="<?= $pct ?>%"></div>
+                                </div>
+                                <span class="text-[11px] text-gray-400 w-3"><?= $cnt ?></span>
                             </div>
                             <?php endfor; ?>
                         </div>
                     </div>
+
+                    <!-- Review List -->
                     <?php foreach ($reviews as $rv): ?>
-                    <div class="review-item">
-                        <div class="review-head">
+                    <div class="fl-review">
+                        <div class="flex items-center gap-3 mb-2">
                             <?php if (!empty($rv['reviewer_image'])): ?>
-                                <img src="<?= e(base_url('uploads/' . $rv['reviewer_image'])) ?>" alt="" class="review-avatar">
+                                <img src="<?= e(base_url('uploads/' . $rv['reviewer_image'])) ?>" alt="" class="w-9 h-9 rounded-full object-cover">
                             <?php else: ?>
-                                <div class="review-avatar-ph">C</div>
+                                <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white bg-gradient-to-br from-indigo-500 to-purple-600">C</div>
                             <?php endif; ?>
                             <div>
-                                <p class="review-author"><?= e($rv['company_name'] ?? 'Client') ?></p>
-                                <p class="review-date"><?= date('M j, Y', strtotime($rv['created_at'])) ?></p>
+                                <p class="text-sm font-semibold text-gray-900 dark:text-white"><?= e($rv['company_name'] ?? 'Client') ?></p>
+                                <p class="text-[11px] text-gray-400"><?= date('M j, Y', strtotime($rv['created_at'])) ?></p>
                             </div>
                         </div>
-                        <div class="review-stars">
-                            <?php for ($s = 1; $s <= 5; $s++): ?><svg width="13" height="13" fill="<?= $s <= $rv['rating'] ? '#f59e0b' : '#e2e8f0' ?>" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><?php endfor; ?>
+                        <div class="flex gap-0.5 mb-2">
+                            <?php for ($s = 1; $s <= 5; $s++): ?><svg class="w-3.5 h-3.5" fill="<?= $s <= $rv['rating'] ? '#f59e0b' : '#e2e8f0' ?>" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><?php endfor; ?>
                         </div>
-                        <?php if ($rv['comment']): ?><p class="review-text"><?= e($rv['comment']) ?></p><?php endif; ?>
+                        <?php if ($rv['comment']): ?><p class="text-sm text-gray-600 dark:text-gray-300 leading-relaxed"><?= e($rv['comment']) ?></p><?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                     <?php else: ?>
-                        <p style="text-align:center;color:#94a3b8;padding:20px 0;">No reviews yet.</p>
+                        <p class="text-center text-gray-400 py-10 text-sm">No reviews yet.</p>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
 
-        <!-- RIGHT SIDEBAR -->
-        <div>
+        <!-- ===== RIGHT SIDEBAR ===== -->
+        <div class="space-y-6">
+
             <!-- Skills -->
             <?php if (!empty($fl_skills)): ?>
-            <div class="card" style="margin-bottom:20px;">
-                <div class="card-body">
-                    <h2 class="card-title">Skills</h2>
-                    <?php foreach ($fl_skills as $i => $sk):
-                        $prof = max(50, 98 - ($i * 7));
-                    ?>
-                    <div class="skill-item">
-                        <div class="skill-top">
-                            <span class="skill-name"><?= e($sk) ?></span>
-                            <span class="skill-pct"><?= $prof ?>%</span>
-                        </div>
-                        <div class="skill-bar"><div class="skill-fill" style="width:0%;" data-width="<?= $prof ?>%"></div></div>
+            <div class="fl-card fl-reveal">
+                <div class="fl-card-body">
+                    <h2 class="fl-section-title">Skills</h2>
+                    <div class="flex flex-wrap gap-2">
+                        <?php foreach ($fl_skills as $sk): ?>
+                            <span class="fl-skill-tag"><?= e($sk) ?></span>
+                        <?php endforeach; ?>
                     </div>
-                    <?php endforeach; ?>
                 </div>
             </div>
             <?php endif; ?>
 
             <!-- Companies -->
             <?php if (!empty($companies_worked)): ?>
-            <div class="card" style="margin-bottom:20px;">
-                <div class="card-body">
-                    <h2 class="card-title">Companies</h2>
-                    <div class="companies-grid">
+            <div class="fl-card fl-reveal">
+                <div class="fl-card-body">
+                    <h2 class="fl-section-title">Companies</h2>
+                    <div class="grid grid-cols-3 gap-3">
                         <?php foreach ($companies_worked as $cw): ?>
-                        <div class="company-item">
+                        <div class="fl-company">
                             <?php if ($cw['logo']): ?>
-                                <img src="<?= e($cw['logo']) ?>" alt="" class="company-logo">
+                                <img src="<?= e($cw['logo']) ?>" alt="" class="w-12 h-12 rounded-xl object-contain bg-white p-1 shadow-sm mb-2">
                             <?php else: ?>
-                                <div class="company-logo-ph"><?= strtoupper(mb_substr($cw['name'], 0, 1)) ?></div>
+                                <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400 mb-2"><?= strtoupper(mb_substr($cw['name'], 0, 1)) ?></div>
                             <?php endif; ?>
-                            <span class="company-label"><?= e($cw['name']) ?></span>
+                            <span class="text-[11px] font-semibold text-gray-600 dark:text-gray-300 text-center leading-tight"><?= e($cw['name']) ?></span>
                         </div>
                         <?php endforeach; ?>
                     </div>
@@ -510,29 +579,58 @@ if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'company') {
             <?php endif; ?>
 
             <!-- Contact -->
-            <div class="card">
-                <div class="card-body">
-                    <h2 class="card-title">Contact</h2>
-                    <div class="contact-item">
-                        <div class="contact-ico"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg></div>
-                        <div class="contact-detail"><p class="cl">Email</p><p class="cv"><?= e($freelancer['email']) ?></p></div>
+            <div class="fl-card fl-reveal">
+                <div class="fl-card-body">
+                    <h2 class="fl-section-title">Contact</h2>
+                    <div class="fl-contact">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
+                        </div>
+                        <div><p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Email</p><p class="text-sm font-semibold text-gray-900 dark:text-white"><?= e($freelancer['email']) ?></p></div>
                     </div>
                     <?php if ($freelancer['phone']): ?>
-                    <div class="contact-item">
-                        <div class="contact-ico"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg></div>
-                        <div class="contact-detail"><p class="cl">Phone</p><p class="cv"><?= e($freelancer['phone']) ?></p></div>
+                    <div class="fl-contact">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
+                        </div>
+                        <div><p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Phone</p><p class="text-sm font-semibold text-gray-900 dark:text-white"><?= e($freelancer['phone']) ?></p></div>
                     </div>
                     <?php endif; ?>
                     <?php if ($freelancer['location']): ?>
-                    <div class="contact-item">
-                        <div class="contact-ico"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg></div>
-                        <div class="contact-detail"><p class="cl">Location</p><p class="cv"><?= e($freelancer['location']) ?></p></div>
+                    <div class="fl-contact">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+                        </div>
+                        <div><p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Location</p><p class="text-sm font-semibold text-gray-900 dark:text-white"><?= e($freelancer['location']) ?></p></div>
                     </div>
                     <?php endif; ?>
-                    <?php if ($freelancer['portfolio_url']): ?>
-                    <div class="contact-item">
-                        <div class="contact-ico"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg></div>
-                        <div class="contact-detail"><p class="cl">Website</p><p class="cv"><a href="<?= e($freelancer['portfolio_url']) ?>" target="_blank"><?= e($freelancer['portfolio_url']) ?></a></p></div>
+                    <?php if (!empty($portfolio_items)): ?>
+                    <div class="fl-contact" style="flex-direction:column;align-items:stretch;gap:12px;">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
+                            </div>
+                            <div><p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Portfolios</p><p class="text-sm font-semibold text-gray-900 dark:text-white"><?= count($portfolio_items) ?> project<?= count($portfolio_items) !== 1 ? 's' : '' ?></p></div>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <?php foreach (array_slice($portfolio_items, 0, 3) as $pi_item): ?>
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                                    <?php if ($pi_item['cover_image']): ?>
+                                        <img src="<?= e(base_url('uploads/' . $pi_item['cover_image'])) ?>" alt="" class="w-5 h-5 rounded object-cover">
+                                    <?php else: ?>
+                                        <svg class="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
+                                    <?php endif; ?>
+                                    <?= e($pi_item['title']) ?>
+                                </span>
+                            <?php endforeach; ?>
+                            <?php if (count($portfolio_items) > 3): ?>
+                                <span class="inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">+<?= count($portfolio_items) - 3 ?> more</span>
+                            <?php endif; ?>
+                        </div>
+                        <a href="<?= e(base_url('freelancer/view_portfolio.php?id=' . $fid)) ?>" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/25 hover:shadow-lg hover:-translate-y-0.5 transition-all text-center justify-center">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+                            View Portfolios
+                        </a>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -542,14 +640,111 @@ if (isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'company') {
 </div>
 
 <!-- Modal -->
-<div class="modal-bg" id="modal" onclick="this.classList.remove('open')">
+<div class="fl-modal" id="modal" onclick="this.classList.remove('open')">
     <img id="modalImg" src="" alt="">
 </div>
 
+<!-- Hire Modal -->
+<div id="hireModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div class="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+        <!-- Header -->
+        <div class="p-6 pb-4 border-b border-gray-100 dark:border-gray-800">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white">Hire <?= e($freelancer['full_name'] ?? $freelancer['username']) ?></h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Send a direct hire request with project details</p>
+                </div>
+                <button type="button" onclick="document.getElementById('hireModal').classList.add('hidden')" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Success/Error Messages -->
+        <?php if ($hire_success): ?>
+            <div class="mx-6 mt-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-sm font-medium">
+                <?= e($hire_success) ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($hire_error): ?>
+            <div class="mx-6 mt-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm font-medium">
+                <?= e($hire_error) ?>
+            </div>
+        <?php endif; ?>
+
+        <!-- Form -->
+        <?php if (!$is_hired && !$pending_hire): ?>
+        <form method="POST" enctype="multipart/form-data" class="p-6 space-y-4">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="action" value="direct_hire">
+
+            <div>
+                <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Project Title <span class="text-red-500">*</span></label>
+                <input type="text" name="project_title" required maxlength="255" class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="e.g. Website Redesign">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Description <span class="text-red-500">*</span></label>
+                <textarea name="project_description" rows="3" required class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" placeholder="Describe the project requirements..."></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Budget ($) <span class="text-red-500">*</span></label>
+                    <input type="number" name="budget" min="1" step="0.01" required class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="0.00">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Deadline</label>
+                    <input type="date" name="deadline" min="<?= date('Y-m-d') ?>" class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Payment Type <span class="text-red-500">*</span></label>
+                <select name="payment_type" required class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="fixed">Fixed Price</option>
+                    <option value="milestone">Milestone-Based</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Notes</label>
+                <textarea name="notes" rows="2" class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" placeholder="Additional notes for the freelancer..."></textarea>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Attachment</label>
+                <input type="file" name="attachment" accept=".jpg,.jpeg,.png,.pdf,.docx,.zip" class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-900/30 dark:file:text-blue-400">
+                <p class="text-xs text-gray-400 mt-1">JPG, PNG, PDF, DOCX, ZIP (Max 10MB)</p>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+                <button type="button" onclick="document.getElementById('hireModal').classList.add('hidden')" class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">Send Hire Request</button>
+            </div>
+        </form>
+        <?php else: ?>
+        <div class="p-6 text-center">
+            <p class="text-gray-500 dark:text-gray-400">
+                <?php if ($is_hired): ?>
+                    You have already hired this freelancer.
+                <?php else: ?>
+                    A hire request is already pending for this freelancer.
+                <?php endif; ?>
+            </p>
+            <button type="button" onclick="document.getElementById('hireModal').classList.add('hidden')" class="mt-4 px-6 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Close</button>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <script>
-var obs=new IntersectionObserver(function(e){e.forEach(function(el){if(el.isIntersecting){el.target.querySelectorAll('[data-width]').forEach(function(f){setTimeout(function(){f.style.width=f.getAttribute('data-width');},150);});obs.unobserve(el.target);}});},{threshold:.15});
-document.querySelectorAll('.card').forEach(function(c){obs.observe(c);});
-setTimeout(function(){document.querySelectorAll('[data-width]').forEach(function(f){if(f.getBoundingClientRect().top<window.innerHeight)f.style.width=f.getAttribute('data-width');});},400);
+/* Scroll reveal */
+var obs=new IntersectionObserver(function(e){e.forEach(function(el){if(el.isIntersecting){el.target.classList.add('visible');el.target.querySelectorAll('[data-width]').forEach(function(f){setTimeout(function(){f.style.width=f.getAttribute('data-width');},200);});obs.unobserve(el.target);}});},{threshold:.1});
+document.querySelectorAll('.fl-reveal').forEach(function(c){obs.observe(c);});
+setTimeout(function(){document.querySelectorAll('[data-width]').forEach(function(f){if(f.getBoundingClientRect().top<window.innerHeight)f.style.width=f.getAttribute('data-width');});},500);
+
+/* Modal */
 function openModal(s){if(!s)return;document.getElementById('modalImg').src=s;document.getElementById('modal').classList.add('open');}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('modal').classList.remove('open');});
 </script>

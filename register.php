@@ -141,15 +141,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $stmt->close();
                     } else {
                         $full_name       = trim($_POST['full_name'] ?? '');
-                        $portfolio_url   = trim($_POST['portfolio_url'] ?? '');
                         $selected_skills = $_POST['skills'] ?? [];
 
                         if ($full_name === '') {
                             throw new Exception(__('error.full_name_required'));
                         }
 
-                        $stmt = $conn->prepare('INSERT INTO freelancers (user_id, full_name, portfolio_url) VALUES (?, ?, ?)');
-                        $stmt->bind_param('iss', $user_id, $full_name, $portfolio_url);
+                        $stmt = $conn->prepare('INSERT INTO freelancers (user_id, full_name) VALUES (?, ?)');
+                        $stmt->bind_param('is', $user_id, $full_name);
                         $stmt->execute();
                         $freelancer_id = $stmt->insert_id;
                         $stmt->close();
@@ -701,10 +700,7 @@ require __DIR__ . '/includes/header.php';
                   <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e(__('register.full_name')) ?> <span style="color:#ef4444">*</span></label>
                   <input type="text" name="full_name" class="auth-input" placeholder="John Doe" value="<?= e($_POST['full_name'] ?? '') ?>">
                 </div>
-                <div>
-                  <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e(__('register.portfolio_url')) ?></label>
-                  <input type="url" name="portfolio_url" class="auth-input" placeholder="<?= e(__('register.portfolio_placeholder')) ?>" value="<?= e($_POST['portfolio_url'] ?? '') ?>">
-                </div>
+
                 <div>
                   <label class="block text-sm font-medium mb-2" style="color:var(--color-text-secondary)"><?= e(__('register.skills')) ?></label>
                   <div class="grid-skills">

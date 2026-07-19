@@ -26,6 +26,85 @@ try { $s = $conn->prepare("SELECT p.id,p.amount,p.status,p.paid_at,j.title AS jo
 $recommended = [];
 try { $s = $conn->prepare("SELECT j.id,j.title,j.description,j.budget,j.created_at,c.company_name,c.logo_image FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.status='approved' AND j.id NOT IN (SELECT job_id FROM job_applications WHERE freelancer_id=?) AND j.id NOT IN (SELECT job_id FROM assignments) ORDER BY j.created_at DESC LIMIT 6"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $recommended[] = $row; $s->close(); } catch(Exception $e) {}
 
+// Direct hire requests (pending)
+$direct_hire_requests = [];
+try {
+    $s = $conn->prepare("SELECT a.id, a.project_title, a.project_description, a.budget, a.deadline, a.payment_type, a.notes, a.attachment, a.assigned_at, c.company_name, c.logo_image, u.email AS company_email
+        FROM assignments a
+        JOIN jobs j ON a.job_id = j.id
+        JOIN companies c ON j.company_id = c.id
+        JOIN users u ON c.user_id = u.id
+        WHERE a.freelancer_id = ? AND a.assignment_type = 'direct_hire' AND a.freelancer_response = 'pending'
+        ORDER BY a.assigned_at DESC");
+    $s->bind_param('i', $fl_freelancer_id);
+    $s->execute();
+    $r = $s->get_result();
+    while ($row = $r->fetch_assoc()) $direct_hire_requests[] = $row;
+    $s->close();
+} catch(Exception $e) {}
+
+// Handle accept/reject direct hire
+$hire_action_msg = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
+    if (!verify_csrf()) {
+        $hire_action_msg = 'Invalid request.';
+    } else {
+        $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
+        $action = $_POST['hire_action'];
+
+        if ($assignment_id > 0 && in_array($action, ['accept', 'reject'])) {
+            $response = $action === 'accept' ? 'accepted' : 'rejected';
+            $new_status = $action === 'accept' ? 'working' : 'assigned';
+
+            try {
+                $s = $conn->prepare("UPDATE assignments SET freelancer_response = ?, status = ? WHERE id = ? AND freelancer_id = ? AND assignment_type = 'direct_hire' AND freelancer_response = 'pending'");
+                $s->bind_param('ssii', $response, $new_status, $assignment_id, $fl_freelancer_id);
+                $s->execute();
+
+                if ($s->affected_rows > 0) {
+                    // Get company user_id for notification
+                    $s2 = $conn->prepare("SELECT c.user_id FROM assignments a JOIN jobs j ON a.job_id = j.id JOIN companies c ON j.company_id = c.id WHERE a.id = ?");
+                    $s2->bind_param('i', $assignment_id);
+                    $s2->execute();
+                    $company_user = $s2->get_result()->fetch_assoc();
+                    $s2->close();
+
+                    if ($company_user) {
+                        $msg = $action === 'accept'
+                            ? "Your direct hire request has been accepted by {$fl_profile['full_name']}."
+                            : "Your direct hire request has been declined by {$fl_profile['full_name']}.";
+                        create_notification($conn, (int) $company_user['user_id'], 'direct_hire_' . $action, $msg, 'company/dashboard.php');
+                    }
+
+                    $hire_action_msg = $action === 'accept' ? 'Request accepted! You can now start working.' : 'Request declined.';
+                } else {
+                    $hire_action_msg = 'Unable to process this request. It may have already been handled.';
+                }
+                $s->close();
+            } catch(Exception $e) {
+                $hire_action_msg = 'Error: ' . $e->getMessage();
+            }
+        }
+    }
+
+    // Refresh the list after action
+    $direct_hire_requests = [];
+    try {
+        $s = $conn->prepare("SELECT a.id, a.project_title, a.project_description, a.budget, a.deadline, a.payment_type, a.notes, a.attachment, a.assigned_at, c.company_name, c.logo_image, u.email AS company_email
+            FROM assignments a
+            JOIN jobs j ON a.job_id = j.id
+            JOIN companies c ON j.company_id = c.id
+            JOIN users u ON c.user_id = u.id
+            WHERE a.freelancer_id = ? AND a.assignment_type = 'direct_hire' AND a.freelancer_response = 'pending'
+            ORDER BY a.assigned_at DESC");
+        $s->bind_param('i', $fl_freelancer_id);
+        $s->execute();
+        $r = $s->get_result();
+        while ($row = $r->fetch_assoc()) $direct_hire_requests[] = $row;
+        $s->close();
+    } catch(Exception $e) {}
+}
+
 $profileImg = profile_image_url($fl_profile['profile_image']);
 $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['username'] ?? 'U', 0, 1));
 ?>
@@ -105,6 +184,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
         <div class="flex gap-1 min-w-max">
             <?php $tabs = [
                 ['id'=>'overview','label'=>'Overview','icon'=>'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6'],
+                ['id'=>'hire_requests','label'=>'Hiring Requests','icon'=>'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z','badge'=>count($direct_hire_requests),'bc'=>'purple'],
                 ['id'=>'applications','label'=>'Applications','icon'=>'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z','badge'=>$fl_stats['pending'],'bc'=>'yellow'],
                 ['id'=>'ongoing','label'=>'Ongoing','icon'=>'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10','badge'=>$fl_stats['active'],'bc'=>'blue'],
                 ['id'=>'completed','label'=>'Completed','icon'=>'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'],
@@ -210,6 +290,105 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                         <?php if ($app['logo_image']): ?><img src="<?= e(base_url('uploads/' . $app['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php else: ?><div class="w-12 h-12 rounded-xl flex items-center justify-center text-indigo-600 font-bold border" style="background:rgba(99,102,241,0.1);border-color:var(--color-border)"><?= strtoupper(mb_substr($app['company_name'], 0, 1)) ?></div><?php endif; ?>
                         <div class="flex-1 min-w-0"><p class="font-semibold" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p><p class="text-sm" style="color:var(--color-text-muted)"><?= e($app['company_name']) ?> &middot; $<?= number_format((float) $app['budget'], 2) ?></p><p class="text-xs" style="color:var(--color-text-placeholder)">Applied <?= date('M j, Y', strtotime($app['applied_at'])) ?></p></div>
                         <?= status_badge($app['status']) ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
+<!-- HIRING REQUESTS -->
+<div class="dash-section" id="tab-hire_requests">
+    <h2 class="text-xl font-bold mb-5" style="color:var(--color-text-primary)">Hiring Requests</h2>
+
+    <?php if ($hire_action_msg): ?>
+        <div class="mb-5 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-sm font-medium"><?= e($hire_action_msg) ?></div>
+    <?php endif; ?>
+
+    <?php if (empty($direct_hire_requests)): ?>
+        <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)">
+            <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+            <p>No pending hiring requests.</p>
+            <p class="text-xs mt-2 opacity-70">When companies hire you directly, requests will appear here.</p>
+        </div>
+    <?php else: ?>
+        <div class="space-y-4">
+            <?php foreach ($direct_hire_requests as $req): ?>
+                <div class="glass rounded-2xl p-6 hover-lift">
+                    <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
+                        <div class="flex items-center gap-3">
+                            <?php if ($req['logo_image']): ?>
+                                <img src="<?= e(base_url('uploads/' . $req['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)">
+                            <?php else: ?>
+                                <div class="w-12 h-12 rounded-xl flex items-center justify-center text-purple-600 font-bold border" style="background:rgba(139,92,246,0.1);border-color:var(--color-border)"><?= strtoupper(mb_substr($req['company_name'], 0, 1)) ?></div>
+                            <?php endif; ?>
+                            <div>
+                                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e($req['company_name']) ?></p>
+                                <h3 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($req['project_title']) ?></h3>
+                            </div>
+                        </div>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Pending Response
+                        </span>
+                    </div>
+
+                    <p class="text-sm mb-4 leading-relaxed" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($req['project_description'] ?? '', 0, 250, '...')) ?></p>
+
+                    <div class="flex flex-wrap items-center gap-4 text-sm mb-5">
+                        <span class="inline-flex items-center gap-1.5" style="color:var(--color-text-muted)">
+                            <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
+                            Budget: <strong class="text-emerald-600 dark:text-emerald-400">$<?= number_format((float) $req['budget'], 2) ?></strong>
+                        </span>
+                        <?php if ($req['deadline']): ?>
+                            <span class="inline-flex items-center gap-1.5" style="color:var(--color-text-muted)">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>
+                                Deadline: <strong><?= date('M j, Y', strtotime($req['deadline'])) ?></strong>
+                            </span>
+                        <?php endif; ?>
+                        <span class="inline-flex items-center gap-1.5" style="color:var(--color-text-muted)">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
+                            Payment: <strong class="capitalize"><?= e($req['payment_type']) ?></strong>
+                        </span>
+                        <span class="text-xs" style="color:var(--color-text-placeholder)">Sent <?= date('M j, Y', strtotime($req['assigned_at'])) ?></span>
+                    </div>
+
+                    <?php if (!empty($req['notes'])): ?>
+                        <div class="mb-4 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+                            <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Notes from Company:</p>
+                            <p class="text-sm" style="color:var(--color-text-secondary)"><?= nl2br(e($req['notes'])) ?></p>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($req['attachment'])): ?>
+                        <div class="mb-4">
+                            <a href="<?= e(base_url('uploads/attachments/' . $req['attachment'])) ?>" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13"/></svg>
+                                View Attachment: <?= e(basename($req['attachment'])) ?>
+                            </a>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Accept/Reject Buttons -->
+                    <div class="flex flex-wrap gap-3 pt-4 border-t" style="border-color:var(--color-border)">
+                        <form method="POST" class="inline">
+                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                            <input type="hidden" name="assignment_id" value="<?= (int) $req['id'] ?>">
+                            <input type="hidden" name="hire_action" value="accept">
+                            <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                Accept
+                            </button>
+                        </form>
+                        <form method="POST" class="inline">
+                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                            <input type="hidden" name="assignment_id" value="<?= (int) $req['id'] ?>">
+                            <input type="hidden" name="hire_action" value="reject">
+                            <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                Reject
+                            </button>
+                        </form>
                     </div>
                 </div>
             <?php endforeach; ?>
