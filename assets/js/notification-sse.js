@@ -56,14 +56,21 @@ var NotificationSSE = (function() {
     }
 
     function updateBadge(count) {
-        var badge = document.getElementById('notifBadge');
-        if (!badge) return;
+        var text = count > 99 ? '99+' : (count > 0 ? String(count) : '');
+        var show = count > 0;
 
-        if (count > 0) {
-            badge.textContent = count > 99 ? '99+' : count;
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
+        // Desktop badge
+        var badge = document.getElementById('notifBadge');
+        if (badge) {
+            badge.textContent = text;
+            badge.style.display = show ? 'flex' : 'none';
+        }
+
+        // Mobile badge
+        var mobileBadge = document.getElementById('notifBadgeMobile');
+        if (mobileBadge) {
+            mobileBadge.textContent = text;
+            mobileBadge.style.display = show ? 'flex' : 'none';
         }
     }
 

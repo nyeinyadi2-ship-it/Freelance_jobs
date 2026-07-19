@@ -267,68 +267,97 @@ $page_title = __('app.tagline');
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
 
-        /* Premium hero */
-        .hero-premium {
-            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 25%, #4338ca 50%, #6366f1 75%, #7c3aed 100%);
+        /* ===== HERO ===== */
+        .hero-section {
             position: relative;
+            min-height: 92vh;
+            display: flex;
+            align-items: center;
             overflow: hidden;
         }
 
-        .hero-premium::before {
-            content: '';
+        /* Slideshow */
+        .hero-slides {
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(ellipse at 30% 50%, rgba(139, 92, 246, 0.3) 0%, transparent 50%),
-                radial-gradient(ellipse at 70% 20%, rgba(59, 130, 246, 0.2) 0%, transparent 50%),
-                radial-gradient(ellipse at 50% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%);
-            animation: heroGlow 10s ease-in-out infinite alternate;
+            inset: 0;
+            z-index: 0;
+        }
+        .hero-slide {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            transition: opacity 1.6s ease-in-out;
+        }
+        .hero-slide img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .hero-slide.active { opacity: 1; }
+
+        /* Hero navigation buttons */
+        .hero-nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .hero-nav-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-50%) scale(1.1);
+        }
+        .hero-nav-btn.prev { left: 16px; }
+        .hero-nav-btn.next { right: 16px; }
+        @media (min-width: 768px) {
+            .hero-nav-btn { width: 56px; height: 56px; }
+            .hero-nav-btn.prev { left: 24px; }
+            .hero-nav-btn.next { right: 24px; }
         }
 
-        @keyframes heroGlow {
-            0% {
-                transform: translate(0, 0) scale(1);
-            }
-
-            100% {
-                transform: translate(30px, -20px) scale(1.05);
-            }
+        /* Overlay */
+        .hero-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(30,41,59,0.45) 50%, rgba(51,65,85,0.35) 100%);
+            z-index: 1;
         }
 
-        /* Floating cards */
-        .floating-card {
-            animation: floatCard 6s ease-in-out infinite;
+        /* Animated shapes */
+        .hero-shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.15;
+            animation: heroFloat 6s ease-in-out infinite;
+        }
+        .hero-shape-1 { width: 400px; height: 400px; background: #818cf8; top: -100px; right: -50px; animation-delay: 0s; }
+        .hero-shape-2 { width: 300px; height: 300px; background: #c084fc; bottom: -80px; left: -60px; animation-delay: -2s; }
+        .hero-shape-3 { width: 200px; height: 200px; background: #f472b6; top: 40%; left: 40%; animation-delay: -4s; }
+
+        @keyframes heroFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(15px, -20px) scale(1.05); }
         }
 
-        .floating-card:nth-child(2) {
-            animation-delay: -1.5s;
-        }
-
-        .floating-card:nth-child(3) {
-            animation-delay: -3s;
-        }
-
-        .floating-card:nth-child(4) {
-            animation-delay: -4.5s;
-        }
-
-        @keyframes floatCard {
-
-            0%,
-            100% {
-                transform: translateY(0px);
-            }
-
-            50% {
-                transform: translateY(-12px);
-            }
-        }
+        /* Content area */
+        .hero-content { position: relative; z-index: 2; }
 
         /* Gradient text */
         .gradient-text {
-            background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+            background: linear-gradient(135deg, #c4b5fd, #f9a8d4, #fda4af);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -608,154 +637,83 @@ $page_title = __('app.tagline');
     <?php require __DIR__ . '/includes/navbar.php'; ?>
 
     <!-- ===== HERO SECTION ===== -->
-    <section class="hero-premium min-h-screen flex items-center pt-24 pb-16 relative">
-        <!-- Animated particles -->
-        <div class="absolute inset-0 overflow-hidden pointer-events-none">
-            <div class="absolute top-1/4 left-1/4 w-72 h-72 bg-purple-400/10 rounded-full blur-3xl" style="animation: float 8s ease-in-out infinite;"></div>
-            <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl" style="animation: float 10s ease-in-out infinite reverse;"></div>
-            <div class="absolute top-1/2 left-1/2 w-64 h-64 bg-pink-400/10 rounded-full blur-3xl" style="animation: float 12s ease-in-out infinite 2s;"></div>
+    <section class="hero-section">
+        <!-- Slideshow Background -->
+        <div class="hero-slides">
+            <div class="hero-slide active">
+                <img src="<?= e(base_url('uploads/office1.jpg')) ?>" alt="Office meeting">
+            </div>
+            <div class="hero-slide">
+                <img src="<?= e(base_url('uploads/office2.jfif')) ?>" alt="Virtual collaboration">
+            </div>
+            <div class="hero-slide">
+                <img src="<?= e(base_url('uploads/office3.jfif')) ?>" alt="Team presentation">
+            </div>
         </div>
 
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
-            <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-                <!-- Left: Content -->
-                <div class="space-y-8">
-                    <div class="inline-flex items-center gap-2 glass rounded-full px-5 py-2 text-sm text-white/90 reveal">
-                        <span class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse"></span>
-                        Trusted by <?= number_format($stats['freelancers'] + $stats['companies']) ?>+ professionals
-                    </div>
+        <!-- Overlay -->
+        <div class="hero-overlay"></div>
 
-                    <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight reveal reveal-d1">
-                        Find Top Talent or
-                        <span class="block mt-2 bg-gradient-to-r from-yellow-300 via-amber-300 to-orange-300 bg-clip-text text-transparent">Land Your Dream Job</span>
-                    </h1>
+        <!-- Animated Shapes -->
+        <div class="hero-shape hero-shape-1"></div>
+        <div class="hero-shape hero-shape-2"></div>
+        <div class="hero-shape hero-shape-3"></div>
 
-                    <p class="text-lg text-indigo-100/80 max-w-lg leading-relaxed reveal reveal-d2">
-                        The modern platform connecting companies with skilled freelancers. Post jobs, hire talent, and manage projects seamlessly.
-                    </p>
+        <!-- Previous Button -->
+        <button class="hero-nav-btn prev" id="heroPrev" aria-label="Previous slide">
+            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+        </button>
 
-                    <!-- Search Box -->
-                    <div class="glass rounded-2xl p-2 max-w-2xl reveal reveal-d3">
-                        <div class="flex flex-col sm:flex-row items-stretch gap-2">
-                            <div class="flex-1 flex items-center gap-3 px-4">
-                                <svg class="w-5 h-5 text-white/50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
-                                <input type="text" id="hero-search" placeholder="Search for jobs, skills, or companies..." class="w-full py-3.5 bg-transparent text-white placeholder-white/50 focus:outline-none text-sm">
-                            </div>
-                            <button onclick="heroSearch()" class="btn-gradient px-8 py-3.5 rounded-xl font-semibold text-white text-sm whitespace-nowrap shadow-lg shadow-primary-500/30">
-                                Search Jobs
-                            </button>
-                        </div>
-                    </div>
+        <!-- Next Button -->
+        <button class="hero-nav-btn next" id="heroNext" aria-label="Next slide">
+            <svg class="w-5 h-5 md:w-6 md:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+        </button>
 
-                    <!-- Action Buttons -->
-                    <div class="flex flex-wrap gap-4 reveal reveal-d4">
-                        <a href="<?= e(base_url('register.php')) ?>" class="btn-gradient px-8 py-3.5 rounded-xl font-semibold text-white text-sm shadow-lg shadow-primary-500/25">
-                            <svg class="w-5 h-5 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            Hire Freelancer
-                        </a>
-                        <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="glass px-8 py-3.5 rounded-xl font-semibold text-white text-sm hover:bg-white/20 transition-all">
-                            <svg class="w-5 h-5 inline mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            Find Work
-                        </a>
-                    </div>
-
-                    <!-- Quick Tags -->
-                    <div class="flex flex-wrap gap-2 reveal reveal-d5">
-                        <span class="glass text-white/70 text-xs px-4 py-1.5 rounded-full hover:bg-white/20 transition-colors cursor-pointer">PHP</span>
-                        <span class="glass text-white/70 text-xs px-4 py-1.5 rounded-full hover:bg-white/20 transition-colors cursor-pointer">JavaScript</span>
-                        <span class="glass text-white/70 text-xs px-4 py-1.5 rounded-full hover:bg-white/20 transition-colors cursor-pointer">React.js</span>
-                        <span class="glass text-white/70 text-xs px-4 py-1.5 rounded-full hover:bg-white/20 transition-colors cursor-pointer">UI/UX Design</span>
-                        <span class="glass text-white/70 text-xs px-4 py-1.5 rounded-full hover:bg-white/20 transition-colors cursor-pointer">Python</span>
-                        <span class="glass text-white/70 text-xs px-4 py-1.5 rounded-full hover:bg-white/20 transition-colors cursor-pointer">Content Writing</span>
-                    </div>
+        <!-- Content -->
+        <div class="hero-content max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full py-20">
+            <div class="max-w-2xl">
+                <div class="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-5 py-2 text-sm font-medium text-white/90 border border-white/15 mb-8 reveal">
+                    <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                    Trusted by <?= number_format($stats['freelancers'] + $stats['companies']) ?>+ professionals
                 </div>
 
-                <!-- Right: Floating Cards -->
-                <div class="relative hidden lg:block h-[500px]">
-                    <!-- Main illustration placeholder -->
-                    <div class="absolute inset-0 flex items-center justify-center">
-                        <div class="w-80 h-80 bg-gradient-to-br from-white/10 to-white/5 rounded-full flex items-center justify-center">
-                            <svg class="w-40 h-40 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="0.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                        </div>
-                    </div>
+                <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-6 reveal reveal-d1">
+                    Welcome to
+                    <span class="block mt-2 gradient-text">HireWork</span>
+                </h1>
 
-                    <!-- Floating Card: Active Jobs -->
-                    <div class="floating-card glass-card absolute top-8 right-0 px-5 py-4 rounded-2xl z-10">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-2xl font-bold text-gray-900 dark:text-white counter-val" data-target="<?= $stats['jobs'] ?>">0</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Active Jobs</p>
-                            </div>
-                        </div>
-                    </div>
+                <p class="text-lg text-white/70 max-w-xl leading-relaxed mb-10 reveal reveal-d2">
+                    Discover top talent or find your next opportunity. The modern platform connecting companies with skilled freelancers worldwide.
+                </p>
 
-                    <!-- Floating Card: Top Freelancer -->
-                    <div class="floating-card glass-card absolute top-32 left-4 px-5 py-4 rounded-2xl z-20">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/30">
-                                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-gray-900 dark:text-white">Top Rated</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Freelancer</p>
-                            </div>
-                        </div>
-                    </div>
+                <div class="flex flex-wrap gap-4 mb-10 reveal reveal-d3">
+                    <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="btn-gradient px-8 py-4 rounded-xl font-semibold text-white text-base shadow-lg shadow-primary-500/30 inline-flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        Find Jobs
+                    </a>
+                    <a href="<?= e(base_url('register.php')) ?>" class="px-8 py-4 rounded-xl font-semibold text-white text-base bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 hover:border-white/30 transition-all inline-flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                        Join Now
+                    </a>
+                </div>
 
-                    <!-- Floating Card: Secure Payment -->
-                    <div class="floating-card glass-card absolute bottom-32 right-4 px-5 py-4 rounded-2xl z-10">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-                                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-gray-900 dark:text-white">100% Secure</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Payment</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Floating Card: 5-Star Reviews -->
-                    <div class="floating-card glass-card absolute bottom-16 left-8 px-5 py-4 rounded-2xl z-20">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 bg-gradient-to-br from-pink-400 to-rose-500 rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/30">
-                                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-gray-900 dark:text-white">5.0 Rating</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">2.4k Reviews</p>
-                            </div>
-                        </div>
-                    </div>
+                <!-- Quick Tags -->
+                <div class="flex flex-wrap gap-2 reveal reveal-d4">
+                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">PHP</span>
+                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">JavaScript</span>
+                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">React.js</span>
+                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">UI/UX Design</span>
+                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">Python</span>
+                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">Content Writing</span>
                 </div>
             </div>
         </div>
 
-        <!-- Scroll indicator -->
-        <div class="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-white/40">
-            <span class="text-xs tracking-widest uppercase">Scroll</span>
-            <div class="w-5 h-8 border-2 border-white/30 rounded-full flex justify-center pt-1.5">
-                <div class="w-1 h-2 bg-white/60 rounded-full animate-bounce"></div>
-            </div>
+        <!-- Slideshow Dots -->
+        <div class="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 flex gap-3" id="heroDots">
+            <button class="hero-dot w-3 h-3 rounded-full bg-white transition-all duration-300" data-slide="0" onclick="heroSlide(0)"></button>
+            <button class="hero-dot w-3 h-3 rounded-full bg-white/40 transition-all duration-300" data-slide="1" onclick="heroSlide(1)"></button>
+            <button class="hero-dot w-3 h-3 rounded-full bg-white/40 transition-all duration-300" data-slide="2" onclick="heroSlide(2)"></button>
         </div>
     </section>
 
@@ -863,7 +821,7 @@ $page_title = __('app.tagline');
                     <p class="text-gray-500 dark:text-gray-400 text-lg">No jobs available yet. Check back soon!</p>
                 </div>
             <?php else: ?>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-7">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <?php foreach ($latest_jobs as $i => $job):
                         $job_id = (int) $job['id'];
                         $already_applied = in_array($job_id, $applied_job_ids);
@@ -1079,8 +1037,8 @@ $page_title = __('app.tagline');
                                     <p class="text-xs text-gray-400 dark:text-gray-500">Hourly Rate</p>
                                     <p class="text-lg font-bold text-primary-600 dark:text-primary-400">$<?= e(number_format((float) ($fl['hourly_rate'] ?? 0), 0)) ?></p>
                                 </div>
-                                <a href="<?= e(base_url('register.php')) ?>" class="btn-gradient px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-md shadow-primary-500/20">
-                                    Hire Now
+                                <a href="<?= e(base_url('company/view_freelancer.php?id=' . $fl['id'])) ?>" class="btn-gradient px-5 py-2 rounded-xl text-sm font-semibold text-white shadow-md shadow-primary-500/20">
+                                    View Profile
                                 </a>
                             </div>
                         </div>
@@ -1647,6 +1605,72 @@ $page_title = __('app.tagline');
             }
             return true;
         }
+
+        // Hero Slideshow
+        (function() {
+            var slides = document.querySelectorAll('.hero-slide');
+            var dots = document.querySelectorAll('.hero-dot');
+            var prevBtn = document.getElementById('heroPrev');
+            var nextBtn = document.getElementById('heroNext');
+            var current = 0;
+            var total = slides.length;
+            var interval;
+
+            function goTo(index) {
+                slides[current].classList.remove('active');
+                dots[current].classList.remove('bg-white');
+                dots[current].classList.add('bg-white/40');
+                current = index;
+                slides[current].classList.add('active');
+                dots[current].classList.remove('bg-white/40');
+                dots[current].classList.add('bg-white');
+            }
+
+            function next() {
+                goTo((current + 1) % total);
+            }
+
+            function prev() {
+                goTo((current - 1 + total) % total);
+            }
+
+            function startAuto() {
+                stopAuto();
+                interval = setInterval(next, 5000);
+            }
+
+            function stopAuto() {
+                if (interval) clearInterval(interval);
+            }
+
+            window.heroSlide = function(index) {
+                stopAuto();
+                goTo(index);
+                startAuto();
+            };
+
+            if (prevBtn) prevBtn.addEventListener('click', function() { stopAuto(); prev(); startAuto(); });
+            if (nextBtn) nextBtn.addEventListener('click', function() { stopAuto(); next(); startAuto(); });
+
+            // Touch swipe support
+            var touchStartX = 0;
+            var heroEl = document.querySelector('.hero-section');
+            if (heroEl) {
+                heroEl.addEventListener('touchstart', function(e) {
+                    touchStartX = e.changedTouches[0].screenX;
+                    stopAuto();
+                }, { passive: true });
+                heroEl.addEventListener('touchend', function(e) {
+                    var diff = touchStartX - e.changedTouches[0].screenX;
+                    if (Math.abs(diff) > 50) {
+                        diff > 0 ? next() : prev();
+                    }
+                    startAuto();
+                }, { passive: true });
+            }
+
+            startAuto();
+        })();
     </script>
 </body>
 

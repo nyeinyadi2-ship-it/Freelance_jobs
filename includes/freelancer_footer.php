@@ -1,3 +1,22 @@
+<?php $flash = get_flash(); if ($flash): ?>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+    <?php $isError = $flash['type'] === 'error'; ?>
+    <div class="flex items-center gap-3 p-4 rounded-xl mb-4 transition-all" id="fl-flash-msg"
+         style="background:<?= $isError ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)' ?>;border:1px solid <?= $isError ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)' ?>;color:<?= $isError ? '#dc2626' : '#059669' ?>">
+        <?php if ($isError): ?>
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <?php else: ?>
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <?php endif; ?>
+        <p class="text-sm font-medium flex-1"><?= e($flash['message']) ?></p>
+        <button onclick="this.parentElement.remove()" class="flex-shrink-0 p-1 rounded-lg hover:bg-black/5 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    </div>
+</div>
+<script>setTimeout(function(){var el=document.getElementById('fl-flash-msg');if(el){el.style.transition='opacity .4s,transform .4s';el.style.opacity='0';el.style.transform='translateY(-8px)';setTimeout(function(){el.remove()},400);}},5000);</script>
+<?php endif; ?>
+
 </div><!-- end fl-page-content -->
 </main>
 

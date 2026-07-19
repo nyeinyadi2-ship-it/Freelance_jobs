@@ -59,6 +59,7 @@ if (isset($admin_user['user_id'])) {
     .admin-sidebar {
         position: fixed; top: 64px; left: 0; bottom: 0; z-index: 40;
         width: 260px;
+        display: flex; flex-direction: column;
         background: #ffffff;
         border-right: 1px solid #e5e7eb;
         overflow-y: auto;

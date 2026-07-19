@@ -56,5 +56,7 @@ $fl_active = match($fl_script) {
     'profile.php' => 'profile',
     'browse_jobs.php' => 'browse',
     'my_tasks.php' => 'tasks',
+    'portfolio.php' => 'portfolio',
+    'view_portfolio.php' => 'portfolio',
     default => 'dashboard'
 };

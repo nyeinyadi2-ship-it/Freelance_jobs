@@ -17,7 +17,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
     $action = $_GET['action'] ?? 'count';
 
-    if ($action === 'count') {
+    if ($action === 'count' || $action === 'get_unread_count') {
         echo json_encode([
             'count' => get_unread_notification_count($conn, $user_id)
         ]);

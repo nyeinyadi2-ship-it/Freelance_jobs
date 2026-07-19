@@ -313,17 +313,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     $stmt->execute();
                     $stmt->close();
 
-                    // Create payment record
+                    // Create payment record (skip if one already exists for this assignment)
                     $stmt = $conn->prepare("SELECT a.id FROM assignments a WHERE a.job_id = ?");
                     $stmt->bind_param('i', $job_id);
                     $stmt->execute();
                     $assignment_row = $stmt->get_result()->fetch_assoc();
                     $stmt->close();
                     if ($assignment_row) {
-                        $stmt = $conn->prepare("INSERT INTO payments (assignment_id, amount, status, paid_at) VALUES (?, ?, 'paid', ?)");
-                        $stmt->bind_param('ids', $assignment_row['id'], $ms['amount'], $now);
-                        $stmt->execute();
-                        $stmt->close();
+                        $chk = $conn->prepare("SELECT id FROM payments WHERE assignment_id = ? AND status = 'paid' LIMIT 1");
+                        $chk->bind_param('i', $assignment_row['id']);
+                        $chk->execute();
+                        $existing = $chk->get_result()->fetch_assoc();
+                        $chk->close();
+                        if (!$existing) {
+                            $stmt = $conn->prepare("INSERT INTO payments (assignment_id, amount, status, paid_at) VALUES (?, ?, 'paid', ?)");
+                            $stmt->bind_param('ids', $assignment_row['id'], $ms['amount'], $now);
+                            $stmt->execute();
+                            $stmt->close();
+                        }
                     }
 
                     // Check if all milestones are approved → complete job
@@ -349,20 +356,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                         $stmt->close();
                     }
 
-                    // Notify freelancer
-                    $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
-                    $stmt->bind_param('i', $job_id);
-                    $stmt->execute();
-                    $fl_user = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
-                    if ($fl_user) {
-                        create_notification($conn, (int) $fl_user['id'], 'payment_released', "Milestone payment of \${$ms['amount']} has been released.", 'freelancer/my_tasks.php');
+                    $conn->commit();
+
+                    // Notify freelancer (after commit so notification failure doesn't roll back approval)
+                    try {
+                        $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
+                        $stmt->bind_param('i', $job_id);
+                        $stmt->execute();
+                        $fl_user = $stmt->get_result()->fetch_assoc();
+                        $stmt->close();
+                        if ($fl_user) {
+                            create_notification($conn, (int) $fl_user['id'], 'payment_released', "Milestone payment of \${$ms['amount']} has been released.", 'freelancer/my_tasks.php');
+                        }
+                    } catch (Exception $ne) {
+                        error_log("Notification failed after milestone approval: " . $ne->getMessage());
                     }
 
-                    $conn->commit();
                     set_flash('success', 'Milestone approved and payment released!');
                 } catch (Exception $e) {
                     $conn->rollback();
+                    error_log("Milestone approve failed: " . $e->getMessage());
                     set_flash('error', 'Failed to approve milestone.');
                 }
             } else {
@@ -378,30 +391,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             if ($ms) {
                 $conn->begin_transaction();
                 try {
-                    $stmt = $conn->prepare("UPDATE milestones SET status = 'revision_requested', submission_link = NULL, submitted_at = NULL WHERE id = ?");
+                    $del_stmt = $conn->prepare("SELECT submission_file FROM milestones WHERE id = ?");
+                    $del_stmt->bind_param('i', $milestone_id);
+                    $del_stmt->execute();
+                    $del_row = $del_stmt->get_result()->fetch_assoc();
+                    $del_stmt->close();
+
+                    $stmt = $conn->prepare("UPDATE milestones SET status = 'revision_requested', submission_link = NULL, submission_file = NULL, submission_note = NULL, submitted_at = NULL WHERE id = ?");
                     $stmt->bind_param('i', $milestone_id);
                     $stmt->execute();
                     $stmt->close();
 
-                    // Set assignment back to working
+                    if ($del_row && !empty($del_row['submission_file'])) {
+                        delete_attachment($del_row['submission_file']);
+                    }
+
                     $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'submitted'");
                     $stmt->bind_param('i', $job_id);
                     $stmt->execute();
                     $stmt->close();
 
-                    $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
-                    $stmt->bind_param('i', $job_id);
-                    $stmt->execute();
-                    $fl_user = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
-                    if ($fl_user) {
-                        create_notification($conn, (int) $fl_user['id'], 'revision_requested', "Revision requested for a milestone in \"{$job['title']}\".", 'freelancer/my_tasks.php');
+                    $conn->commit();
+
+                    // Notify freelancer (after commit so notification failure doesn't roll back)
+                    try {
+                        $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
+                        $stmt->bind_param('i', $job_id);
+                        $stmt->execute();
+                        $fl_user = $stmt->get_result()->fetch_assoc();
+                        $stmt->close();
+                        if ($fl_user) {
+                            create_notification($conn, (int) $fl_user['id'], 'revision_requested', "Revision requested for a milestone in \"{$job['title']}\".", 'freelancer/my_tasks.php');
+                        }
+                    } catch (Exception $ne) {
+                        error_log("Notification failed after revision request: " . $ne->getMessage());
                     }
 
-                    $conn->commit();
                     set_flash('success', 'Revision requested. Freelancer has been notified.');
                 } catch (Exception $e) {
                     $conn->rollback();
+                    error_log("Milestone revision failed: " . $e->getMessage());
                     set_flash('error', 'Failed to request revision.');
                 }
             } else {
@@ -574,6 +603,16 @@ require __DIR__ . '/../includes/header.php';
                                     Fund Escrow
                                 </button>
                             </form>
+                        <?php elseif ($ms['status'] === 'funded'): ?>
+                            <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#f59e0b">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
+                                Escrow funded — awaiting freelancer
+                            </span>
+                        <?php elseif ($ms['status'] === 'in_progress'): ?>
+                            <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#6366f1">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                Freelancer working — awaiting submission
+                            </span>
                         <?php elseif ($ms['status'] === 'submitted'): ?>
                             <form method="POST" style="display:inline">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">

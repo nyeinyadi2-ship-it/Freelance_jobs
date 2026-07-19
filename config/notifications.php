@@ -13,8 +13,9 @@ function notifications_table_exists(mysqli $conn): bool
 function create_notification(mysqli $conn, int $user_id, string $type, string $message, ?string $link = null, ?int $from_user_id = null): void
 {
     if (!notifications_table_exists($conn)) return;
-    $stmt = $conn->prepare('INSERT INTO notifications (user_id, from_user_id, type, message, link) VALUES (?, ?, ?, ?, ?)');
-    $stmt->bind_param('iisss', $user_id, $from_user_id, $type, $message, $link);
+    $stmt = $conn->prepare('INSERT INTO notifications (user_id, from_user_id, type, message, link) VALUES (?, NULLIF(?,0), ?, ?, ?)');
+    $safe_from = $from_user_id ?? 0;
+    $stmt->bind_param('iisss', $user_id, $safe_from, $type, $message, $link);
     $stmt->execute();
     $stmt->close();
 }

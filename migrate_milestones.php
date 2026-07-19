@@ -21,6 +21,8 @@ $queries = [
     amount DECIMAL(10,2) NOT NULL,
     status ENUM('draft','funded','in_progress','submitted','approved','revision_requested') DEFAULT 'draft',
     submission_link VARCHAR(255) DEFAULT NULL,
+    submission_file VARCHAR(255) DEFAULT NULL,
+    submission_note TEXT DEFAULT NULL,
     submitted_at TIMESTAMP NULL,
     approved_at TIMESTAMP NULL,
     sort_order INT DEFAULT 0,

@@ -6,6 +6,7 @@ $admin_page = match (true) {
     $admin_script === 'admin_dashboard.php' => 'dashboard',
     $admin_script === 'approve_jobs.php' => 'approve',
     $admin_script === 'manage_users.php' || $admin_script === 'view_user.php' => 'users',
+    $admin_script === 'manage_skills.php' => 'skills',
     $admin_script === 'notifications.php' => 'notifications',
 };
 
@@ -39,6 +40,12 @@ $admin_nav = [
         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>',
     ],
     [
+        'id' => 'skills',
+        'label' => 'Manage Skills',
+        'url' => 'admin/manage_skills.php',
+        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>',
+    ],
+    [
         'id' => 'notifications',
         'label' => __('notif.title'),
         'url' => 'admin/notifications.php',
@@ -67,7 +74,7 @@ $admin_nav = [
 </div> -->
 
 <!-- Navigation -->
-<nav class="py-3">
+<nav class="py-3 flex-1">
     <p class="sidebar-section-title px-5 mb-2 text-[10px] font-bold uppercase tracking-widest" style="color:var(--color-text-placeholder)">Navigation</p>
     <?php foreach ($admin_nav as $item):
         $is_active = $admin_page === $item['id'];

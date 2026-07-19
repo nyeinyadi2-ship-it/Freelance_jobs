@@ -31,8 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $st->execute();
                 $st->close();
 
-                // Update assignment status to working
-                $st = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'assigned'");
+                // Update assignment status to working (from any active state)
+                $st = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status IN ('assigned', 'submitted')");
                 $st->bind_param('i', $ms_check['job_id']);
                 $st->execute();
                 $st->close();
@@ -60,6 +60,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $st->close();
 
         if ($ms_check) {
+            foreach (['submission_file', 'submission_note'] as $col) {
+                $chk = $conn->query("SHOW COLUMNS FROM milestones LIKE '$col'");
+                if (!$chk || $chk->num_rows === 0) {
+                    $type = $col === 'submission_note' ? 'TEXT DEFAULT NULL' : 'VARCHAR(255) DEFAULT NULL AFTER submission_link';
+                    $conn->query("ALTER TABLE milestones ADD COLUMN $col $type");
+                }
+            }
+
             $submission_link = trim($_POST['submission_link'] ?? '');
             $submission_note = trim($_POST['submission_note'] ?? '');
             $submission_file = null;
@@ -80,30 +88,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             $conn->begin_transaction();
             try {
                 $now = date('Y-m-d H:i:s');
+                $file_for_db = $submission_file ?? '';
                 $st = $conn->prepare("UPDATE milestones SET submission_link=?, submission_file=?, submission_note=?, status='submitted', submitted_at=? WHERE id=?");
-                $st->bind_param('ssssi', $submission_link, $submission_file, $submission_note, $now, $post_milestone_id);
+                $st->bind_param('ssssi', $submission_link, $file_for_db, $submission_note, $now, $post_milestone_id);
                 $st->execute();
                 $st->close();
 
-                // Update assignment status to submitted
-                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND status='working'");
+                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND status IN ('working', 'assigned')");
                 $st->bind_param('i', $ms_check['job_id']);
                 $st->execute();
                 $st->close();
 
-                $ns = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.id=?");
-                $ns->bind_param('i', $ms_check['job_id']);
-                $ns->execute();
-                $ni = $ns->get_result()->fetch_assoc();
-                $ns->close();
-                if ($ni) {
-                    create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for a milestone.", 'company/view_applications.php?id=' . $ms_check['job_id']);
+                $conn->commit();
+
+                // Notify company (after commit so notification failure doesn't roll back submission)
+                try {
+                    $ns = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.id=?");
+                    $ns->bind_param('i', $ms_check['job_id']);
+                    $ns->execute();
+                    $ni = $ns->get_result()->fetch_assoc();
+                    $ns->close();
+                    if ($ni) {
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for a milestone.", 'company/view_applications.php?id=' . $ms_check['job_id']);
+                    }
+                } catch (Exception $ne) {
+                    error_log("Notification failed after submission: " . $ne->getMessage());
                 }
 
-                $conn->commit();
                 set_flash('success', 'Work submitted for review!');
             } catch (Exception $e) {
                 $conn->rollback();
+                if ($submission_file !== null) {
+                    delete_attachment($submission_file);
+                }
                 set_flash('error', 'Failed to submit work. Please try again.');
             }
         } else {
