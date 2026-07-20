@@ -89,7 +89,7 @@ if ($target_user['role'] === 'company') {
         }
 
         try {
-            $stmt = $conn->prepare('SELECT id, title, budget, status, created_at FROM jobs WHERE company_id = ? ORDER BY created_at DESC LIMIT 5');
+            $stmt = $conn->prepare('SELECT id, title, budget, status, created_at FROM jobs WHERE company_id = ? AND category != \'Direct Hire\' ORDER BY created_at DESC LIMIT 5');
             $stmt->bind_param('i', $profile['id']);
             $stmt->execute();
             $profile_extra['recent_jobs'] = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);

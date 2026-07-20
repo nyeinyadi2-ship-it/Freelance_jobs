@@ -67,7 +67,7 @@ $sql = "SELECT j.id, j.title, j.description, j.budget, j.created_at, j.category,
         JOIN companies c ON j.company_id = c.id
         JOIN job_skills js ON js.job_id = j.id
         JOIN skills s ON js.skill_id = s.id
-        WHERE j.status = 'approved' AND s.skill_name = ?
+        WHERE j.status = 'approved' AND j.category != 'Direct Hire' AND s.skill_name = ?
         ORDER BY j.created_at DESC";
 
 $params[] = $skill_info['id'];

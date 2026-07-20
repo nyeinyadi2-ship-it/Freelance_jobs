@@ -86,39 +86,33 @@ $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'freelancer'")
 $stats['freelancers'] = (int) $r->fetch_assoc()['cnt'];
 $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'company'");
 $stats['companies'] = (int) $r->fetch_assoc()['cnt'];
-$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'approved'");
+$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'approved' AND category != 'Direct Hire'");
 $stats['jobs'] = (int) $r->fetch_assoc()['cnt'];
 $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'completed'");
 $stats['completed'] = (int) $r->fetch_assoc()['cnt'];
 
-// Fetch latest jobs
+// Fetch latest jobs (exclude direct hire)
 $latest_jobs = [];
 $r = $conn->query("
     SELECT j.id, j.company_id, j.title, j.budget, j.created_at, j.description, j.attachment, j.deadline, j.category,
-           c.company_name, c.logo_image,
-           (SELECT GROUP_CONCAT(s.skill_name SEPARATOR ', ') FROM job_applications ja JOIN freelancers f ON ja.freelancer_id = f.id JOIN freelancer_skills fs ON fs.freelancer_id = f.id JOIN skills s ON fs.skill_id = s.id WHERE ja.job_id = j.id GROUP BY ja.job_id LIMIT 3) AS applied_skills
+           c.company_name, c.logo_image
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
-    WHERE j.status = 'approved'
+    WHERE j.status = 'approved' AND j.category != 'Direct Hire'
     ORDER BY j.created_at DESC
     LIMIT 3
 ");
 if ($r) {
     while ($row = $r->fetch_assoc()) {
+        $row['skills'] = [];
+        $sr = $conn->query("SELECT s.skill_name FROM job_skills js JOIN skills s ON js.skill_id = s.id WHERE js.job_id = " . (int) $row['id'] . " ORDER BY s.skill_name");
+        if ($sr) {
+            while ($sk = $sr->fetch_assoc()) {
+                $row['skills'][] = $sk['skill_name'];
+            }
+        }
         $latest_jobs[] = $row;
     }
-}
-
-// Fallback: if no applied skills, get company skills
-if (!empty($latest_jobs)) {
-    foreach ($latest_jobs as &$job) {
-        if (empty($job['applied_skills'])) {
-            $cid = (int) ($job['company_id'] ?? 0);
-            $sr = $conn->query("SELECT GROUP_CONCAT(s.skill_name SEPARATOR ', ') AS skills FROM freelancer_skills fs JOIN skills s ON fs.skill_id = s.id JOIN freelancers f ON fs.freelancer_id = f.id WHERE f.user_id = (SELECT user_id FROM companies WHERE id = {$cid}) LIMIT 3");
-            $job['applied_skills'] = $sr ? ($sr->fetch_assoc()['skills'] ?? '') : '';
-        }
-    }
-    unset($job);
 }
 
 // Check if current user is a freelancer and get applied job IDs
@@ -1044,7 +1038,7 @@ $page_title = __('app.tagline');
                     if (!isset($category_data[$skill['skill_name']])) continue;
                     $cd = $category_data[$skill['skill_name']];
                     $shown++;
-                    $cnt_r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs j JOIN job_skills js ON js.job_id = j.id JOIN skills s ON js.skill_id = s.id WHERE s.skill_name = '" . $conn->real_escape_string($skill['skill_name']) . "' AND j.status = 'approved'");
+                    $cnt_r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs j JOIN job_skills js ON js.job_id = j.id JOIN skills s ON js.skill_id = s.id WHERE s.skill_name = '" . $conn->real_escape_string($skill['skill_name']) . "' AND j.status = 'approved' AND j.category != 'Direct Hire'");
                     $job_cnt = $cnt_r ? (int) $cnt_r->fetch_assoc()['cnt'] : 0;
                 ?>
                     <a href="<?= e(base_url('freelancer/skill_jobs.php?skill=' . urlencode($skill['skill_name']))) ?>" class="cat-card bg-gradient-to-br <?= $cd['color'] ?> reveal reveal-d<?= ($shown % 5) + 1 ?>">
@@ -1154,12 +1148,14 @@ $page_title = __('app.tagline');
                                 <h3 class="font-bold text-base text-gray-900 dark:text-white mb-2 leading-snug line-clamp-2 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors"><?= e($job['title']) ?></h3>
                                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-3 line-clamp-2 leading-relaxed"><?= e(mb_strimwidth($job['description'] ?? '', 0, 100, '...')) ?></p>
 
-                                <?php if (!empty($job['applied_skills'])): ?>
+                                <?php if (!empty($job['skills'])): ?>
                                     <div class="flex flex-wrap gap-1.5 mb-4">
-                                        <?php $skills_arr = array_slice(explode(', ', $job['applied_skills']), 0, 3); ?>
-                                        <?php foreach ($skills_arr as $skill_tag): ?>
+                                        <?php foreach (array_slice($job['skills'], 0, 4) as $skill_tag): ?>
                                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"><?= e($skill_tag) ?></span>
                                         <?php endforeach; ?>
+                                        <?php if (count($job['skills']) > 4): ?>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium text-gray-400 dark:text-gray-500">+<?= count($job['skills']) - 4 ?> more</span>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endif; ?>
 

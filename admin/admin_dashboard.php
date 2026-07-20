@@ -47,12 +47,13 @@ try {
     $stats['total_revenue'] = 0;
 }
 
-// Recent jobs
+// Recent jobs (exclude direct hire)
 $recent_jobs = [];
 try {
     $r = $conn->query("
         SELECT j.id, j.title, j.budget, j.status, j.created_at, c.company_name
         FROM jobs j JOIN companies c ON j.company_id = c.id
+        WHERE j.category != 'Direct Hire'
         ORDER BY j.created_at DESC LIMIT 5
     ");
     if ($r) { while ($row = $r->fetch_assoc()) $recent_jobs[] = $row; }

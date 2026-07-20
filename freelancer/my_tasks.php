@@ -268,6 +268,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                         <div>
                                             <p class="text-sm font-bold" style="color:var(--color-text-primary)"><?= e($ms['title']) ?></p>
                                             <?php if ($ms['description']): ?><p class="text-xs mt-0.5" style="color:var(--color-text-muted)"><?= e(mb_strimwidth($ms['description'], 0, 80, '...')) ?></p><?php endif; ?>
+                                            <?php if (!empty($ms['deadline'])): ?><p class="text-[11px] mt-0.5" style="color:var(--color-text-muted)">Due: <?= date('M j, Y', strtotime($ms['deadline'])) ?></p><?php endif; ?>
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-2">

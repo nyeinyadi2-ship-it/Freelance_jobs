@@ -46,7 +46,7 @@ $search = trim($_GET['q'] ?? '');
 $filter_cat = $_GET['category'] ?? '';
 $filter_exp = $_GET['experience'] ?? '';
 
-$where = "j.status='approved'";
+$where = "j.status='approved' AND j.category != 'Direct Hire'";
 $params = [];
 $types = '';
 

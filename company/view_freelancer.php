@@ -152,6 +152,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $payment_type = $_POST['payment_type'] ?? 'fixed';
             $notes = trim($_POST['notes'] ?? '');
 
+            // Milestone data
+            $ms_titles = $_POST['ms_title'] ?? [];
+            $ms_descs = $_POST['ms_desc'] ?? [];
+            $ms_amounts = $_POST['ms_amount'] ?? [];
+            $ms_deadlines = $_POST['ms_deadline'] ?? [];
+
             // Handle attachment upload
             $attachment_name = null;
             if (!empty($_FILES['attachment']['name'])) {
@@ -167,34 +173,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $hire_error = 'Project description is required.';
             } elseif ($budget <= 0) {
                 $hire_error = 'Budget must be greater than zero.';
+            } elseif ($payment_type === 'milestone' && empty($ms_titles)) {
+                $hire_error = 'Please add at least one milestone.';
             } else {
-                // Create a job record for this direct hire
-                $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'approved', '')");
-                $stmt->bind_param('issds', $company_id, $title, $description, $budget, $deadline);
-                $stmt->execute();
-                $job_id = $stmt->insert_id;
-                $stmt->close();
+                // Check for existing pending direct hire request
+                $dup_check = $conn->prepare("SELECT id FROM assignments WHERE freelancer_id = ? AND assignment_type = 'direct_hire' AND freelancer_response = 'pending' AND job_id IN (SELECT id FROM jobs WHERE company_id = ?)");
+                $dup_check->bind_param('ii', $fid, $company_id);
+                $dup_check->execute();
+                $has_pending = $dup_check->get_result()->num_rows > 0;
+                $dup_check->close();
 
-                if ($job_id > 0) {
-                    // Create assignment with direct_hire type
-                    $deadline_val = $deadline !== '' ? $deadline : null;
-                    $notes_val = $notes !== '' ? $notes : null;
-                    $stmt = $conn->prepare("INSERT INTO assignments (job_id, freelancer_id, assignment_type, status, freelancer_response, project_title, project_description, budget, deadline, payment_type, notes, attachment) VALUES (?, ?, 'direct_hire', 'assigned', 'pending', ?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->bind_param('iisssssss', $job_id, $fid, $title, $description, $budget, $deadline_val, $payment_type, $notes_val, $attachment_name);
+                if ($has_pending) {
+                    $hire_error = 'You already have a pending direct hire request for this freelancer.';
+                } else {
+                    // Validate milestone totals if milestone-based
+                    if ($payment_type === 'milestone') {
+                    $ms_total = 0;
+                    foreach ($ms_amounts as $amt) {
+                        $ms_total += (float) $amt;
+                    }
+                    if (abs($ms_total - $budget) > 0.01) {
+                        $hire_error = 'Milestone total ($' . number_format($ms_total, 2) . ') must match the budget ($' . number_format($budget, 2) . ').';
+                    }
+                }
+
+                if (empty($hire_error)) {
+                    // Create a job record for this direct hire
+                    $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'approved', '')");
+                    $stmt->bind_param('issds', $company_id, $title, $description, $budget, $deadline);
                     $stmt->execute();
-                    $assignment_id = $stmt->insert_id;
+                    $job_id = $stmt->insert_id;
                     $stmt->close();
 
-                    if ($assignment_id > 0) {
-                        // Notify freelancer
-                        create_notification($conn, (int) $freelancer['user_id'], 'direct_hire', "You have a new direct hire request from a company for: {$title}", "freelancer/dashboard.php");
-                        $hire_success = 'Hire request sent successfully! The freelancer will be notified.';
-                        $pending_hire = true;
+                    if ($job_id > 0) {
+                        // Create milestones if milestone-based
+                        if ($payment_type === 'milestone' && !empty($ms_titles)) {
+                            $ms_stmt = $conn->prepare('INSERT INTO milestones (job_id, title, description, amount, deadline, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
+                            foreach ($ms_titles as $idx => $ms_t) {
+                                $ms_t = trim($ms_t);
+                                $ms_a = (float) ($ms_amounts[$idx] ?? 0);
+                                $ms_d = trim($ms_descs[$idx] ?? '');
+                                $ms_dl = trim($ms_deadlines[$idx] ?? '') !== '' ? trim($ms_deadlines[$idx]) : null;
+                                if ($ms_t !== '' && $ms_a > 0) {
+                                    $order = $idx + 1;
+                                    $ms_stmt->bind_param('issdsi', $job_id, $ms_t, $ms_d, $ms_a, $ms_dl, $order);
+                                    $ms_stmt->execute();
+                                }
+                            }
+                            $ms_stmt->close();
+                        }
+
+                        // Create assignment
+                        $deadline_val = $deadline !== '' ? $deadline : null;
+                        $notes_val = $notes !== '' ? $notes : null;
+                        $stmt = $conn->prepare("INSERT INTO assignments (job_id, freelancer_id, assignment_type, status, freelancer_response, project_title, project_description, budget, deadline, payment_type, notes, attachment) VALUES (?, ?, 'direct_hire', 'assigned', 'pending', ?, ?, ?, ?, ?, ?, ?)");
+                        $stmt->bind_param('iisssssss', $job_id, $fid, $title, $description, $budget, $deadline_val, $payment_type, $notes_val, $attachment_name);
+                        $stmt->execute();
+                        $assignment_id = $stmt->insert_id;
+                        $stmt->close();
+
+                        if ($assignment_id > 0) {
+                            // Auto-fund the first milestone (create escrow record)
+                            if ($payment_type === 'milestone') {
+                                $first_ms = $conn->prepare("SELECT id, amount FROM milestones WHERE job_id = ? AND sort_order = 1 LIMIT 1");
+                                $first_ms->bind_param('i', $job_id);
+                                $first_ms->execute();
+                                $ms_row = $first_ms->get_result()->fetch_assoc();
+                                $first_ms->close();
+                                if ($ms_row) {
+                                    $conn->begin_transaction();
+                                    try {
+                                        $up = $conn->prepare("UPDATE milestones SET status = 'funded' WHERE id = ?");
+                                        $up->bind_param('i', $ms_row['id']);
+                                        $up->execute();
+                                        $up->close();
+
+                                        $esc = $conn->prepare("INSERT INTO escrow (milestone_id, amount, status) VALUES (?, ?, 'held')");
+                                        $esc->bind_param('id', $ms_row['id'], $ms_row['amount']);
+                                        $esc->execute();
+                                        $esc->close();
+
+                                        $conn->commit();
+                                    } catch (Exception $e) {
+                                        $conn->rollback();
+                                    }
+                                }
+                            }
+
+                            // Notify freelancer
+                            create_notification($conn, (int) $freelancer['user_id'], 'direct_hire', "You have a new direct hire request from a company for: {$title}", "freelancer/dashboard.php");
+                            $hire_success = 'Hire request sent successfully! The freelancer will be notified.';
+                            $pending_hire = true;
+                        } else {
+                            $hire_error = 'Failed to create assignment.';
+                        }
                     } else {
-                        $hire_error = 'Failed to create assignment.';
+                        $hire_error = 'Failed to create job record.';
                     }
-                } else {
-                    $hire_error = 'Failed to create job record.';
+                }
                 }
             }
         }
@@ -286,6 +362,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         .fl-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
         .fl-modal.open{display:flex;}
         .fl-modal img{max-width:92vw;max-height:88vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+
+        /* ===== HIRE MODAL SCROLL ===== */
+        #hireModal{overflow-y:auto;-webkit-overflow-scrolling:touch;}
+        #hireModal .relative{margin:auto;}
+        #hireModal .relative form,
+        #hireModal .relative > div:last-child{scrollbar-width:thin;scrollbar-color:rgba(156,163,175,0.3) transparent;}
+        @media(max-height:700px){
+            #hireModal{align-items:flex-start;padding-top:16px;}
+            #hireModal .relative{margin-top:auto;margin-bottom:auto;}
+        }
+        @media(max-width:480px){
+            #hireModal{padding:8px;}
+            #hireModal .relative{max-width:100%;border-radius:16px;}
+        }
 
         /* ===== ANIMATIONS ===== */
         .fl-reveal{opacity:0;transform:translateY(24px);transition:opacity .6s cubic-bezier(.4,0,.2,1),transform .6s cubic-bezier(.4,0,.2,1);}
@@ -646,9 +736,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 <!-- Hire Modal -->
 <div id="hireModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-    <div class="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+    <div class="relative w-full max-w-lg max-h-[90dvh] max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onclick="event.stopPropagation()">
         <!-- Header -->
-        <div class="p-6 pb-4 border-b border-gray-100 dark:border-gray-800">
+        <div class="shrink-0 p-6 pb-4 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 rounded-t-2xl">
             <div class="flex items-center justify-between">
                 <div>
                     <h3 class="text-xl font-bold text-gray-900 dark:text-white">Hire <?= e($freelancer['full_name'] ?? $freelancer['username']) ?></h3>
@@ -674,7 +764,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         <!-- Form -->
         <?php if (!$is_hired && !$pending_hire): ?>
-        <form method="POST" enctype="multipart/form-data" class="p-6 space-y-4">
+        <form method="POST" enctype="multipart/form-data" class="p-6 space-y-4 overflow-y-auto flex-1 min-h-0" style="-webkit-overflow-scrolling:touch;">
             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
             <input type="hidden" name="action" value="direct_hire">
 
@@ -701,10 +791,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             <div>
                 <label class="block text-sm font-medium mb-1.5 text-gray-700 dark:text-gray-300">Payment Type <span class="text-red-500">*</span></label>
-                <select name="payment_type" required class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <select name="payment_type" id="hirePaymentType" required onchange="toggleMilestones()" class="w-full px-4 py-2.5 rounded-xl text-sm border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     <option value="fixed">Fixed Price</option>
                     <option value="milestone">Milestone-Based</option>
                 </select>
+            </div>
+
+            <!-- Milestones Section (shown when Milestone-Based is selected) -->
+            <div id="milestonesSection" class="hidden">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Milestones <span class="text-red-500">*</span></label>
+                    <span class="text-xs text-gray-400">Milestone sum must equal budget</span>
+                </div>
+                <div id="milestonesContainer" class="space-y-3"></div>
+                <div class="flex items-center justify-between mt-3 p-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30">
+                    <span class="text-xs font-semibold text-blue-600 dark:text-blue-400">Milestone Total</span>
+                    <span class="text-sm font-bold text-blue-700 dark:text-blue-300" id="milestoneTotal">$0.00</span>
+                </div>
+                <button type="button" onclick="addMilestone()" class="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border border-dashed border-blue-300 dark:border-blue-700 text-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                    Add Milestone
+                </button>
+                <p id="milestoneError" class="text-xs text-red-500 mt-1 hidden"></p>
             </div>
 
             <div>
@@ -724,7 +832,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </div>
         </form>
         <?php else: ?>
-        <div class="p-6 text-center">
+        <div class="p-6 text-center overflow-y-auto flex-1 min-h-0">
             <p class="text-gray-500 dark:text-gray-400">
                 <?php if ($is_hired): ?>
                     You have already hired this freelancer.
@@ -747,6 +855,107 @@ setTimeout(function(){document.querySelectorAll('[data-width]').forEach(function
 /* Modal */
 function openModal(s){if(!s)return;document.getElementById('modalImg').src=s;document.getElementById('modal').classList.add('open');}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')document.getElementById('modal').classList.remove('open');});
+
+/* Hire Modal - close on backdrop click */
+document.getElementById('hireModal').addEventListener('click',function(e){if(e.target===this)this.classList.add('hidden');});
+
+/* Milestone Management */
+var milestoneCount = 0;
+
+function toggleMilestones() {
+    var sel = document.getElementById('hirePaymentType');
+    var sec = document.getElementById('milestonesSection');
+    if (sel.value === 'milestone') {
+        sec.classList.remove('hidden');
+        if (milestoneCount === 0) addMilestone();
+    } else {
+        sec.classList.add('hidden');
+    }
+}
+
+function addMilestone() {
+    milestoneCount++;
+    var n = milestoneCount;
+    var today = new Date().toISOString().split('T')[0];
+    var html = '<div class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700" id="ms_' + n + '">' +
+        '<div class="flex items-center justify-between mb-2">' +
+            '<span class="text-xs font-bold uppercase tracking-wider text-gray-400">Milestone ' + n + '</span>' +
+            '<button type="button" onclick="removeMilestone(' + n + ')" class="text-gray-400 hover:text-red-500 transition-colors">' +
+                '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>' +
+            '</button>' +
+        '</div>' +
+        '<div class="space-y-2">' +
+            '<input type="text" name="ms_title[]" required maxlength="200" placeholder="Milestone title" class="w-full px-3 py-2 rounded-lg text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">' +
+            '<textarea name="ms_desc[]" rows="2" placeholder="Brief description" class="w-full px-3 py-2 rounded-lg text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>' +
+            '<div class="grid grid-cols-2 gap-2">' +
+                '<div>' +
+                    '<label class="block text-[11px] font-medium text-gray-400 mb-0.5">Amount ($)</label>' +
+                    '<input type="number" name="ms_amount[]" min="1" step="0.01" required placeholder="0.00" class="w-full px-3 py-2 rounded-lg text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 ms-amount" oninput="updateMilestoneTotal()">' +
+                '</div>' +
+                '<div>' +
+                    '<label class="block text-[11px] font-medium text-gray-400 mb-0.5">Deadline</label>' +
+                    '<input type="date" name="ms_deadline[]" min="' + today + '" class="w-full px-3 py-2 rounded-lg text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">' +
+                '</div>' +
+            '</div>' +
+        '</div>' +
+    '</div>';
+    document.getElementById('milestonesContainer').insertAdjacentHTML('beforeend', html);
+    updateMilestoneTotal();
+}
+
+function removeMilestone(n) {
+    var el = document.getElementById('ms_' + n);
+    if (el) el.remove();
+    updateMilestoneTotal();
+}
+
+function updateMilestoneTotal() {
+    var total = 0;
+    document.querySelectorAll('.ms-amount').forEach(function(input) {
+        total += parseFloat(input.value) || 0;
+    });
+    document.getElementById('milestoneTotal').textContent = '$' + total.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+    var errEl = document.getElementById('milestoneError');
+    var budgetInput = document.querySelector('input[name="budget"]');
+    var budget = parseFloat(budgetInput ? budgetInput.value : 0) || 0;
+    if (budget > 0 && total > 0 && Math.abs(total - budget) > 0.01) {
+        errEl.textContent = 'Milestone total ($' + total.toFixed(2) + ') does not match budget ($' + budget.toFixed(2) + ')';
+        errEl.classList.remove('hidden');
+    } else {
+        errEl.classList.add('hidden');
+    }
+}
+
+/* Validate milestone total before submit */
+document.querySelector('#hireModal form').addEventListener('submit', function(e) {
+    if (document.getElementById('hirePaymentType').value === 'milestone') {
+        var total = 0;
+        document.querySelectorAll('.ms-amount').forEach(function(input) {
+            total += parseFloat(input.value) || 0;
+        });
+        var budget = parseFloat(document.querySelector('input[name="budget"]').value) || 0;
+        if (total <= 0) {
+            e.preventDefault();
+            alert('Please add at least one milestone with an amount.');
+            return false;
+        }
+        if (budget > 0 && Math.abs(total - budget) > 0.01) {
+            e.preventDefault();
+            alert('Milestone total ($' + total.toFixed(2) + ') must match the project budget ($' + budget.toFixed(2) + ').');
+            return false;
+        }
+        var titles = document.querySelectorAll('input[name="ms_title[]"]');
+        for (var i = 0; i < titles.length; i++) {
+            if (!titles[i].value.trim()) {
+                e.preventDefault();
+                alert('Please fill in all milestone titles.');
+                titles[i].focus();
+                return false;
+            }
+        }
+    }
+});
 </script>
 
 </body>

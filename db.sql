@@ -157,6 +157,7 @@ CREATE TABLE milestones (
     title VARCHAR(200) NOT NULL,
     description TEXT DEFAULT NULL,
     amount DECIMAL(10,2) NOT NULL,
+    deadline DATE DEFAULT NULL,
     status ENUM('draft','funded','in_progress','submitted','approved','revision_requested') DEFAULT 'draft',
     submission_link VARCHAR(255) DEFAULT NULL,
     submission_file VARCHAR(255) DEFAULT NULL,

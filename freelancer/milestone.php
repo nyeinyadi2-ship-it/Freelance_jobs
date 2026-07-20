@@ -510,6 +510,12 @@ $draft_enabled = ($milestone['status'] === 'draft');
                     </div>
                     <?php endif; ?>
                     <div class="h-px" style="background:var(--color-border)"></div>
+                    <?php if (!empty($milestone['deadline'])): ?>
+                    <div class="flex justify-between text-sm">
+                        <span style="color:var(--color-text-muted)">Milestone Deadline</span>
+                        <span class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= date('M j, Y', strtotime($milestone['deadline'])) ?></span>
+                    </div>
+                    <?php endif; ?>
                     <div class="flex justify-between text-sm">
                         <span style="color:var(--color-text-muted)">Job Deadline</span>
                         <span class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= $milestone['job_deadline'] ? date('M j, Y', strtotime($milestone['job_deadline'])) : 'Not set' ?></span>

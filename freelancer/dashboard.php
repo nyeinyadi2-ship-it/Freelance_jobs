@@ -24,12 +24,12 @@ try { $s = $conn->prepare("SELECT p.id,p.amount,p.status,p.paid_at,j.title AS jo
 
 // Recommended jobs
 $recommended = [];
-try { $s = $conn->prepare("SELECT j.id,j.title,j.description,j.budget,j.created_at,c.company_name,c.logo_image FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.status='approved' AND j.id NOT IN (SELECT job_id FROM job_applications WHERE freelancer_id=?) AND j.id NOT IN (SELECT job_id FROM assignments) ORDER BY j.created_at DESC LIMIT 6"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $recommended[] = $row; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT j.id,j.title,j.description,j.budget,j.created_at,c.company_name,c.logo_image FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.status='approved' AND j.category != 'Direct Hire' AND j.id NOT IN (SELECT job_id FROM job_applications WHERE freelancer_id=?) AND j.id NOT IN (SELECT job_id FROM assignments) ORDER BY j.created_at DESC LIMIT 6"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $recommended[] = $row; $s->close(); } catch(Exception $e) {}
 
 // Direct hire requests (pending)
 $direct_hire_requests = [];
 try {
-    $s = $conn->prepare("SELECT a.id, a.project_title, a.project_description, a.budget, a.deadline, a.payment_type, a.notes, a.attachment, a.assigned_at, c.company_name, c.logo_image, u.email AS company_email
+    $s = $conn->prepare("SELECT a.id, a.job_id, a.project_title, a.project_description, a.budget, a.deadline, a.payment_type, a.notes, a.attachment, a.assigned_at, c.company_name, c.logo_image, u.email AS company_email
         FROM assignments a
         JOIN jobs j ON a.job_id = j.id
         JOIN companies c ON j.company_id = c.id
@@ -41,6 +41,20 @@ try {
     $r = $s->get_result();
     while ($row = $r->fetch_assoc()) $direct_hire_requests[] = $row;
     $s->close();
+
+    // Fetch milestones for each direct hire request
+    foreach ($direct_hire_requests as &$req) {
+        $req['milestones'] = [];
+        if ($req['payment_type'] === 'milestone') {
+            $ms = $conn->prepare("SELECT id, title, amount, deadline, sort_order FROM milestones WHERE job_id = ? ORDER BY sort_order ASC");
+            $ms->bind_param('i', $req['job_id']);
+            $ms->execute();
+            $mr = $ms->get_result();
+            while ($m = $mr->fetch_assoc()) $req['milestones'][] = $m;
+            $ms->close();
+        }
+    }
+    unset($req);
 } catch(Exception $e) {}
 
 // Handle accept/reject direct hire
@@ -57,6 +71,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
             $new_status = $action === 'accept' ? 'working' : 'assigned';
 
             try {
+                // For milestone-based assignments, keep status as 'assigned' after acceptance
+                // (freelancer starts via the first milestone in my_tasks)
+                if ($action === 'accept') {
+                    $chk = $conn->prepare("SELECT payment_type FROM assignments WHERE id = ? AND freelancer_id = ? AND assignment_type = 'direct_hire'");
+                    $chk->bind_param('ii', $assignment_id, $fl_freelancer_id);
+                    $chk->execute();
+                    $chk_row = $chk->get_result()->fetch_assoc();
+                    $chk->close();
+                    if ($chk_row && ($chk_row['payment_type'] ?? 'fixed') === 'milestone') {
+                        $new_status = 'assigned';
+                    }
+                }
+
                 $s = $conn->prepare("UPDATE assignments SET freelancer_response = ?, status = ? WHERE id = ? AND freelancer_id = ? AND assignment_type = 'direct_hire' AND freelancer_response = 'pending'");
                 $s->bind_param('ssii', $response, $new_status, $assignment_id, $fl_freelancer_id);
                 $s->execute();
@@ -76,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
                         create_notification($conn, (int) $company_user['user_id'], 'direct_hire_' . $action, $msg, 'company/dashboard.php');
                     }
 
-                    $hire_action_msg = $action === 'accept' ? 'Request accepted! You can now start working.' : 'Request declined.';
+                    $hire_action_msg = $action === 'accept' ? 'Request accepted! You can now start working on your milestones.' : 'Request declined.';
                 } else {
                     $hire_action_msg = 'Unable to process this request. It may have already been handled.';
                 }
@@ -90,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
     // Refresh the list after action
     $direct_hire_requests = [];
     try {
-        $s = $conn->prepare("SELECT a.id, a.project_title, a.project_description, a.budget, a.deadline, a.payment_type, a.notes, a.attachment, a.assigned_at, c.company_name, c.logo_image, u.email AS company_email
+        $s = $conn->prepare("SELECT a.id, a.job_id, a.project_title, a.project_description, a.budget, a.deadline, a.payment_type, a.notes, a.attachment, a.assigned_at, c.company_name, c.logo_image, u.email AS company_email
             FROM assignments a
             JOIN jobs j ON a.job_id = j.id
             JOIN companies c ON j.company_id = c.id
@@ -102,6 +129,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
         $r = $s->get_result();
         while ($row = $r->fetch_assoc()) $direct_hire_requests[] = $row;
         $s->close();
+
+        foreach ($direct_hire_requests as &$req) {
+            $req['milestones'] = [];
+            if ($req['payment_type'] === 'milestone') {
+                $ms = $conn->prepare("SELECT id, title, amount, deadline, sort_order FROM milestones WHERE job_id = ? ORDER BY sort_order ASC");
+                $ms->bind_param('i', $req['job_id']);
+                $ms->execute();
+                $mr = $ms->get_result();
+                while ($m = $mr->fetch_assoc()) $req['milestones'][] = $m;
+                $ms->close();
+            }
+        }
+        unset($req);
     } catch(Exception $e) {}
 }
 
@@ -357,6 +397,20 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                         <div class="mb-4 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
                             <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Notes from Company:</p>
                             <p class="text-sm" style="color:var(--color-text-secondary)"><?= nl2br(e($req['notes'])) ?></p>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($req['milestones'])): ?>
+                        <div class="mb-4 p-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30">
+                            <p class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 mb-2">Project Milestones (<?= count($req['milestones']) ?>)</p>
+                            <div class="space-y-1.5">
+                                <?php foreach ($req['milestones'] as $ms): ?>
+                                    <div class="flex items-center justify-between text-xs">
+                                        <span class="text-gray-600 dark:text-gray-300"><?= e($ms['title']) ?></span>
+                                        <span class="font-semibold text-indigo-700 dark:text-indigo-300">$<?= number_format((float) $ms['amount'], 2) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
                     <?php endif; ?>
 
