@@ -10,7 +10,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 $job_id = (int) ($_GET['id'] ?? $_POST['job_id'] ?? 0);
 
 if (!$company_id || $job_id <= 0) {
-    set_flash('error', __('error.invalid_job'));
+    set_flash('error', 'Invalid job.');
     redirect('company/manage_jobs.php');
 }
 
@@ -21,7 +21,7 @@ $job = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$job) {
-    set_flash('error', __('error.job_not_found'));
+    set_flash('error', 'Job not found.');
     redirect('company/manage_jobs.php');
 }
 
@@ -74,13 +74,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 }
 
                 $conn->commit();
-                set_flash('success', __('success.freelancer_hired'));
+                set_flash('success', 'Freelancer hired successfully.');
             } catch (Exception $e) {
                 $conn->rollback();
-                set_flash('error', __('error.could_not_hire'));
+                set_flash('error', 'Could not hire freelancer. Job may already be assigned.');
             }
         } else {
-            set_flash('error', __('error.application_not_found'));
+            set_flash('error', 'Application not found or already processed.');
         }
     } elseif ($action === 'reject') {
         $application_id = (int) ($_POST['application_id'] ?? 0);
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             }
         }
 
-        set_flash('success', __('success.application_rejected'));
+        set_flash('success', 'Application rejected.');
     } elseif ($action === 'complete_payment') {
         $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
 
@@ -164,13 +164,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 }
 
                 $conn->commit();
-                set_flash('success', __('success.work_paid'));
+                set_flash('success', 'Work approved and payment processed.');
             } catch (Exception $e) {
                 $conn->rollback();
-                set_flash('error', __('error.could_not_pay'));
+                set_flash('error', 'Could not process payment.');
             }
         } else {
-            set_flash('error', __('error.assignment_not_ready'));
+            set_flash('error', 'Assignment not found or not ready for payment.');
         }
     } elseif ($action === 'request_revision') {
         $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
@@ -508,20 +508,20 @@ foreach ($milestones as $m) {
 }
 $all_approved = $total_milestones > 0 && $approved_count === $total_milestones;
 
-$page_title = __('company.applications');
+$page_title = 'Applications';
 require __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="mb-6">
-    <a href="<?= e(base_url('company/manage_jobs.php')) ?>" class="text-indigo-600 hover:underline text-sm">&larr; <?= __('company.back_jobs') ?></a>
+    <a href="<?= e(base_url('company/manage_jobs.php')) ?>" class="text-indigo-600 hover:underline text-sm">&larr; <?= 'Back to jobs' ?></a>
     <h1 class="text-2xl font-bold mt-2" style="color:var(--color-text-primary)"><?= e($job['title']) ?></h1>
-    <p style="color:var(--color-text-muted)"><?= __('company.table.budget') ?>: $<?= e(number_format((float) $job['budget'], 2)) ?> &middot; <?= status_badge($job['status']) ?></p>
+    <p style="color:var(--color-text-muted)"><?= 'Budget' ?>: $<?= e(number_format((float) $job['budget'], 2)) ?> &middot; <?= status_badge($job['status']) ?></p>
 </div>
 
 <?php if ($assignment): ?>
     <div class="card mb-6">
-        <h2 class="text-lg font-semibold mb-3"><?= __('company.assignment') ?></h2>
-        <p class="text-sm mb-2" style="color:var(--color-text-secondary)"><?= __('company.assigned_to') ?>: <strong><?= e($assignment['full_name']) ?></strong></p>
+        <h2 class="text-lg font-semibold mb-3"><?= 'Assignment' ?></h2>
+        <p class="text-sm mb-2" style="color:var(--color-text-secondary)"><?= 'Assigned to' ?>: <strong><?= e($assignment['full_name']) ?></strong></p>
         <p class="mb-3">Status: <?= status_badge($all_approved ? 'completed' : $assignment['status']) ?></p>
 
         <!-- Milestones Section -->
@@ -704,10 +704,10 @@ require __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="card">
-    <h2 class="text-lg font-semibold mb-4"><?= __('company.applications_list') ?></h2>
+    <h2 class="text-lg font-semibold mb-4"><?= 'Applications' ?></h2>
 
     <?php if (empty($applications)): ?>
-        <p style="color:var(--color-text-muted)"><?= __('company.no_job_applications') ?></p>
+        <p style="color:var(--color-text-muted)"><?= 'No applications for this job yet.' ?></p>
     <?php else: ?>
         <div class="space-y-4">
             <?php foreach ($applications as $app): ?>
@@ -727,7 +727,7 @@ require __DIR__ . '/../includes/header.php';
                             <?php if ($app['portfolio_url']): ?>
                                 <a href="<?= e($app['portfolio_url']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#128193; View Portfolio</a>
                             <?php endif; ?>
-                            <p class="text-xs mt-1" style="color:var(--color-text-placeholder)"><?= __('company.applied') ?>: <?= e($app['applied_at']) ?></p>
+                            <p class="text-xs mt-1" style="color:var(--color-text-placeholder)"><?= 'Applied' ?>: <?= e($app['applied_at']) ?></p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
@@ -738,14 +738,14 @@ require __DIR__ . '/../includes/header.php';
                                 <input type="hidden" name="job_id" value="<?= $job_id ?>">
                                 <input type="hidden" name="action" value="accept">
                                 <input type="hidden" name="application_id" value="<?= (int) $app['id'] ?>">
-                                <button type="submit" class="btn-primary text-sm"><?= __('company.accept') ?></button>
+                                <button type="submit" class="btn-primary text-sm"><?= 'Accept' ?></button>
                             </form>
                             <form method="POST">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="job_id" value="<?= $job_id ?>">
                                 <input type="hidden" name="action" value="reject">
                                 <input type="hidden" name="application_id" value="<?= (int) $app['id'] ?>">
-                                <button type="submit" class="btn-danger text-sm"><?= __('admin.reject') ?></button>
+                                <button type="submit" class="btn-danger text-sm"><?= 'Hide' ?></button>
                             </form>
                         <?php endif; ?>
                     </div>

@@ -9,7 +9,7 @@ $user = current_user();
 $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
-    set_flash('error', __('error.company_not_found'));
+    set_flash('error', 'Company profile not found.');
     redirect('login.php');
 }
 
@@ -25,7 +25,7 @@ $profile = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$profile) {
-    set_flash('error', __('profile.not_found'));
+    set_flash('error', 'Profile not found.');
     redirect('login.php');
 }
 
@@ -34,7 +34,7 @@ $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
     if (!verify_csrf()) {
-        $error = __('error.invalid_request');
+        $error = 'Invalid request. Please try again.';
     } else {
         $company_name = trim($_POST['company_name'] ?? '');
         $website = trim($_POST['website'] ?? '');
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
         $established_year = (int) ($_POST['established_year'] ?? 0);
 
         if ($company_name === '') {
-            $error = __('error.company_name_required');
+            $error = 'Company name is required.';
         } else {
             $old_profile_image = $profile['profile_image'];
             $old_logo = $profile['logo_image'];
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                 if ($uploaded) {
                     $new_profile_image = $uploaded;
                 } else {
-                    $error = __('upload.invalid_profile');
+                    $error = 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
                 }
             }
 
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                 if ($uploaded) {
                     $new_logo = $uploaded;
                 } else {
-                    $error = __('upload.invalid_logo');
+                    $error = 'Invalid company logo. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
                 }
             }
 
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                     $_SESSION['profile_image'] = $new_profile_image;
                     $_SESSION['logo_image'] = $new_logo;
 
-                    $success = __('profile.updated');
+                    $success = 'Profile updated successfully.';
                     $profile['company_name'] = $company_name;
                     $profile['website'] = $website;
                     $profile['phone'] = $phone;
@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
 }
 
 $is_edit = isset($_GET['edit']);
-$page_title = $is_edit ? __('profile.company_edit') : __('profile.company');
+$page_title = $is_edit ? 'Edit Company Profile' : 'Company Profile';
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -118,7 +118,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-4">
             <?php if (!empty($profile['logo_image'])): ?>
-                <img src="<?= e(base_url('uploads/' . $profile['logo_image'])) ?>" alt="" class="w-14 h-14 rounded-xl object-contain border bg-white dark:bg-gray-800" style="border-color:var(--color-border)">
+                <img src="<?= e(base_url('uploads/images/' . $profile['logo_image'])) ?>" alt="" class="w-14 h-14 rounded-xl object-contain border bg-white dark:bg-gray-800" style="border-color:var(--color-border)">
             <?php elseif ($profileImgUrl = profile_image_url($profile['profile_image'])): ?>
                 <img src="<?= e($profileImgUrl) ?>" alt="" class="w-14 h-14 rounded-full object-cover border" style="border-color:var(--color-border)">
             <?php else: ?>
@@ -128,7 +128,7 @@ require __DIR__ . '/../includes/header.php';
             <?php endif; ?>
             <div>
                 <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= e($profile['company_name']) ?></h1>
-                <p class="text-sm" style="color:var(--color-text-muted)"><?= e($user['username']) ?> &middot; <?= __('profile.joined') ?> <?= e(date('M Y', strtotime($profile['created_at']))) ?></p>
+                <p class="text-sm" style="color:var(--color-text-muted)"><?= e($user['username']) ?> &middot; <?= 'Joined' ?> <?= e(date('M Y', strtotime($profile['created_at']))) ?></p>
             </div>
         </div>
         <div class="flex gap-2">
@@ -207,7 +207,7 @@ require __DIR__ . '/../includes/header.php';
                         <label class="block text-sm font-medium text-gray-700 mb-2">Company Logo</label>
                         <div class="flex items-center gap-4">
                             <?php if ($profile['logo_image']): ?>
-                                <img src="<?= e(base_url('uploads/' . $profile['logo_image'])) ?>" class="h-12 w-auto object-contain border border-gray-200 rounded-lg p-1" id="logoPreview">
+                                <img src="<?= e(base_url('uploads/images/' . $profile['logo_image'])) ?>" class="h-12 w-auto object-contain border border-gray-200 rounded-lg p-1" id="logoPreview">
                             <?php endif; ?>
                             <input type="file" name="logo_image" accept="image/jpeg,image/png,image/gif,image/webp" class="text-sm" onchange="previewImage(this, 'logoPreview')">
                         </div>
@@ -276,7 +276,7 @@ require __DIR__ . '/../includes/header.php';
                 <?php if ($profile['logo_image']): ?>
                 <div class="mt-6">
                     <h3 class="text-sm font-medium text-gray-500 mb-2">Company Logo</h3>
-                    <img src="<?= e(base_url('uploads/' . $profile['logo_image'])) ?>" alt="Company Logo" class="h-16 w-auto object-contain border border-gray-200 rounded-lg p-1">
+                    <img src="<?= e(base_url('uploads/images/' . $profile['logo_image'])) ?>" alt="Company Logo" class="h-16 w-auto object-contain border border-gray-200 rounded-lg p-1">
                 </div>
                 <?php else: ?>
                 <div class="mt-6">

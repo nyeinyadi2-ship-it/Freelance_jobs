@@ -39,14 +39,14 @@ $notifications = get_notifications_filtered($conn, $user_id, $filter, 50);
 $unread_count = get_unread_notification_count($conn, $user_id);
 $type_counts = get_notification_count_by_type($conn, $user_id);
 
-$page_title = __('notif.title');
+$page_title = 'Notifications';
 require __DIR__ . '/includes/header.php';
 ?>
 
 <div class="max-w-3xl mx-auto">
     <div class="flex flex-wrap justify-between items-center gap-4 mb-6">
         <div>
-            <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= __('notif.title') ?></h1>
+            <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= 'Notifications' ?></h1>
             <?php if ($unread_count > 0): ?>
                 <p class="text-sm mt-1" style="color:var(--color-text-muted)"><?= $unread_count ?> unread notification<?= $unread_count !== 1 ? 's' : '' ?></p>
             <?php endif; ?>
@@ -57,16 +57,16 @@ require __DIR__ . '/includes/header.php';
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="mark_all_read">
                     <button type="submit" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
-                        <?= __('notif.mark_all_read') ?>
+                        <?= 'Mark all as read' ?>
                     </button>
                 </form>
             <?php endif; ?>
             <?php if (!empty($notifications)): ?>
-                <form method="POST" class="inline" onsubmit="return confirm('<?= e(__('notif.confirm_delete_all')) ?>')">
+                <form method="POST" class="inline" onsubmit="return confirm('<?= e('Delete all notifications? This cannot be undone.') ?>')">
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="delete_all">
                     <button type="submit" class="text-sm text-red-500 hover:text-red-700 font-medium">
-                        <?= __('notif.delete_all') ?>
+                        <?= 'Delete all' ?>
                     </button>
                 </form>
             <?php endif; ?>
@@ -77,9 +77,9 @@ require __DIR__ . '/includes/header.php';
     <div class="flex gap-1 mb-6 p-1 rounded-lg w-fit" style="background:var(--color-card-hover)">
         <?php
         $filters = [
-            'all' => __('notif.filter_all'),
-            'unread' => __('notif.filter_unread'),
-            'read' => __('notif.filter_read'),
+            'all' => 'All',
+            'unread' => 'Unread',
+            'read' => 'Read',
         ];
         foreach ($filters as $key => $label):
             $count = $key === 'unread' ? $unread_count : ($key === 'all' ? array_sum($type_counts) : null);
@@ -106,7 +106,7 @@ require __DIR__ . '/includes/header.php';
                     <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                 </svg>
             </div>
-            <p class="text-lg" style="color:var(--color-text-muted)"><?= $filter === 'unread' ? e(__('notif.no_unread')) : e(__('notif.empty_state')) ?></p>
+            <p class="text-lg" style="color:var(--color-text-muted)"><?= $filter === 'unread' ? e('You\'re all caught up!') : e('No notifications to show.') ?></p>
         </div>
     <?php else: ?>
         <div class="space-y-2">
@@ -147,11 +147,11 @@ require __DIR__ . '/includes/header.php';
                                         data-id="<?= (int) $n['id'] ?>"
                                         data-url="<?= e(base_url($n['link'])) ?>"
                                         data-csrf="<?= e(csrf_token()) ?>">
-                                    <?= __('notif.view_all') ?>
+                                    <?= 'View all' ?>
                                 </button>
                             <?php else: ?>
                                 <a href="<?= e(base_url($n['link'])) ?>" class="text-sm text-indigo-600 hover:underline whitespace-nowrap">
-                                    <?= __('notif.view_all') ?>
+                                    <?= 'View all' ?>
                                 </a>
                             <?php endif; ?>
                         <?php endif; ?>
@@ -159,15 +159,15 @@ require __DIR__ . '/includes/header.php';
                             <button type="button" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium whitespace-nowrap mark-read-btn"
                                     data-id="<?= (int) $n['id'] ?>"
                                     data-csrf="<?= e(csrf_token()) ?>"
-                                    title="<?= e(__('notif.mark_read')) ?>">
-                                <?= __('notif.mark_read') ?>
+                                    title="<?= e('Mark as Read') ?>">
+                                <?= 'Mark as Read' ?>
                             </button>
                         <?php endif; ?>
                         <form method="POST" class="inline">
                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="notification_id" value="<?= (int) $n['id'] ?>">
-                            <button type="submit" class="text-sm text-red-400 hover:text-red-600 whitespace-nowrap" title="<?= e(__('notif.delete')) ?>">
+                            <button type="submit" class="text-sm text-red-400 hover:text-red-600 whitespace-nowrap" title="<?= e('Delete') ?>">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>

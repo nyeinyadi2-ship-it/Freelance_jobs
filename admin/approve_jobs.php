@@ -204,7 +204,7 @@ require __DIR__ . '/includes/admin_header.php';
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-3 mb-2">
                             <?php if ($job['logo_image']): ?>
-                                <img src="<?= e(base_url('uploads/' . $job['logo_image'])) ?>" alt="" class="w-8 h-8 rounded-lg object-cover">
+                                <img src="<?= e(base_url('uploads/images/' . $job['logo_image'])) ?>" alt="" class="w-8 h-8 rounded-lg object-cover">
                             <?php else: ?>
                                 <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 font-bold text-xs">
                                     <?= e(_first_char($job['company_name'])) ?>

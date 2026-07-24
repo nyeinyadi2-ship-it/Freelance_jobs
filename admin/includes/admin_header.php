@@ -1,7 +1,7 @@
 <?php
-$page_title = $page_title ?? __('app.name');
+$page_title = $page_title ?? 'FreelanceHub';
 $admin_user = current_user();
-$current_lang = current_lang();
+$current_lang = 'en';
 $unread_count = 0;
 $recent_notifications = [];
 $chat_unread = 0;
@@ -15,7 +15,7 @@ if (isset($admin_user['user_id'])) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="<?= e(current_lang()) ?>" data-theme>
+<html lang="<?= e('en') ?>" data-theme>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -274,7 +274,7 @@ if (isset($admin_user['user_id'])) {
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                     </svg>
                 </div>
-                <span class="text-lg font-bold text-white tracking-tight hidden sm:inline"><?= e(__('app.name')) ?></span>
+                <span class="text-lg font-bold text-white tracking-tight hidden sm:inline"><?= e('FreelanceHub') ?></span>
                 <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/15 text-white/90">Admin</span>
             </a>
         </div>
@@ -300,8 +300,8 @@ if (isset($admin_user['user_id'])) {
                     <span class="hidden sm:inline"><?= $current_lang === 'my' ? 'မြန်မာ' : 'English' ?></span>
                 </button>
                 <div id="lang-dropdown" class="hidden absolute right-0 mt-2 w-28 rounded-xl shadow-xl border z-50 overflow-hidden" style="background:var(--color-card);border-color:var(--color-border)">
-                    <a href="<?= e(lang_switch_url('en')) ?>" class="block px-3 py-2 text-sm font-medium <?= $current_lang === 'en' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' : '' ?>" style="color:<?= $current_lang === 'en' ? '' : 'var(--color-text-secondary)' ?>"><?= e(__('lang.en')) ?></a>
-                    <a href="<?= e(lang_switch_url('my')) ?>" class="block px-3 py-2 text-sm font-medium <?= $current_lang === 'my' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' : '' ?>" style="color:<?= $current_lang === 'my' ? '' : 'var(--color-text-secondary)' ?>"><?= e(__('lang.my')) ?></a>
+                    <a href="<?= e(lang_switch_url('en')) ?>" class="block px-3 py-2 text-sm font-medium <?= $current_lang === 'en' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' : '' ?>" style="color:<?= $current_lang === 'en' ? '' : 'var(--color-text-secondary)' ?>"><?= e('English') ?></a>
+                    <a href="<?= e(lang_switch_url('my')) ?>" class="block px-3 py-2 text-sm font-medium <?= $current_lang === 'my' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' : '' ?>" style="color:<?= $current_lang === 'my' ? '' : 'var(--color-text-secondary)' ?>"><?= e('မြန်မာ') ?></a>
                 </div>
             </div>
 
@@ -317,7 +317,7 @@ if (isset($admin_user['user_id'])) {
 
             <!-- Notification Bell -->
             <div class="relative notification-container">
-                <button type="button" class="notification-toggle relative p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors" aria-label="<?= e(__('notif.title')) ?>">
+                <button type="button" class="notification-toggle relative p-2 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors" aria-label="<?= e('Notifications') ?>">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
@@ -330,17 +330,17 @@ if (isset($admin_user['user_id'])) {
 
                 <div class="notification-dropdown absolute right-0 mt-2 w-80 rounded-xl shadow-2xl border z-50 hidden" style="display:none;background:var(--color-card);border-color:var(--color-border)">
                     <div class="p-4 border-b flex justify-between items-center" style="border-color:var(--color-border)">
-                        <span class="font-semibold text-sm" style="color:var(--color-text-primary)"><?= __('notif.recent') ?></span>
+                        <span class="font-semibold text-sm" style="color:var(--color-text-primary)"><?= 'Recent Notifications' ?></span>
                         <div class="flex items-center gap-2">
                             <?php if ($unread_count > 0): ?>
-                                <button type="button" class="notification-mark-all text-xs text-indigo-600 hover:underline" data-csrf="<?= e(csrf_token()) ?>"><?= __('notif.mark_all_read') ?></button>
+                                <button type="button" class="notification-mark-all text-xs text-indigo-600 hover:underline" data-csrf="<?= e(csrf_token()) ?>"><?= 'Mark all as read' ?></button>
                             <?php endif; ?>
-                            <a href="<?= e(base_url('admin/notifications.php')) ?>" class="text-xs hover:text-indigo-600" style="color:var(--color-text-muted)"><?= __('notif.view_all') ?></a>
+                            <a href="<?= e(base_url('admin/notifications.php')) ?>" class="text-xs hover:text-indigo-600" style="color:var(--color-text-muted)"><?= 'View all' ?></a>
                         </div>
                     </div>
                     <div class="max-h-80 overflow-y-auto notification-list">
                         <?php if (empty($recent_notifications)): ?>
-                            <div class="p-6 text-center text-sm" style="color:var(--color-text-placeholder)"><?= __('notif.no_notifications') ?></div>
+                            <div class="p-6 text-center text-sm" style="color:var(--color-text-placeholder)"><?= 'No notifications yet.' ?></div>
                         <?php else: ?>
                             <?php foreach ($recent_notifications as $n): ?>
                                 <div class="notification-item flex items-start gap-2 px-4 py-3 border-b last:border-0 <?= $n['is_read'] ? '' : 'bg-indigo-50/50 dark:bg-indigo-900/20' ?>" style="border-color:var(--color-border)" data-id="<?= (int) $n['id'] ?>">
@@ -351,7 +351,7 @@ if (isset($admin_user['user_id'])) {
                                             <p class="text-xs mt-0.5" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
                                         </a>
                                     </div>
-                                    <button type="button" class="notification-delete-btn flex-shrink-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity" style="color:var(--color-text-placeholder)" data-id="<?= (int) $n['id'] ?>" data-csrf="<?= e(csrf_token()) ?>" title="<?= __('notif.delete') ?>">
+                                    <button type="button" class="notification-delete-btn flex-shrink-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity" style="color:var(--color-text-placeholder)" data-id="<?= (int) $n['id'] ?>" data-csrf="<?= e(csrf_token()) ?>" title="<?= 'Delete' ?>">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                                     </button>
                                 </div>

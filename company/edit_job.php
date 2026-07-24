@@ -9,7 +9,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 $job_id = (int) ($_GET['id'] ?? 0);
 
 if (!$company_id || $job_id <= 0) {
-    set_flash('error', __('error.invalid_job'));
+    set_flash('error', 'Invalid job.');
     redirect('company/manage_jobs.php');
 }
 
@@ -20,12 +20,12 @@ $job = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$job) {
-    set_flash('error', __('error.job_not_found'));
+    set_flash('error', 'Job not found.');
     redirect('company/manage_jobs.php');
 }
 
 if ($job['status'] === 'completed') {
-    set_flash('error', __('error.completed_job_edit'));
+    set_flash('error', 'Completed jobs cannot be edited.');
     redirect('company/manage_jobs.php');
 }
 
@@ -51,7 +51,7 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
-        $error = __('error.invalid_request');
+        $error = 'Invalid request. Please try again.';
     } else {
         $title = trim($_POST['title'] ?? '');
         $category = trim($_POST['category'] ?? '');
@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ins->close();
                 }
 
-                set_flash('success', __('success.job_updated'));
+                set_flash('success', 'Job updated successfully.');
                 redirect('company/manage_jobs.php');
             }
         }

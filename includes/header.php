@@ -1,8 +1,8 @@
 <?php
-$page_title = $page_title ?? __('app.name');
+$page_title = $page_title ?? 'FreelanceHub';
 ?>
 <!DOCTYPE html>
-<html lang="<?= e(current_lang()) ?>" data-theme>
+<html lang="<?= e('en') ?>" data-theme>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

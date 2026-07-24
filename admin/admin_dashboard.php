@@ -68,14 +68,14 @@ $r = $conn->query("
 ");
 if ($r) { while ($row = $r->fetch_assoc()) $recent_users[] = $row; }
 
-$page_title = __('admin.dashboard_title');
+$page_title = 'Admin Dashboard';
 require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Page Header -->
 <div class="mb-8 admin-fade">
-    <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= e(__('admin.dashboard_title')) ?></h1>
-    <p class="mt-1 text-sm" style="color:var(--color-text-muted)"><?= e(__('admin.dashboard_welcome')) ?></p>
+    <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= e('Admin Dashboard') ?></h1>
+    <p class="mt-1 text-sm" style="color:var(--color-text-muted)"><?= e('Welcome back! Here\'s what\'s happening on your platform.') ?></p>
 </div>
 
 <!-- Stats Grid -->
@@ -101,7 +101,7 @@ require __DIR__ . '/includes/admin_header.php';
     <div class="admin-stat-card card admin-fade delay-2">
         <div class="flex items-start justify-between">
             <div>
-                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e(__('admin.total_jobs')) ?></p>
+                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e('Total Jobs') ?></p>
                 <p class="text-3xl font-extrabold mt-1 text-indigo-600 stat-counter" data-target="<?= $stats['total_jobs'] ?>">0</p>
             </div>
             <div class="stat-icon bg-indigo-100 dark:bg-indigo-900/30">
@@ -109,7 +109,7 @@ require __DIR__ . '/includes/admin_header.php';
             </div>
         </div>
         <div class="mt-3">
-            <span class="text-xs" style="color:var(--color-text-muted)"><?= $stats['completed_jobs'] ?> <?= e(__('admin.completed')) ?></span>
+            <span class="text-xs" style="color:var(--color-text-muted)"><?= $stats['completed_jobs'] ?> <?= e('completed') ?></span>
         </div>
         <div class="stat-glow-effect bg-indigo-400"></div>
     </div>
@@ -118,7 +118,7 @@ require __DIR__ . '/includes/admin_header.php';
     <div class="admin-stat-card card admin-fade delay-3">
         <div class="flex items-start justify-between">
             <div>
-                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e(__('admin.companies')) ?></p>
+                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e('Companies') ?></p>
                 <p class="text-3xl font-extrabold mt-1 text-emerald-600 stat-counter" data-target="<?= $stats['total_companies'] ?>">0</p>
             </div>
             <div class="stat-icon bg-emerald-100 dark:bg-emerald-900/30">
@@ -126,7 +126,7 @@ require __DIR__ . '/includes/admin_header.php';
             </div>
         </div>
         <div class="mt-3">
-            <span class="text-xs" style="color:var(--color-text-muted)"><?= e(__('admin.active_accounts')) ?></span>
+            <span class="text-xs" style="color:var(--color-text-muted)"><?= e('Active accounts') ?></span>
         </div>
         <div class="stat-glow-effect bg-emerald-400"></div>
     </div>
@@ -135,7 +135,7 @@ require __DIR__ . '/includes/admin_header.php';
     <div class="admin-stat-card card admin-fade delay-4">
         <div class="flex items-start justify-between">
             <div>
-                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e(__('admin.freelancers')) ?></p>
+                <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e('Freelancers') ?></p>
                 <p class="text-3xl font-extrabold mt-1 text-purple-600 stat-counter" data-target="<?= $stats['total_freelancers'] ?>">0</p>
             </div>
             <div class="stat-icon bg-purple-100 dark:bg-purple-900/30">
@@ -143,7 +143,7 @@ require __DIR__ . '/includes/admin_header.php';
             </div>
         </div>
         <div class="mt-3">
-            <span class="text-xs" style="color:var(--color-text-muted)"><?= e(__('admin.talented_pool')) ?></span>
+            <span class="text-xs" style="color:var(--color-text-muted)"><?= e('Talented professionals') ?></span>
         </div>
         <div class="stat-glow-effect bg-purple-400"></div>
     </div>
@@ -153,7 +153,7 @@ require __DIR__ . '/includes/admin_header.php';
 <div class="grid lg:grid-cols-3 gap-6 mb-8">
     <!-- Quick Actions -->
     <div class="lg:col-span-1 card admin-fade">
-        <h3 class="font-bold mb-4" style="color:var(--color-text-primary)"><?= e(__('admin.quick_actions')) ?></h3>
+        <h3 class="font-bold mb-4" style="color:var(--color-text-primary)"><?= e('Quick Actions') ?></h3>
         <div class="space-y-3">
             <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="quick-action-card">
                 <div class="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
@@ -169,8 +169,8 @@ require __DIR__ . '/includes/admin_header.php';
                     <svg class="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
                 </div>
                 <div>
-                    <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e(__('admin.manage_users')) ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= $stats['total_users'] ?> <?= e(__('admin.total_users')) ?></p>
+                    <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e('Manage Users') ?></p>
+                    <p class="text-xs" style="color:var(--color-text-muted)"><?= $stats['total_users'] ?> <?= e('Total Users') ?></p>
                 </div>
             </a>
             <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="quick-action-card">
@@ -189,7 +189,7 @@ require __DIR__ . '/includes/admin_header.php';
     <div class="lg:col-span-2 card admin-fade" style="background:linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);color:white;border:none">
         <div class="flex items-start justify-between mb-6">
             <div>
-                <p class="text-indigo-200 text-sm font-medium"><?= e(__('admin.total_revenue')) ?></p>
+                <p class="text-indigo-200 text-sm font-medium"><?= e('Total Revenue') ?></p>
                 <p class="text-4xl font-extrabold mt-1">$<?= e(number_format($stats['total_revenue'], 2)) ?></p>
             </div>
             <div class="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
@@ -198,15 +198,15 @@ require __DIR__ . '/includes/admin_header.php';
         </div>
         <div class="grid grid-cols-3 gap-4">
             <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-indigo-200 text-xs"><?= e(__('admin.completed')) ?></p>
+                <p class="text-indigo-200 text-xs"><?= e('completed') ?></p>
                 <p class="text-xl font-bold mt-1"><?= $stats['completed_jobs'] ?></p>
             </div>
             <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-indigo-200 text-xs"><?= e(__('admin.total_users')) ?></p>
+                <p class="text-indigo-200 text-xs"><?= e('Total Users') ?></p>
                 <p class="text-xl font-bold mt-1"><?= $stats['total_users'] ?></p>
             </div>
             <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-indigo-200 text-xs"><?= e(__('admin.jobs_created')) ?></p>
+                <p class="text-indigo-200 text-xs"><?= e('Jobs Created') ?></p>
                 <p class="text-xl font-bold mt-1"><?= $stats['total_jobs'] ?></p>
             </div>
         </div>
@@ -218,11 +218,11 @@ require __DIR__ . '/includes/admin_header.php';
     <!-- Recent Jobs -->
     <div class="card admin-fade">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="font-bold" style="color:var(--color-text-primary)"><?= e(__('admin.recent_jobs')) ?></h3>
-            <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e(__('admin.view_all')) ?> →</a>
+            <h3 class="font-bold" style="color:var(--color-text-primary)"><?= e('Recent Jobs') ?></h3>
+            <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e('View All') ?> →</a>
         </div>
         <?php if (empty($recent_jobs)): ?>
-            <p class="text-sm text-center py-8" style="color:var(--color-text-muted)"><?= e(__('admin.no_jobs_yet')) ?></p>
+            <p class="text-sm text-center py-8" style="color:var(--color-text-muted)"><?= e('No jobs posted yet.') ?></p>
         <?php else: ?>
             <div class="space-y-0">
                 <?php foreach ($recent_jobs as $job): ?>
@@ -244,11 +244,11 @@ require __DIR__ . '/includes/admin_header.php';
     <!-- Recent Users -->
     <div class="card admin-fade">
         <div class="flex items-center justify-between mb-4">
-            <h3 class="font-bold" style="color:var(--color-text-primary)"><?= e(__('admin.recent_users')) ?></h3>
-            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e(__('admin.view_all')) ?> →</a>
+            <h3 class="font-bold" style="color:var(--color-text-primary)"><?= e('Recent Users') ?></h3>
+            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e('View All') ?> →</a>
         </div>
         <?php if (empty($recent_users)): ?>
-            <p class="text-sm text-center py-8" style="color:var(--color-text-muted)"><?= e(__('admin.no_users_yet')) ?></p>
+            <p class="text-sm text-center py-8" style="color:var(--color-text-muted)"><?= e('No users registered yet.') ?></p>
         <?php else: ?>
             <div class="space-y-0">
                 <?php foreach ($recent_users as $u): ?>

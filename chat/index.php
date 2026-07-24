@@ -7,7 +7,7 @@ require_login();
 
 $role = $_SESSION['role'] ?? '';
 if (!in_array($role, ['company', 'freelancer', 'admin'], true)) {
-    set_flash('error', __('error.no_permission'));
+    set_flash('error', 'You do not have permission to access that page.');
     redirect('login.php');
 }
 
@@ -24,15 +24,15 @@ if ($other_id > 0) {
     }
 }
 
-$page_title = __('chat.title');
+$page_title = 'Messages';
 $unread_total = get_unread_count($conn, $user_id);
 ?>
 <!DOCTYPE html>
-<html lang="<?= e(current_lang()) ?>" data-theme>
+<html lang="<?= e('en') ?>" data-theme>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($page_title) ?> - <?= e(__('app.name')) ?></title>
+    <title><?= e($page_title) ?> - <?= e('FreelanceHub') ?></title>
     <script>
     (function(){
         var t = localStorage.getItem('theme');
@@ -289,7 +289,7 @@ $unread_total = get_unread_count($conn, $user_id);
         <div class="p-5" style="border-bottom:1px solid rgba(99,102,241,0.06)">
             <div class="flex items-center justify-between mb-4">
                 <div>
-                    <h1 class="text-xl font-bold" style="color:var(--color-text-primary)"><?= e(__('chat.title')) ?></h1>
+                    <h1 class="text-xl font-bold" style="color:var(--color-text-primary)"><?= e('Messages') ?></h1>
                     <p class="text-xs mt-0.5" style="color:var(--color-text-muted)"><?= count($conversations) ?> conversations</p>
                 </div>
                 <?php if ($unread_total > 0): ?>
@@ -310,8 +310,8 @@ $unread_total = get_unread_count($conn, $user_id);
                             <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                         </svg>
                     </div>
-                    <p class="font-semibold mb-1" style="color:var(--color-text-primary)"><?= e(__('chat.no_contracts')) ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e(__('chat.hire_hint')) ?></p>
+                    <p class="font-semibold mb-1" style="color:var(--color-text-primary)"><?= e('No active contracts yet.') ?></p>
+                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e('Hire a freelancer or get hired to start chatting.') ?></p>
                 </div>
             <?php else: ?>
                 <?php foreach ($conversations as $conv):
@@ -326,7 +326,7 @@ $unread_total = get_unread_count($conn, $user_id);
                        data-message="<?= e(strtolower($conv['last_message'] ?? '')) ?>">
                         <div class="relative flex-shrink-0">
                             <?php if (!empty($conv['other_profile_image'])): ?>
-                                <img src="<?= e(base_url('uploads/' . $conv['other_profile_image'])) ?>" alt="" class="avatar">
+                                <img src="<?= e(base_url('uploads/images/' . $conv['other_profile_image'])) ?>" alt="" class="avatar">
                             <?php else: ?>
                                 <div class="avatar-initials"><?= $initial ?></div>
                             <?php endif; ?>
@@ -346,7 +346,7 @@ $unread_total = get_unread_count($conn, $user_id);
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-xs truncate" style="color:var(--color-text-muted)">
-                                    <?= $conv['last_message'] ? e(mb_strimwidth($conv['last_message'], 0, 45, '...')) : '<em>' . e(__('chat.no_messages')) . '</em>' ?>
+                                    <?= $conv['last_message'] ? e(mb_strimwidth($conv['last_message'], 0, 45, '...')) : '<em>' . e('No messages yet') . '</em>' ?>
                                 </span>
                                 <?php if ((int) $conv['unread_count'] > 0): ?>
                                     <span class="unread-badge ml-2 flex-shrink-0"><?= (int) $conv['unread_count'] ?></span>
@@ -370,7 +370,7 @@ $unread_total = get_unread_count($conn, $user_id);
                 </button>
                 <div class="relative flex-shrink-0">
                     <?php if (!empty($partner['profile_image'])): ?>
-                        <img src="<?= e(base_url('uploads/' . $partner['profile_image'])) ?>" alt="" class="avatar-sm avatar">
+                        <img src="<?= e(base_url('uploads/images/' . $partner['profile_image'])) ?>" alt="" class="avatar-sm avatar">
                     <?php else: ?>
                         <div class="avatar-sm avatar-initials"><?= $initial ?></div>
                     <?php endif; ?>
@@ -424,7 +424,7 @@ $unread_total = get_unread_count($conn, $user_id);
                         </button>
                         <input type="file" id="fileInput" name="attachment" style="display:none" accept="image/*,.pdf,.docx,.zip,.rar,.txt,.csv,.xlsx,.pptx">
                         <div class="flex-1 min-w-0">
-                            <textarea id="messageInput" rows="1" placeholder="<?= e(__('chat.placeholder')) ?>"
+                            <textarea id="messageInput" rows="1" placeholder="<?= e('Type a message...') ?>"
                                 class="w-full px-4 py-3 text-sm rounded-2xl resize-none focus:outline-none transition-all"
                                 style="max-height:120px; background:rgba(255,255,255,0.7); border:1px solid rgba(99,102,241,0.08); color:var(--color-text-primary); backdrop-filter:blur(8px);"
                                 oninput="autoResize(this)"></textarea>
@@ -444,8 +444,8 @@ $unread_total = get_unread_count($conn, $user_id);
                         <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                     </svg>
                 </div>
-                <h2 class="text-xl font-bold mb-2" style="color:var(--color-text-primary)"><?= e(__('chat.your_messages')) ?></h2>
-                <p class="text-sm max-w-xs" style="color:var(--color-text-muted)"><?= e(__('chat.select_person')) ?></p>
+                <h2 class="text-xl font-bold mb-2" style="color:var(--color-text-primary)"><?= e('Your Messages') ?></h2>
+                <p class="text-sm max-w-xs" style="color:var(--color-text-muted)"><?= e('Select a person to start chatting') ?></p>
                 <div class="mt-6 flex items-center gap-2 text-xs px-4 py-2 rounded-xl" style="color:var(--color-text-placeholder);background:rgba(99,102,241,0.04);border:1px solid rgba(99,102,241,0.06)">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     Chat is available after a proposal is accepted or you're hired
@@ -538,7 +538,7 @@ $unread_total = get_unread_count($conn, $user_id);
         if (!isSent) {
             html += '<div class="flex-shrink-0 mb-1">';
             if (msg.sender_profile_image) {
-                html += '<img src="<?= e(base_url('uploads/')) ?>' + escapeHtml(msg.sender_profile_image) + '" class="avatar-xs" style="width:28px;height:28px;border-radius:10px;object-fit:cover">';
+                html += '<img src="<?= e(base_url('uploads/images/')) ?>' + escapeHtml(msg.sender_profile_image) + '" class="avatar-xs" style="width:28px;height:28px;border-radius:10px;object-fit:cover">';
             } else {
                 html += '<div class="avatar-xs avatar-initials" style="width:28px;height:28px;font-size:11px;border-radius:10px">' + escapeHtml(name.charAt(0).toUpperCase()) + '</div>';
             }

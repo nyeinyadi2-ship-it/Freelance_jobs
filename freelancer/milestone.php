@@ -528,7 +528,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                 <h3 class="text-sm font-bold mb-3" style="color:var(--color-text-primary)">Project</h3>
                 <a href="<?= e(base_url('freelancer/view_job.php?id=' . $milestone['job_id'])) ?>" class="flex items-center gap-3 p-3 rounded-xl transition-colors hover:opacity-80" style="background:var(--color-bg);border:1px solid var(--color-border)">
                     <?php if ($milestone['logo_image']): ?>
-                        <img src="<?= e(base_url('uploads/' . $milestone['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-lg object-contain flex-shrink-0">
+                        <img src="<?= e(base_url('uploads/images/' . $milestone['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-lg object-contain flex-shrink-0">
                     <?php else: ?>
                         <div class="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0" style="background:rgba(99,102,241,0.1);color:#6366f1"><?= strtoupper(mb_substr($milestone['company_name'], 0, 1)) ?></div>
                     <?php endif; ?>

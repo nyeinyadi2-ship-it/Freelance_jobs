@@ -18,7 +18,7 @@ $freelancer = $st->get_result()->fetch_assoc();
 $st->close();
 if (!$freelancer) { redirect('login.php'); }
 
-$profileImgUrl = $freelancer['profile_image'] ? base_url('uploads/' . $freelancer['profile_image']) : null;
+$profileImgUrl = $freelancer['profile_image'] ? base_url('uploads/images/' . $freelancer['profile_image']) : null;
 
 // Fetch portfolio items
 $portfolio_items = [];
@@ -74,7 +74,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
 }
 ?>
 <!DOCTYPE html>
-<html lang="<?= e(current_lang()) ?>" data-theme>
+<html lang="<?= e('en') ?>" data-theme>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -160,7 +160,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
         </div>
     <?php else: ?>
         <?php foreach ($portfolio_items as $item):
-            $coverUrl = $item['cover_image'] ? base_url('uploads/' . $item['cover_image']) : null;
+            $coverUrl = $item['cover_image'] ? base_url('uploads/images/' . $item['cover_image']) : null;
         ?>
         <div class="glass rounded-2xl overflow-hidden mb-6 portfolio-card reveal">
             <!-- Cover Image -->
@@ -211,7 +211,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
                 <?php if (!empty($item['images'])): ?>
                     <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                         <?php foreach ($item['images'] as $img): ?>
-                            <img src="<?= e(base_url('uploads/' . $img['image_path'])) ?>" alt="" class="w-24 h-18 rounded-lg object-cover cursor-pointer border flex-shrink-0 hover:opacity-80 transition-opacity" style="border-color:var(--color-border)" onclick="openModal(this.src)">
+                            <img src="<?= e(base_url('uploads/images/' . $img['image_path'])) ?>" alt="" class="w-24 h-18 rounded-lg object-cover cursor-pointer border flex-shrink-0 hover:opacity-80 transition-opacity" style="border-color:var(--color-border)" onclick="openModal(this.src)">
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>

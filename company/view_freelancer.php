@@ -18,7 +18,7 @@ $freelancer = $st->get_result()->fetch_assoc();
 $st->close();
 if (!$freelancer) { redirect('index.php'); }
 
-$profileImgUrl = $freelancer['profile_image'] ? base_url('uploads/' . $freelancer['profile_image']) : null;
+$profileImgUrl = $freelancer['profile_image'] ? base_url('uploads/images/' . $freelancer['profile_image']) : null;
 
 $fl_skills = [];
 $r = $conn->prepare("SELECT s.skill_name FROM freelancer_skills fs JOIN skills s ON fs.skill_id = s.id WHERE fs.freelancer_id = ?");
@@ -80,7 +80,7 @@ foreach ($completed_projects as $cp) {
         if ($cl_row) {
             $companies_worked[] = [
                 'name' => $cl_row['company_name'],
-                'logo' => $cl_row['logo_image'] ? base_url('uploads/' . $cl_row['logo_image']) : null,
+                'logo' => $cl_row['logo_image'] ? base_url('uploads/images/' . $cl_row['logo_image']) : null,
             ];
         }
     }
@@ -278,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 ?>
 <!DOCTYPE html>
-<html lang="<?= e(current_lang()) ?>" data-theme>
+<html lang="<?= e('en') ?>" data-theme>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -520,7 +520,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <h2 class="fl-section-title">Portfolio <span class="text-sm font-medium text-gray-400 ml-1"><?= count($portfolio_items) ?> projects</span></h2>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <?php foreach ($portfolio_items as $item):
-                            $cover = $item['cover_image'] ? base_url('uploads/' . $item['cover_image']) : null;
+                            $cover = $item['cover_image'] ? base_url('uploads/images/' . $item['cover_image']) : null;
                         ?>
                         <div class="fl-portfolio-card group cursor-pointer" onclick="<?= $cover ? "openModal(this.querySelector('img')?.src)" : '' ?>">
                             <?php if ($cover): ?>
@@ -608,7 +608,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <div class="fl-review">
                         <div class="flex items-center gap-3 mb-2">
                             <?php if (!empty($rv['reviewer_image'])): ?>
-                                <img src="<?= e(base_url('uploads/' . $rv['reviewer_image'])) ?>" alt="" class="w-9 h-9 rounded-full object-cover">
+                                <img src="<?= e(base_url('uploads/images/' . $rv['reviewer_image'])) ?>" alt="" class="w-9 h-9 rounded-full object-cover">
                             <?php else: ?>
                                 <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white bg-gradient-to-br from-indigo-500 to-purple-600">C</div>
                             <?php endif; ?>
@@ -706,7 +706,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <?php foreach (array_slice($portfolio_items, 0, 3) as $pi_item): ?>
                                 <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
                                     <?php if ($pi_item['cover_image']): ?>
-                                        <img src="<?= e(base_url('uploads/' . $pi_item['cover_image'])) ?>" alt="" class="w-5 h-5 rounded object-cover">
+                                        <img src="<?= e(base_url('uploads/images/' . $pi_item['cover_image'])) ?>" alt="" class="w-5 h-5 rounded object-cover">
                                     <?php else: ?>
                                         <svg class="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
                                     <?php endif; ?>

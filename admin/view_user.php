@@ -9,7 +9,7 @@ $has_status_col = has_account_status_column();
 
 $user_id = (int) ($_GET['id'] ?? 0);
 if ($user_id <= 0) {
-    set_flash('error', __('error.invalid_request'));
+    set_flash('error', 'Invalid request. Please try again.');
     redirect('admin/manage_users.php');
 }
 
@@ -22,7 +22,7 @@ $target_user = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$target_user) {
-    set_flash('error', __('admin.user_not_found'));
+    set_flash('error', 'User not found.');
     redirect('admin/manage_users.php');
 }
 
@@ -41,13 +41,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf() && $has_status_col) {
             // Send notification to the user
             $link = null;
             if ($new_status === 'suspended') {
-                $notif_msg = __('admin.account_suspended_msg');
+                $notif_msg = 'Your account has been suspended by an administrator.';
                 $notif_type = 'account_suspended';
             } elseif ($new_status === 'blocked') {
-                $notif_msg = __('admin.account_blocked_msg');
+                $notif_msg = 'Your account has been blocked by an administrator.';
                 $notif_type = 'account_suspended';
             } else {
-                $notif_msg = __('admin.account_reactivated_msg');
+                $notif_msg = 'Your account has been reactivated.';
                 $notif_type = 'account_activated';
             }
             create_notification($conn, $user_id, $notif_type, $notif_msg, $link);
@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf() && $has_status_col) {
 
             set_flash('success', $msg);
         } else {
-            set_flash('error', __('error.could_not_update_status'));
+            set_flash('error', 'Could not update user status.');
         }
         $stmt->close();
     }
@@ -162,16 +162,16 @@ if ($target_user['role'] === 'company') {
 
 $status = $target_user['account_status'] ?? 'active';
 
-$page_title = __('admin.view_user_title') . ' - ' . e($target_user['username']);
+$page_title = 'User Profile' . ' - ' . e($target_user['username']);
 require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Breadcrumb -->
 <div class="mb-6 admin-fade">
     <div class="flex items-center gap-3 mb-1">
-        <a href="<?= e(base_url('admin/admin_dashboard.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e(__('admin.dashboard_title')) ?></a>
+        <a href="<?= e(base_url('admin/admin_dashboard.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e('Admin Dashboard') ?></a>
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--color-text-placeholder)"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e(__('admin.manage_users')) ?></a>
+        <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e('Manage Users') ?></a>
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--color-text-placeholder)"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         <span class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e($target_user['username']) ?></span>
     </div>
@@ -209,7 +209,7 @@ require __DIR__ . '/includes/admin_header.php';
                 <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full <?= $sc ?>"><?= e(__('user_status.' . $status)) ?></span>
             </div>
             <p class="text-sm mb-1" style="color:var(--color-text-secondary)"><?= e($target_user['email']) ?></p>
-            <p class="text-xs" style="color:var(--color-text-muted)"><?= e(__('admin.joined_on')) ?> <?= e($target_user['created_at']) ?></p>
+            <p class="text-xs" style="color:var(--color-text-muted)"><?= e('Joined on') ?> <?= e($target_user['created_at']) ?></p>
         </div>
     </div>
 </div>
@@ -220,46 +220,46 @@ require __DIR__ . '/includes/admin_header.php';
         <?php if ($target_user['role'] === 'company' && $profile): ?>
             <!-- Company Profile -->
             <div class="card">
-                <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e(__('admin.company_profile')) ?></h2>
+                <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e('Company Profile') ?></h2>
                 <div class="grid sm:grid-cols-2 gap-4">
                     <?php if ($profile['company_name']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.company_name')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Company Name *') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['company_name']) ?></p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['phone']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.phone')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Phone') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['phone']) ?></p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['website']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.website')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Website') ?></p>
                             <a href="<?= e($profile['website']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#127760; Visit Website</a>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['location']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.location')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Location') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['location']) ?></p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['established_year']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.established_year')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Established Year') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['established_year']) ?></p>
                         </div>
                     <?php endif; ?>
                     <div>
-                        <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('admin.total_jobs')) ?></p>
+                        <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Total Jobs') ?></p>
                         <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= $profile_extra['jobs_count'] ?? 0 ?></p>
                     </div>
                 </div>
                 <?php if ($profile['description']): ?>
                     <div class="mt-4">
-                        <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e(__('profile.description')) ?></p>
+                        <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e('Description') ?></p>
                         <p class="text-sm" style="color:var(--color-text-secondary)"><?= nl2br(e($profile['description'])) ?></p>
                     </div>
                 <?php endif; ?>
@@ -268,7 +268,7 @@ require __DIR__ . '/includes/admin_header.php';
             <!-- Recent Jobs -->
             <?php if (!empty($profile_extra['recent_jobs'])): ?>
                 <div class="card">
-                    <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e(__('admin.recent_jobs')) ?></h2>
+                    <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e('Recent Jobs') ?></h2>
                     <div class="space-y-3">
                         <?php foreach ($profile_extra['recent_jobs'] as $job): ?>
                             <div class="flex flex-wrap justify-between items-center gap-2 py-2" style="border-bottom:1px solid var(--color-border)">
@@ -286,68 +286,68 @@ require __DIR__ . '/includes/admin_header.php';
         <?php elseif ($target_user['role'] === 'freelancer' && $profile): ?>
             <!-- Freelancer Profile -->
             <div class="card">
-                <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e(__('admin.freelancer_profile')) ?></h2>
+                <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e('Freelancer Profile') ?></h2>
                 <div class="grid sm:grid-cols-2 gap-4">
                     <?php if ($profile['full_name']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.full_name')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Full Name *') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['full_name']) ?></p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['title']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.title')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Professional Title') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['title']) ?></p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['phone']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.phone')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Phone') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['phone']) ?></p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['location']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.location')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Location') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['location']) ?></p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['experience_years']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.experience')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Experience (Years)') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['experience_years']) ?> years</p>
                         </div>
                     <?php endif; ?>
                     <?php if ($profile['hourly_rate']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('profile.hourly_rate')) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Hourly Rate ($)') ?></p>
                             <p class="text-sm" style="color:var(--color-text-primary)">$<?= e(number_format((float) $profile['hourly_rate'], 2)) ?></p>
                         </div>
                     <?php endif; ?>
                     <div>
-                        <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('admin.applications_sent')) ?></p>
+                        <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Applications Sent') ?></p>
                         <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= $profile_extra['applications_count'] ?? 0 ?></p>
                     </div>
                     <div>
-                        <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e(__('admin.assignments')) ?></p>
+                        <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Assignments') ?></p>
                         <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= $profile_extra['assignments_count'] ?? 0 ?></p>
                     </div>
                 </div>
                 <?php if ($profile['portfolio_url']): ?>
                     <div class="mt-4">
-                        <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e(__('profile.portfolio_url')) ?></p>
+                        <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e('Portfolio URL') ?></p>
                         <a href="<?= e($profile['portfolio_url']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#128193; View Portfolio</a>
                     </div>
                 <?php endif; ?>
                 <?php if ($profile['bio']): ?>
                     <div class="mt-4">
-                        <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e(__('profile.bio')) ?></p>
+                        <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e('Bio') ?></p>
                         <p class="text-sm" style="color:var(--color-text-secondary)"><?= nl2br(e($profile['bio'])) ?></p>
                     </div>
                 <?php endif; ?>
                 <?php if (!empty($profile_extra['skills'])): ?>
                     <div class="mt-4">
-                        <p class="text-xs font-medium mb-2" style="color:var(--color-text-muted)"><?= e(__('profile.skills')) ?></p>
+                        <p class="text-xs font-medium mb-2" style="color:var(--color-text-muted)"><?= e('Skills') ?></p>
                         <div class="flex flex-wrap gap-2">
                             <?php foreach ($profile_extra['skills'] as $skill): ?>
                                 <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300"><?= e($skill) ?></span>
@@ -360,7 +360,7 @@ require __DIR__ . '/includes/admin_header.php';
             <!-- Recent Applications -->
             <?php if (!empty($profile_extra['recent_applications'])): ?>
                 <div class="card">
-                    <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e(__('admin.recent_applications')) ?></h2>
+                    <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e('Recent Applications') ?></h2>
                     <div class="space-y-3">
                         <?php foreach ($profile_extra['recent_applications'] as $app): ?>
                             <div class="flex flex-wrap justify-between items-center gap-2 py-2" style="border-bottom:1px solid var(--color-border)">
@@ -381,47 +381,47 @@ require __DIR__ . '/includes/admin_header.php';
     <div class="space-y-6">
         <?php if ($has_status_col): ?>
         <div class="card">
-            <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e(__('admin.account_status')) ?></h2>
+            <h2 class="text-lg font-semibold mb-4" style="color:var(--color-text-primary)"><?= e('Account Status') ?></h2>
             <form method="POST">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <div class="mb-4">
-                    <label class="block text-sm font-medium mb-2" style="color:var(--color-text-secondary)"><?= e(__('admin.change_status')) ?></label>
+                    <label class="block text-sm font-medium mb-2" style="color:var(--color-text-secondary)"><?= e('Change Account Status') ?></label>
                     <select name="account_status" class="form-input">
-                        <option value="active" <?= $status === 'active' ? 'selected' : '' ?>><?= e(__('user_status.active')) ?></option>
-                        <option value="suspended" <?= $status === 'suspended' ? 'selected' : '' ?>><?= e(__('user_status.suspended')) ?></option>
-                        <option value="blocked" <?= $status === 'blocked' ? 'selected' : '' ?>><?= e(__('user_status.blocked')) ?></option>
+                        <option value="active" <?= $status === 'active' ? 'selected' : '' ?>><?= e('Active') ?></option>
+                        <option value="suspended" <?= $status === 'suspended' ? 'selected' : '' ?>><?= e('Suspended') ?></option>
+                        <option value="blocked" <?= $status === 'blocked' ? 'selected' : '' ?>><?= e('Blocked') ?></option>
                     </select>
                 </div>
-                <button type="submit" class="btn-primary w-full" onclick="return confirm('<?= e(__('admin.confirm_status_change')) ?>')">
-                    <?= e(__('admin.update_status')) ?>
+                <button type="submit" class="btn-primary w-full" onclick="return confirm('<?= e('Are you sure you want to change this user\'s status?') ?>')">
+                    <?= e('Update Status') ?>
                 </button>
             </form>
         </div>
         <?php else: ?>
         <div class="card" style="background:var(--color-flash-error-bg);border-color:var(--color-flash-error-border)">
-            <p class="text-sm" style="color:var(--color-flash-error-text)"><?= e(__('admin.migration_required')) ?></p>
+            <p class="text-sm" style="color:var(--color-flash-error-text)"><?= e('Database migration required') ?></p>
             <code class="block mt-2 p-2 rounded text-xs" style="background:rgba(0,0,0,0.05);color:var(--color-flash-error-text)">ALTER TABLE users ADD COLUMN account_status ENUM('active', 'suspended', 'blocked') DEFAULT 'active' AFTER last_activity;</code>
         </div>
         <?php endif; ?>
 
         <!-- Account Summary -->
         <div class="card">
-            <h2 class="text-lg font-semibold mb-3" style="color:var(--color-text-primary)"><?= e(__('admin.account_summary')) ?></h2>
+            <h2 class="text-lg font-semibold mb-3" style="color:var(--color-text-primary)"><?= e('Account Summary') ?></h2>
             <div class="space-y-3 text-sm">
                 <div class="flex justify-between">
-                    <span style="color:var(--color-text-muted)"><?= e(__('admin.user_id')) ?></span>
+                    <span style="color:var(--color-text-muted)"><?= e('User ID') ?></span>
                     <span style="color:var(--color-text-primary)">#<?= $target_user['id'] ?></span>
                 </div>
                 <div class="flex justify-between">
-                    <span style="color:var(--color-text-muted)"><?= e(__('admin.role')) ?></span>
+                    <span style="color:var(--color-text-muted)"><?= e('Role') ?></span>
                     <span style="color:var(--color-text-primary)"><?= e(ucfirst($target_user['role'])) ?></span>
                 </div>
                 <div class="flex justify-between">
-                    <span style="color:var(--color-text-muted)"><?= e(__('admin.status')) ?></span>
+                    <span style="color:var(--color-text-muted)"><?= e('Status') ?></span>
                     <span style="color:var(--color-text-primary)"><?= e(__('user_status.' . $status)) ?></span>
                 </div>
                 <div class="flex justify-between">
-                    <span style="color:var(--color-text-muted)"><?= e(__('admin.joined_on')) ?></span>
+                    <span style="color:var(--color-text-muted)"><?= e('Joined on') ?></span>
                     <span style="color:var(--color-text-primary)"><?= e($target_user['created_at']) ?></span>
                 </div>
             </div>

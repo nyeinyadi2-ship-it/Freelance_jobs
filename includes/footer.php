@@ -6,7 +6,7 @@
 <?php endif; ?>
 <footer style="background:var(--color-footer);border-color:var(--color-border)" class="border-t py-6 mt-auto">
     <div class="container mx-auto px-4 max-w-6xl text-center" style="color:var(--color-text-muted)">
-        <p class="text-sm">&copy; <?= date('Y') ?> <?= e(__('app.name')) ?>. <?= e(__('footer.rights')) ?></p>
+        <p class="text-sm">&copy; <?= date('Y') ?> <?= e('FreelanceHub') ?>. <?= e('All rights reserved.') ?></p>
     </div>
 </footer>
 <script>

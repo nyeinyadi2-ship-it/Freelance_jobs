@@ -16,17 +16,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $st = $conn->prepare("SELECT id FROM jobs WHERE id = ? AND status = 'approved'");
         $st->bind_param('i', $job_id); $st->execute();
         $job = $st->get_result()->fetch_assoc(); $st->close();
-        if (!$job) { set_flash('error', __('error.job_not_available')); }
+        if (!$job) { set_flash('error', 'Job is not available for application.'); }
         else {
             $st = $conn->prepare('SELECT id FROM assignments WHERE job_id = ?');
             $st->bind_param('i', $job_id); $st->execute();
             $has = $st->get_result()->num_rows > 0; $st->close();
-            if ($has) { set_flash('error', __('error.job_already_assigned')); }
+            if ($has) { set_flash('error', 'This job has already been assigned.'); }
             else {
                 $st = $conn->prepare('SELECT id FROM job_applications WHERE job_id = ? AND freelancer_id = ?');
                 $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute();
                 $exists = $st->get_result()->num_rows > 0; $st->close();
-                if ($exists) { set_flash('error', __('error.already_applied')); }
+                if ($exists) { set_flash('error', 'You have already applied for this job.'); }
                 else {
                     $st = $conn->prepare('INSERT INTO job_applications (job_id, freelancer_id) VALUES (?, ?)');
                     $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute(); $st->close();
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     $st->bind_param('i', $job_id); $st->execute();
                     $ji = $st->get_result()->fetch_assoc(); $st->close();
                     if ($ji) create_notification($conn, (int) $ji['user_id'], 'new_application', $fl_user['username'] . " applied for your job \"{$ji['title']}\".", 'company/view_applications.php?id=' . $job_id);
-                    set_flash('success', __('success.application_submitted'));
+                    set_flash('success', 'Application submitted successfully.');
                 }
             }
         }

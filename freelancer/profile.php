@@ -11,7 +11,7 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
-    if (!verify_csrf()) { $error = __('error.invalid_request'); }
+    if (!verify_csrf()) { $error = 'Invalid request. Please try again.'; }
     else {
         $full_name = trim($_POST['full_name'] ?? '');
         $title = trim($_POST['title'] ?? '');
@@ -21,14 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
         $experience_years = (int) ($_POST['experience_years'] ?? 0);
         $hourly_rate = (float) ($_POST['hourly_rate'] ?? 0);
         $selected_skills = $_POST['skills'] ?? [];
-        if ($full_name === '') $error = __('profile.name_required');
-        elseif ($hourly_rate < 0) $error = __('profile.rate_min');
+        if ($full_name === '') $error = 'Full name is required.';
+        elseif ($hourly_rate < 0) $error = 'Hourly rate must be 0 or greater.';
         else {
             $old_img = $fl_profile['profile_image'];
             $new_img = $old_img;
             if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
                 $uploaded = upload_image($_FILES['profile_image']);
-                if ($uploaded) $new_img = $uploaded; else $error = __('upload.invalid_profile');
+                if ($uploaded) $new_img = $uploaded; else $error = 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
             }
             if ($error === '') {
                 $conn->begin_transaction();
@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                     $conn->commit();
                     if ($new_img !== $old_img && $old_img) delete_upload($old_img);
                     $_SESSION['profile_image'] = $new_img;
-                    $success = __('profile.updated');
+                    $success = 'Profile updated successfully.';
                     $fl_profile['full_name']=$full_name; $fl_profile['title']=$title; $fl_profile['phone']=$phone;
                     $fl_profile['location']=$location; $fl_profile['bio']=$bio;
                     $fl_profile['experience_years']=$ey; $fl_profile['hourly_rate']=$hr; $fl_profile['profile_image']=$new_img;
@@ -217,7 +217,7 @@ $r->close();
                 <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="group block rounded-xl overflow-hidden border transition-all hover:shadow-lg hover:-translate-y-1" style="border-color:var(--color-border)">
                     <?php if ($pi['cover_image']): ?>
                         <div class="aspect-video overflow-hidden bg-gray-100 dark:bg-gray-800">
-                            <img src="<?= e(base_url('uploads/' . $pi['cover_image'])) ?>" alt="<?= e($pi['title']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                            <img src="<?= e(base_url('uploads/images/' . $pi['cover_image'])) ?>" alt="<?= e($pi['title']) ?>" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                         </div>
                     <?php else: ?>
                         <div class="aspect-video flex items-center justify-center" style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(168,85,247,0.08))">

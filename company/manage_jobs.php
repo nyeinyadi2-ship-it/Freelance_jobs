@@ -8,7 +8,7 @@ $user = current_user();
 $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
-    set_flash('error', __('error.company_not_found'));
+    set_flash('error', 'Company profile not found.');
     redirect('login.php');
 }
 

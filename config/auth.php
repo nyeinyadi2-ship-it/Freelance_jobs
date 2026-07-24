@@ -6,7 +6,6 @@ if (session_status() === PHP_SESSION_NONE) {
 
 require_once __DIR__ . '/lang.php';
 require_once __DIR__ . '/upload.php';
-init_lang();
 
 function base_url(string $path = ''): string
 {
@@ -30,7 +29,7 @@ function redirect(string $path): void
 function require_login(): void
 {
     if (empty($_SESSION['user_id'])) {
-        set_flash('error', __('error.login_required'));
+        set_flash('error', 'Please log in to continue.');
         redirect('login.php');
     }
 
@@ -55,11 +54,11 @@ function require_login(): void
 
     if ($status === 'suspended') {
         session_destroy();
-        set_flash('error', __('error.account_suspended'));
+        set_flash('error', 'Your account has been suspended. Please contact support.');
         redirect('login.php');
     } elseif ($status === 'blocked') {
         session_destroy();
-        set_flash('error', __('error.account_blocked'));
+        set_flash('error', 'Your account has been blocked. Please contact support.');
         redirect('login.php');
     }
 }
@@ -69,7 +68,7 @@ function require_role(string $role): void
     require_login();
 
     if (($_SESSION['role'] ?? '') !== $role) {
-        set_flash('error', __('error.no_permission'));
+        set_flash('error', 'You do not have permission to access that page.');
         redirect('login.php');
     }
 }
@@ -90,7 +89,7 @@ function current_user(): array
 function profile_image_url(?string $filename): ?string
 {
     if ($filename) {
-        return base_url('uploads/' . $filename);
+        return base_url('uploads/images/' . $filename);
     }
     return null;
 }
@@ -195,5 +194,5 @@ function status_badge(string $status): string
 
     $class = $classes[$status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';
 
-    return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $class . '">' . e(translate_status($status)) . '</span>';
+    return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $class . '">' . e(ucfirst($status)) . '</span>';
 }

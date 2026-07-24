@@ -263,7 +263,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                 <div class="space-y-3">
                     <?php foreach (array_slice($recent_apps, 0, 5) as $app): ?>
                         <div class="flex items-center gap-3 p-3.5 rounded-xl transition-all hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border:1px solid var(--color-border)">
-                            <?php if ($app['logo_image']): ?><img src="<?= e(base_url('uploads/' . $app['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php else: ?><div class="w-10 h-10 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-sm" style="background:rgba(99,102,241,0.1)"><?= strtoupper(mb_substr($app['company_name'], 0, 1)) ?></div><?php endif; ?>
+                            <?php if ($app['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $app['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php else: ?><div class="w-10 h-10 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-sm" style="background:rgba(99,102,241,0.1)"><?= strtoupper(mb_substr($app['company_name'], 0, 1)) ?></div><?php endif; ?>
                             <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($app['company_name']) ?> &middot; $<?= number_format((float) $app['budget'], 0) ?></p></div>
                             <div class="text-right flex-shrink-0"><p class="text-xs mb-1" style="color:var(--color-text-placeholder)"><?= date('M j', strtotime($app['applied_at'])) ?></p><?= status_badge($app['status']) ?></div>
                         </div>
@@ -284,7 +284,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <?php foreach (array_slice($ongoing_tasks, 0, 5) as $task): ?>
                         <div class="p-4 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
                             <div class="flex items-center gap-3 mb-2.5">
-                                <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/' . $task['logo_image'])) ?>" alt="" class="w-8 h-8 rounded-lg object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
+                                <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-8 h-8 rounded-lg object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
                                 <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?> &middot; $<?= number_format((float) $task['budget'], 0) ?></p></div>
                                 <?= status_badge($task['status']) ?>
                             </div>
@@ -306,7 +306,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
         <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <?php foreach ($recommended as $job): ?>
                 <div class="p-4 rounded-xl hover-lift" style="background:var(--color-bg);border:1px solid var(--color-border)">
-                    <div class="flex items-center gap-2 mb-2"><?php if ($job['logo_image']): ?><img src="<?= e(base_url('uploads/' . $job['logo_image'])) ?>" alt="" class="w-7 h-7 rounded-lg object-contain border" style="border-color:var(--color-border)"><?php endif; ?><span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e($job['company_name']) ?></span></div>
+                    <div class="flex items-center gap-2 mb-2"><?php if ($job['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $job['logo_image'])) ?>" alt="" class="w-7 h-7 rounded-lg object-contain border" style="border-color:var(--color-border)"><?php endif; ?><span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e($job['company_name']) ?></span></div>
                     <p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($job['title']) ?></p>
                     <p class="text-xs mt-1 line-clamp-2" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($job['description'] ?? '', 0, 100, '...')) ?></p>
                     <div class="flex items-center justify-between mt-3 pt-3 border-t" style="border-color:var(--color-border)"><span class="text-sm font-bold text-primary-600">$<?= number_format((float) $job['budget'], 0) ?></span><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-xs font-medium text-primary-600 hover:text-primary-700">Apply &rarr;</a></div>
@@ -327,7 +327,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
             <?php foreach ($all_apps as $app): ?>
                 <div class="glass rounded-2xl p-5 hover-lift">
                     <div class="flex items-center gap-4">
-                        <?php if ($app['logo_image']): ?><img src="<?= e(base_url('uploads/' . $app['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php else: ?><div class="w-12 h-12 rounded-xl flex items-center justify-center text-indigo-600 font-bold border" style="background:rgba(99,102,241,0.1);border-color:var(--color-border)"><?= strtoupper(mb_substr($app['company_name'], 0, 1)) ?></div><?php endif; ?>
+                        <?php if ($app['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $app['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php else: ?><div class="w-12 h-12 rounded-xl flex items-center justify-center text-indigo-600 font-bold border" style="background:rgba(99,102,241,0.1);border-color:var(--color-border)"><?= strtoupper(mb_substr($app['company_name'], 0, 1)) ?></div><?php endif; ?>
                         <div class="flex-1 min-w-0"><p class="font-semibold" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p><p class="text-sm" style="color:var(--color-text-muted)"><?= e($app['company_name']) ?> &middot; $<?= number_format((float) $app['budget'], 2) ?></p><p class="text-xs" style="color:var(--color-text-placeholder)">Applied <?= date('M j, Y', strtotime($app['applied_at'])) ?></p></div>
                         <?= status_badge($app['status']) ?>
                     </div>
@@ -358,7 +358,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
                         <div class="flex items-center gap-3">
                             <?php if ($req['logo_image']): ?>
-                                <img src="<?= e(base_url('uploads/' . $req['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)">
+                                <img src="<?= e(base_url('uploads/images/' . $req['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)">
                             <?php else: ?>
                                 <div class="w-12 h-12 rounded-xl flex items-center justify-center text-purple-600 font-bold border" style="background:rgba(139,92,246,0.1);border-color:var(--color-border)"><?= strtoupper(mb_substr($req['company_name'], 0, 1)) ?></div>
                             <?php endif; ?>
@@ -460,7 +460,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
             <?php foreach ($ongoing_tasks as $task): ?>
                 <div class="glass rounded-2xl p-6 hover-lift">
                     <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
-                        <div class="flex items-center gap-3"><?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/' . $task['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?><div><p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p><h3 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($task['title']) ?></h3></div></div>
+                        <div class="flex items-center gap-3"><?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?><div><p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p><h3 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($task['title']) ?></h3></div></div>
                         <?= status_badge($task['status']) ?>
                     </div>
                     <p class="text-sm mb-4 leading-relaxed" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($task['description'] ?? '', 0, 200, '...')) ?></p>
@@ -487,7 +487,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
             <?php foreach ($completed_list as $task): ?>
                 <div class="glass rounded-2xl p-5 hover-lift">
                     <div class="flex items-center gap-3 mb-3">
-                        <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/' . $task['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
+                        <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
                         <div class="flex-1 min-w-0"><p class="font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p></div>
                         <?= status_badge('completed') ?>
                     </div>
@@ -526,7 +526,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <?php foreach ($portfolio_items as $item): ?>
                 <div class="glass rounded-2xl overflow-hidden hover-lift">
-                    <?php if ($item['image']): ?><img src="<?= e(base_url('uploads/' . $item['image'])) ?>" alt="" class="w-full h-40 object-cover"><?php else: ?><div class="w-full h-40 flex items-center justify-center" style="background:rgba(99,102,241,0.05)"><svg class="w-12 h-12" style="color:var(--color-text-placeholder)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div><?php endif; ?>
+                    <?php if ($item['image']): ?><img src="<?= e(base_url('uploads/images/' . $item['image'])) ?>" alt="" class="w-full h-40 object-cover"><?php else: ?><div class="w-full h-40 flex items-center justify-center" style="background:rgba(99,102,241,0.05)"><svg class="w-12 h-12" style="color:var(--color-text-placeholder)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div><?php endif; ?>
                     <div class="p-4"><h3 class="font-semibold truncate" style="color:var(--color-text-primary)"><?= e($item['title']) ?></h3><p class="text-xs" style="color:var(--color-text-muted)"><?= e($item['company']) ?></p><div class="flex items-center justify-between mt-3 pt-3 border-t text-xs" style="border-color:var(--color-border)"><span class="font-bold text-primary-600">$<?= number_format((float) $item['budget'], 0) ?></span><?php if ($item['completed']): ?><span class="flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Completed</span><?php else: ?><span class="flex items-center gap-1 text-amber-500 font-medium">In Progress</span><?php endif; ?></div></div>
                 </div>
             <?php endforeach; ?>
@@ -564,7 +564,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
 <div class="dash-section" id="tab-notifications">
     <div class="flex items-center justify-between mb-5"><h2 class="text-xl font-bold" style="color:var(--color-text-primary)">Notifications</h2><?php if ($fl_notif_count > 0): ?><button type="button" onclick="markAllFlNotif()" class="text-sm font-medium text-primary-600 hover:text-primary-700">Mark all as read</button><?php endif; ?></div>
     <?php if (empty($fl_recent_notifs)): ?>
-        <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)"><svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><p><?= __('notif.no_notifications') ?></p></div>
+        <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)"><svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><p><?= 'No notifications yet.' ?></p></div>
     <?php else: ?>
         <div class="space-y-2"><?php foreach ($fl_recent_notifs as $n): ?>
             <div class="glass rounded-xl p-4 flex items-start gap-3 <?= $n['is_read']?'':'border-l-4 border-l-primary-500' ?>" style="<?= $n['is_read']?'':'background:rgba(99,102,241,0.03)' ?>">

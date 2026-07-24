@@ -15,21 +15,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $job_check = $st->get_result()->fetch_assoc(); $st->close();
 
     if (!$job_check) {
-        set_flash('error', __('error.job_not_available'));
+        set_flash('error', 'Job is not available for application.');
     } else {
         $st = $conn->prepare('SELECT id FROM assignments WHERE job_id = ?');
         $st->bind_param('i', $job_id); $st->execute();
         $already_assigned = $st->get_result()->num_rows > 0; $st->close();
 
         if ($already_assigned) {
-            set_flash('error', __('error.job_already_assigned'));
+            set_flash('error', 'This job has already been assigned.');
         } else {
             $st = $conn->prepare('SELECT id FROM job_applications WHERE job_id = ? AND freelancer_id = ?');
             $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute();
             $already_applied = $st->get_result()->num_rows > 0; $st->close();
 
             if ($already_applied) {
-                set_flash('error', __('error.already_applied'));
+                set_flash('error', 'You have already applied for this job.');
             } else {
                 $st = $conn->prepare('INSERT INTO job_applications (job_id, freelancer_id) VALUES (?, ?)');
                 $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute(); $st->close();
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 if ($ji) {
                     create_notification($conn, (int) $ji['user_id'], 'new_application', $fl_user['username'] . " applied for your job \"{$ji['title']}\".", 'company/view_applications.php?id=' . $job_id);
                 }
-                set_flash('success', __('success.application_submitted'));
+                set_flash('success', 'Application submitted successfully.');
             }
         }
     }
@@ -357,7 +357,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <div class="flex items-center gap-4 flex-wrap text-white/75 text-sm">
                         <span class="flex items-center gap-2">
                             <?php if (!empty($job['logo_image'])): ?>
-                                <img src="<?= e(base_url('uploads/' . $job['logo_image'])) ?>" alt="" class="w-7 h-7 rounded-lg object-contain bg-white/20">
+                                <img src="<?= e(base_url('uploads/images/' . $job['logo_image'])) ?>" alt="" class="w-7 h-7 rounded-lg object-contain bg-white/20">
                             <?php else: ?>
                                 <div class="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white text-[10px] font-bold"><?= strtoupper(mb_substr($job['company_name'] ?? 'C', 0, 1)) ?></div>
                             <?php endif; ?>
@@ -443,7 +443,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
                         Attachments
                     </h3>
-                    <a href="<?= e(base_url('uploads/' . $job['attachment'])) ?>" target="_blank" class="inline-flex items-center gap-3 px-5 py-3.5 rounded-xl text-sm font-medium transition-all hover:shadow-md" style="background:rgba(99,102,241,0.06);color:var(--color-text-secondary);border:1px solid var(--color-border)">
+                    <a href="<?= e(base_url('uploads/images/' . $job['attachment'])) ?>" target="_blank" class="inline-flex items-center gap-3 px-5 py-3.5 rounded-xl text-sm font-medium transition-all hover:shadow-md" style="background:rgba(99,102,241,0.06);color:var(--color-text-secondary);border:1px solid var(--color-border)">
                         <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:rgba(99,102,241,0.1)">
                             <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         </div>
@@ -705,7 +705,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
             <a href="<?= e(base_url('freelancer/view_job.php?id=' . $sj['id'])) ?>" class="similar-card p-5 block">
                 <div class="flex items-center gap-3 mb-4">
                     <?php if ($sj['logo_image']): ?>
-                        <img src="<?= e(base_url('uploads/' . $sj['logo_image'])) ?>" alt="" class="w-11 h-11 rounded-xl object-contain border" style="border-color:var(--color-border)">
+                        <img src="<?= e(base_url('uploads/images/' . $sj['logo_image'])) ?>" alt="" class="w-11 h-11 rounded-xl object-contain border" style="border-color:var(--color-border)">
                     <?php else: ?>
                         <div class="w-11 h-11 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-lg" style="background:rgba(99,102,241,0.1)"><?= strtoupper(mb_substr($sj['company_name'] ?? 'C', 0, 1)) ?></div>
                     <?php endif; ?>

@@ -363,7 +363,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Cover Image <?= $edit_item ? '(leave empty to keep current)' : '' ?></label>
                 <input type="file" name="cover_image" accept=".jpg,.jpeg,.png,.gif,.webp" class="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:text-white file:cursor-pointer" style="color:var(--color-text-muted)">
                 <?php if ($edit_item && $edit_item['cover_image']): ?>
-                    <div class="mt-2"><img src="<?= e(base_url('uploads/' . $edit_item['cover_image'])) ?>" class="w-20 h-14 rounded-lg object-cover border" style="border-color:var(--color-border)"></div>
+                    <div class="mt-2"><img src="<?= e(base_url('uploads/images/' . $edit_item['cover_image'])) ?>" class="w-20 h-14 rounded-lg object-cover border" style="border-color:var(--color-border)"></div>
                 <?php endif; ?>
             </div>
             <div>
@@ -383,7 +383,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <div class="flex flex-wrap gap-2 mt-2">
                     <?php foreach ($edit_images as $img): ?>
                         <div class="relative group">
-                            <img src="<?= e(base_url('uploads/' . $img['image_path'])) ?>" class="w-20 h-14 rounded-lg object-cover border" style="border-color:var(--color-border)">
+                            <img src="<?= e(base_url('uploads/images/' . $img['image_path'])) ?>" class="w-20 h-14 rounded-lg object-cover border" style="border-color:var(--color-border)">
                             <form method="POST" class="absolute -top-1.5 -right-1.5 opacity-0 group-hover:opacity-100 transition-opacity" onsubmit="return confirm('Remove this image?')">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="do" value="delete_image">
@@ -419,7 +419,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 <?php else: ?>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <?php foreach ($portfolio_items as $item):
-            $coverUrl = $item['cover_image'] ? base_url('uploads/' . $item['cover_image']) : null;
+            $coverUrl = $item['cover_image'] ? base_url('uploads/images/' . $item['cover_image']) : null;
         ?>
         <div class="glass rounded-2xl overflow-hidden portfolio-card reveal">
             <!-- Cover -->

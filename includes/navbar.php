@@ -16,7 +16,7 @@ if ($role && isset($user['user_id'])) {
         $chat_unread = get_unread_count($conn, (int) $user['user_id']);
     }
 }
-$current_lang = current_lang();
+$current_lang = 'en';
 $is_logged_in = $role && in_array($role, ['company', 'freelancer'], true);
 
 $current_script = basename($_SERVER['SCRIPT_NAME'] ?? '');
@@ -35,15 +35,15 @@ $role_links = [];
 if ($is_logged_in) {
     if ($role === 'company') {
         $role_links = [
-            ['label' => __('nav.dashboard'), 'href' => base_url('company/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
-            ['label' => __('nav.post_job'), 'href' => base_url('company/post_job.php'), 'icon' => 'plus', 'page' => 'post_job'],
-            ['label' => __('nav.my_jobs'), 'href' => base_url('company/manage_jobs.php'), 'icon' => 'briefcase', 'page' => 'manage_jobs'],
+            ['label' => 'Dashboard', 'href' => base_url('company/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
+            ['label' => 'Post Job', 'href' => base_url('company/post_job.php'), 'icon' => 'plus', 'page' => 'post_job'],
+            ['label' => 'My Jobs', 'href' => base_url('company/manage_jobs.php'), 'icon' => 'briefcase', 'page' => 'manage_jobs'],
         ];
     } elseif ($role === 'freelancer') {
         $role_links = [
-            ['label' => __('nav.dashboard'), 'href' => base_url('freelancer/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
-            ['label' => __('nav.browse_jobs'), 'href' => base_url('freelancer/browse_jobs.php'), 'icon' => 'search', 'page' => 'browse_jobs'],
-            ['label' => __('nav.my_tasks'), 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
+            ['label' => 'Dashboard', 'href' => base_url('freelancer/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
+            ['label' => 'Browse Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'icon' => 'search', 'page' => 'browse_jobs'],
+            ['label' => 'My Tasks', 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
             ['label' => 'Portfolio', 'href' => base_url('freelancer/portfolio.php'), 'icon' => 'briefcase', 'page' => 'portfolio'],
         ];
     }
@@ -120,7 +120,7 @@ html.dark .ml.on{background:rgba(99,102,241,.12);color:#818cf8}
                 <div class="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-indigo-500/20" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
                     <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 </div>
-                <span class="text-[15px] font-bold hidden sm:inline" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text"><?= e(__('app.name')) ?></span>
+                <span class="text-[15px] font-bold hidden sm:inline" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text"><?= e('FreelanceHub') ?></span>
             </a>
 
             <!-- Desktop Links -->
@@ -142,22 +142,22 @@ html.dark .ml.on{background:rgba(99,102,241,.12);color:#818cf8}
             <div class="flex items-center gap-0.5">
                 <?php if ($is_logged_in): ?>
                     <!-- Chat -->
-                    <a href="<?= e(base_url('chat/index.php')) ?>" class="ni relative" title="<?= e(__('nav.messages')) ?>">
+                    <a href="<?= e(base_url('chat/index.php')) ?>" class="ni relative" title="<?= e('Messages') ?>">
                         <svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                         <?php if ($chat_unread > 0): ?><span class="absolute top-[2px] right-[2px] nb" style="background:#10b981;border-color:#fff"><?= min($chat_unread,99) ?></span><?php endif; ?>
                     </a>
 
                     <!-- Notifications -->
                     <div class="relative notification-container">
-                        <button type="button" class="notification-toggle ni relative" aria-label="<?= e(__('notif.title')) ?>">
+                        <button type="button" class="notification-toggle ni relative" aria-label="<?= e('Notifications') ?>">
                             <svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                             <?php if ($unread_count > 0): ?><span id="notifBadge" class="badge" style="position:absolute;top:2px;right:2px;background:#ef4444;border-color:#fff"><?= min($unread_count,99) ?></span><?php endif; ?>
                         </button>
                         <div class="dd notification-dropdown" style="width:360px">
                             <div class="p-3.5 flex items-center justify-between" style="border-bottom:1px solid rgba(0,0,0,.05)">
-                                <span class="font-semibold text-[13px]" style="color:#1e293b"><?= __('notif.recent') ?></span>
+                                <span class="font-semibold text-[13px]" style="color:#1e293b"><?= 'Recent Notifications' ?></span>
                                 <div class="flex items-center gap-2">
-                                    <?php if ($unread_count > 0): ?><button type="button" class="notification-mark-all text-[11px] font-semibold text-indigo-600 hover:text-indigo-700" data-csrf="<?= e(csrf_token()) ?>"><?= __('notif.mark_all_read') ?></button><?php endif; ?>
+                                    <?php if ($unread_count > 0): ?><button type="button" class="notification-mark-all text-[11px] font-semibold text-indigo-600 hover:text-indigo-700" data-csrf="<?= e(csrf_token()) ?>"><?= 'Mark all as read' ?></button><?php endif; ?>
                                     <a href="<?= e(base_url('notifications.php')) ?>" class="text-[11px] font-medium" style="color:#94a3b8">View all</a>
                                 </div>
                             </div>
@@ -165,7 +165,7 @@ html.dark .ml.on{background:rgba(99,102,241,.12);color:#818cf8}
                                 <?php if (empty($recent_notifications)): ?>
                                     <div class="p-8 text-center" style="color:#94a3b8">
                                         <svg class="w-9 h-9 mx-auto mb-2 opacity-25" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                                        <p class="text-xs font-medium"><?= __('notif.no_notifications') ?></p>
+                                        <p class="text-xs font-medium"><?= 'No notifications yet.' ?></p>
                                     </div>
                                 <?php else: ?>
                                     <?php foreach ($recent_notifications as $n): ?>
@@ -177,7 +177,7 @@ html.dark .ml.on{background:rgba(99,102,241,.12);color:#818cf8}
                                                     <p class="text-[10.5px] mt-0.5" style="color:#cbd5e1"><?= e($n['created_at']) ?></p>
                                                 </a>
                                             </div>
-                                            <button type="button" class="notification-delete-btn flex-shrink-0 p-1 rounded-md opacity-0 hover:opacity-100 transition-all hover:bg-red-50 dark:hover:bg-red-900/20" style="color:#94a3b8" data-id="<?= (int) $n['id'] ?>" data-csrf="<?= e(csrf_token()) ?>" title="<?= __('notif.delete') ?>">
+                                            <button type="button" class="notification-delete-btn flex-shrink-0 p-1 rounded-md opacity-0 hover:opacity-100 transition-all hover:bg-red-50 dark:hover:bg-red-900/20" style="color:#94a3b8" data-id="<?= (int) $n['id'] ?>" data-csrf="<?= e(csrf_token()) ?>" title="<?= 'Delete' ?>">
                                                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                                             </button>
                                         </div>
@@ -212,7 +212,7 @@ html.dark .ml.on{background:rgba(99,102,241,.12);color:#818cf8}
                     <div class="relative" id="profile-dropdown-container">
                         <button type="button" id="profile-dropdown-toggle" class="np">
                             <?php if (!empty($user['logo_image'])): ?>
-                                <img src="<?= e(base_url('uploads/' . $user['logo_image'])) ?>" alt="" class="na object-contain">
+                                <img src="<?= e(base_url('uploads/images/' . $user['logo_image'])) ?>" alt="" class="na object-contain">
                             <?php elseif ($imgUrl = profile_image_url($user['profile_image'])): ?>
                                 <img src="<?= e($imgUrl) ?>" alt="" class="na">
                             <?php else: ?>
@@ -278,7 +278,7 @@ html.dark .ml.on{background:rgba(99,102,241,.12);color:#818cf8}
     <div class="flex items-center justify-between p-4" style="border-bottom:1px solid rgba(0,0,0,.06)">
         <a href="<?= e(base_url('index.php')) ?>" class="flex items-center gap-2">
             <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"><svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></div>
-            <span class="text-sm font-bold" style="color:#1e293b"><?= e(__('app.name')) ?></span>
+            <span class="text-sm font-bold" style="color:#1e293b"><?= e('FreelanceHub') ?></span>
         </a>
         <button onclick="closeMobileMenu()" class="p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800" style="color:#64748b"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>
     </div>

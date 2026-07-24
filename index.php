@@ -10,13 +10,13 @@ $login_success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['home_login'])) {
     if (!verify_csrf()) {
-        $login_error = __('error.invalid_request');
+        $login_error = 'Invalid request. Please try again.';
     } else {
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
 
         if ($email === '' || $password === '') {
-            $login_error = __('error.email_password_required');
+            $login_error = 'Email and password are required.';
         } else {
             $has_status_col = has_account_status_column();
             $sql = $has_status_col
@@ -31,9 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['home_login'])) {
             if ($user && password_verify($password, $user['password'])) {
                 $account_status = $has_status_col ? ($user['account_status'] ?? 'active') : 'active';
                 if ($account_status === 'suspended') {
-                    $login_error = __('error.account_suspended');
+                    $login_error = 'Your account has been suspended. Please contact support.';
                 } elseif ($account_status === 'blocked') {
-                    $login_error = __('error.account_blocked');
+                    $login_error = 'Your account has been blocked. Please contact support.';
                 } else {
                     $_SESSION['user_id'] = (int) $user['id'];
                     $_SESSION['username'] = $user['username'];
@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['home_login'])) {
                     // Stay on home page — page will re-render with logged-in navbar
                 }
             } else {
-                $login_error = __('error.invalid_credentials');
+                $login_error = 'Invalid email or password.';
             }
         }
     }
@@ -182,10 +182,10 @@ if ($r) {
     }
 }
 
-$page_title = __('app.tagline');
+$page_title = 'FreelanceHub - Find Work or Hire Talent';
 ?>
 <!DOCTYPE html>
-<html lang="<?= e(current_lang()) ?>" data-theme>
+<html lang="<?= e('en') ?>" data-theme>
 
 <head>
     <meta charset="UTF-8">
@@ -1133,7 +1133,7 @@ $page_title = __('app.tagline');
                             <div class="p-5">
                                 <div class="flex items-center gap-3 mb-3">
                                     <?php if (!empty($job['logo_image'])): ?>
-                                        <img src="<?= e(base_url('uploads/' . $job['logo_image'])) ?>" alt="" class="w-9 h-9 rounded-lg object-cover border-2 border-white dark:border-gray-700 shadow-sm">
+                                        <img src="<?= e(base_url('uploads/images/' . $job['logo_image'])) ?>" alt="" class="w-9 h-9 rounded-lg object-cover border-2 border-white dark:border-gray-700 shadow-sm">
                                     <?php else: ?>
                                         <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-900/40 dark:to-accent-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold text-xs shadow-sm">
                                             <?= e(_first_char($job['company_name'] ?? 'C')) ?>
@@ -1245,7 +1245,7 @@ $page_title = __('app.tagline');
                             <div class="avatar-ring">
                                 <div class="w-20 h-20 rounded-full overflow-hidden">
                                     <?php if (!empty($fl['profile_image'])): ?>
-                                        <img src="<?= e(base_url('uploads/' . $fl['profile_image'])) ?>" alt="" class="w-full h-full object-cover">
+                                        <img src="<?= e(base_url('uploads/images/' . $fl['profile_image'])) ?>" alt="" class="w-full h-full object-cover">
                                     <?php else: ?>
                                         <div class="w-full h-full bg-gradient-to-br from-primary-100 to-accent-100 dark:from-primary-800/40 dark:to-accent-800/40 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold text-xl">
                                             <?= e(_first_char($fl['full_name'] ?? 'F')) ?>

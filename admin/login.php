@@ -14,13 +14,13 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
-        $error = __('error.invalid_request');
+        $error = 'Invalid request. Please try again.';
     } else {
         $email = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
 
         if ($email === '' || $password === '') {
-            $error = __('error.email_password_required');
+            $error = 'Email and password are required.';
         } else {
             $has_status_col = has_account_status_column();
             $sql = $has_status_col
@@ -35,11 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($user && password_verify($password, $user['password'])) {
                 $account_status = $has_status_col ? ($user['account_status'] ?? 'active') : 'active';
                 if ($account_status === 'suspended') {
-                    $error = __('error.account_suspended');
+                    $error = 'Your account has been suspended. Please contact support.';
                 } elseif ($account_status === 'blocked') {
-                    $error = __('error.account_blocked');
+                    $error = 'Your account has been blocked. Please contact support.';
                 } elseif ($user['role'] !== 'admin') {
-                    $error = __('error.no_permission');
+                    $error = 'You do not have permission to access that page.';
                 } else {
                     $_SESSION['user_id'] = (int) $user['id'];
                     $_SESSION['username'] = $user['username'];
@@ -57,16 +57,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     redirect('admin/admin_dashboard.php');
                 }
             } else {
-                $error = __('error.invalid_credentials');
+                $error = 'Invalid email or password.';
             }
         }
     }
 }
 
-$page_title = __('login.title');
+$page_title = 'Login';
 ?>
 <!DOCTYPE html>
-<html lang="<?= e(current_lang()) ?>" data-theme>
+<html lang="<?= e('en') ?>" data-theme>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -189,7 +189,7 @@ $page_title = __('login.title');
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                         </svg>
                     </div>
-                    <span><?= e(__('app.name')) ?></span>
+                    <span><?= e('FreelanceHub') ?></span>
                 </a>
                 <div class="mt-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-white/15 text-white/90">
                     <svg class="w-3.5 h-3.5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -211,7 +211,7 @@ $page_title = __('login.title');
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
 
                     <div class="auth-input-group">
-                        <label class="block text-sm font-medium mb-1.5 text-white/80"><?= e(__('login.email')) ?></label>
+                        <label class="block text-sm font-medium mb-1.5 text-white/80"><?= e('Email') ?></label>
                         <div class="relative">
                             <svg class="auth-input-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                             <input type="email" name="email" required class="auth-input" placeholder="admin@example.com" value="<?= e($_POST['email'] ?? '') ?>" autocomplete="email">
@@ -219,7 +219,7 @@ $page_title = __('login.title');
                     </div>
 
                     <div class="auth-input-group">
-                        <label class="block text-sm font-medium mb-1.5 text-white/80"><?= e(__('login.password')) ?></label>
+                        <label class="block text-sm font-medium mb-1.5 text-white/80"><?= e('Password') ?></label>
                         <div class="relative">
                             <svg class="auth-input-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                             <input type="password" name="password" id="loginPassword" required class="auth-input" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password">
@@ -233,7 +233,7 @@ $page_title = __('login.title');
                     <button type="submit" class="auth-submit">
                         <span class="flex items-center justify-center gap-2">
                             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
-                            <?= e(__('login.submit')) ?>
+                            <?= e('Login') ?>
                         </span>
                     </button>
                 </form>

@@ -9,7 +9,7 @@ $user = current_user();
 $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
-    set_flash('error', __('error.company_not_found'));
+    set_flash('error', 'Company profile not found.');
     redirect('login.php');
 }
 
@@ -29,7 +29,7 @@ $old = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
-        $error = __('error.invalid_request');
+        $error = 'Invalid request. Please try again.';
     } else {
         $old['title'] = trim($_POST['title'] ?? '');
         $old['category'] = trim($_POST['category'] ?? '');
@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     create_notification($conn, $admin_id, 'new_job', "New job \"{$old['title']}\" posted by " . e($user['username']) . " and is now live.", "admin/approve_jobs.php");
                 }
 
-                set_flash('success', __('success.job_posted'));
+                set_flash('success', 'Job posted successfully and is now live.');
                 redirect('company/manage_jobs.php');
             }
         }

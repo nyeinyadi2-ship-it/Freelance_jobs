@@ -37,8 +37,8 @@ function upload_image(array $file, int $max_size = 2 * 1024 * 1024): ?string
         }
     }
 
-    // Ensure uploads directory exists
-    $upload_dir = __DIR__ . '/../uploads/';
+    // Ensure uploads/images directory exists
+    $upload_dir = __DIR__ . '/../uploads/images/';
     if (!is_dir($upload_dir)) {
         if (!mkdir($upload_dir, 0755, true)) {
             return null;
@@ -122,7 +122,7 @@ function delete_upload(string $filename): void
     if ($filename === '') {
         return;
     }
-    $path = __DIR__ . '/../uploads/' . $filename;
+    $path = __DIR__ . '/../uploads/images/' . $filename;
     if (file_exists($path)) {
         unlink($path);
     }

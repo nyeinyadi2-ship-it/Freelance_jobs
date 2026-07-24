@@ -208,7 +208,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <!-- Header -->
                 <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
                     <div class="flex items-center gap-3">
-                        <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/' . $task['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
+                        <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
                         <div>
                             <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p>
                             <h2 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($task['title']) ?></h2>

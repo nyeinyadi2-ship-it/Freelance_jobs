@@ -158,7 +158,7 @@ function withdraw_status_badge(string $status): string
                     <div class="flex flex-col sm:flex-row sm:items-start gap-4">
                         <div class="flex items-center gap-3 flex-shrink-0">
                             <?php if ($ep['logo_image']): ?>
-                                <img src="<?= e(base_url('uploads/' . $ep['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)">
+                                <img src="<?= e(base_url('uploads/images/' . $ep['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)">
                             <?php else: ?>
                                 <div class="w-12 h-12 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-lg" style="background:rgba(99,102,241,0.1)"><?= strtoupper(mb_substr($ep['company_name'], 0, 1)) ?></div>
                             <?php endif; ?>
@@ -229,7 +229,7 @@ function withdraw_status_badge(string $status): string
                 <div class="glass rounded-2xl p-5 hover-lift reveal">
                     <div class="flex items-center gap-3 mb-4">
                         <?php if ($cp['logo_image']): ?>
-                            <img src="<?= e(base_url('uploads/' . $cp['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)">
+                            <img src="<?= e(base_url('uploads/images/' . $cp['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)">
                         <?php else: ?>
                             <div class="w-10 h-10 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-sm" style="background:rgba(99,102,241,0.1)"><?= strtoupper(mb_substr($cp['company_name'], 0, 1)) ?></div>
                         <?php endif; ?>

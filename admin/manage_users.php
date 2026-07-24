@@ -88,20 +88,20 @@ try {
     $stmt->close();
 } catch (mysqli_sql_exception $e) {}
 
-$page_title = __('admin.manage_users_title');
+$page_title = 'Manage Users';
 require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Page Header -->
 <div class="mb-6 admin-fade">
     <div class="flex items-center gap-3 mb-1">
-        <a href="<?= e(base_url('admin/admin_dashboard.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e(__('admin.dashboard_title')) ?></a>
+        <a href="<?= e(base_url('admin/admin_dashboard.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e('Admin Dashboard') ?></a>
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--color-text-placeholder)"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        <span class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e(__('admin.manage_users_title')) ?></span>
+        <span class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e('Manage Users') ?></span>
     </div>
     <div class="flex flex-wrap items-center justify-between gap-4">
-        <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= e(__('admin.manage_users_title')) ?></h1>
-        <div class="text-sm" style="color:var(--color-text-muted)"><?= e(__('admin.total_users')) ?>: <?= $total ?></div>
+        <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= e('Manage Users') ?></h1>
+        <div class="text-sm" style="color:var(--color-text-muted)"><?= e('Total Users') ?>: <?= $total ?></div>
     </div>
 </div>
 
@@ -110,8 +110,8 @@ require __DIR__ . '/includes/admin_header.php';
         <div class="flex items-start gap-3">
             <svg class="w-5 h-5 mt-0.5 flex-shrink-0" style="color:var(--color-flash-error-text)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
             <div>
-                <p class="font-semibold mb-1" style="color:var(--color-flash-error-text)"><?= e(__('admin.migration_required')) ?></p>
-                <p class="text-sm" style="color:var(--color-flash-error-text)"><?= e(__('admin.migration_instructions')) ?></p>
+                <p class="font-semibold mb-1" style="color:var(--color-flash-error-text)"><?= e('Database migration required') ?></p>
+                <p class="text-sm" style="color:var(--color-flash-error-text)"><?= e('The account_status column is missing from the users table. Run this SQL command:') ?></p>
                 <code class="block mt-2 p-2 rounded text-xs" style="background:rgba(0,0,0,0.05);color:var(--color-flash-error-text)">ALTER TABLE users ADD COLUMN account_status ENUM('active', 'suspended', 'blocked') DEFAULT 'active' AFTER last_activity;</code>
             </div>
         </div>
@@ -122,51 +122,51 @@ require __DIR__ . '/includes/admin_header.php';
 <div class="card mb-6">
     <form method="GET" class="flex flex-wrap gap-3 items-end">
         <div class="flex-1 min-w-[200px]">
-            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e(__('admin.search_users')) ?></label>
-            <input type="text" name="q" value="<?= e($search) ?>" placeholder="<?= e(__('admin.search_placeholder')) ?>" class="form-input">
+            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e('Search Users') ?></label>
+            <input type="text" name="q" value="<?= e($search) ?>" placeholder="<?= e('Search by name or email...') ?>" class="form-input">
         </div>
         <div class="min-w-[140px]">
-            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e(__('admin.filter_role')) ?></label>
+            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e('Role') ?></label>
             <select name="role" class="form-input">
-                <option value=""><?= e(__('admin.all_roles')) ?></option>
-                <option value="company" <?= $filter_role === 'company' ? 'selected' : '' ?>><?= e(__('role.company')) ?></option>
-                <option value="freelancer" <?= $filter_role === 'freelancer' ? 'selected' : '' ?>><?= e(__('role.freelancer')) ?></option>
+                <option value=""><?= e('All Roles') ?></option>
+                <option value="company" <?= $filter_role === 'company' ? 'selected' : '' ?>><?= e('Company') ?></option>
+                <option value="freelancer" <?= $filter_role === 'freelancer' ? 'selected' : '' ?>><?= e('Freelancer') ?></option>
             </select>
         </div>
         <?php if ($has_status_col): ?>
         <div class="min-w-[140px]">
-            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e(__('admin.filter_status')) ?></label>
+            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e('Status') ?></label>
             <select name="status" class="form-input">
-                <option value=""><?= e(__('admin.all_statuses')) ?></option>
-                <option value="active" <?= $filter_status === 'active' ? 'selected' : '' ?>><?= e(__('user_status.active')) ?></option>
-                <option value="suspended" <?= $filter_status === 'suspended' ? 'selected' : '' ?>><?= e(__('user_status.suspended')) ?></option>
-                <option value="blocked" <?= $filter_status === 'blocked' ? 'selected' : '' ?>><?= e(__('user_status.blocked')) ?></option>
+                <option value=""><?= e('All Statuses') ?></option>
+                <option value="active" <?= $filter_status === 'active' ? 'selected' : '' ?>><?= e('Active') ?></option>
+                <option value="suspended" <?= $filter_status === 'suspended' ? 'selected' : '' ?>><?= e('Suspended') ?></option>
+                <option value="blocked" <?= $filter_status === 'blocked' ? 'selected' : '' ?>><?= e('Blocked') ?></option>
             </select>
         </div>
         <?php endif; ?>
         <div class="flex gap-2">
-            <button type="submit" class="btn-primary"><?= e(__('common.search')) ?></button>
-            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="btn-secondary"><?= e(__('common.clear')) ?></a>
+            <button type="submit" class="btn-primary"><?= e('Search') ?></button>
+            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="btn-secondary"><?= e('Clear') ?></a>
         </div>
     </form>
 </div>
 
 <!-- Users Table -->
 <?php if (empty($users)): ?>
-    <div class="card text-center" style="color:var(--color-text-muted)"><?= e(__('admin.no_users_found')) ?></div>
+    <div class="card text-center" style="color:var(--color-text-muted)"><?= e('No users found.') ?></div>
 <?php else: ?>
     <div class="card overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
                 <tr style="border-bottom:1px solid var(--color-border)">
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e(__('admin.table.user')) ?></th>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e(__('admin.table.email')) ?></th>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e(__('admin.table.role')) ?></th>
+                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('User') ?></th>
+                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Email') ?></th>
+                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Role') ?></th>
                     <?php if ($has_status_col): ?>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e(__('admin.table.status')) ?></th>
+                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Status') ?></th>
                     <?php endif; ?>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e(__('admin.table.joined')) ?></th>
-                    <th class="text-right py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e(__('admin.table.actions')) ?></th>
+                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Joined') ?></th>
+                    <th class="text-right py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Actions') ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -218,7 +218,7 @@ require __DIR__ . '/includes/admin_header.php';
                         <td class="py-3 px-3 text-xs" style="color:var(--color-text-muted)"><?= e($u['created_at']) ?></td>
                         <td class="py-3 px-3 text-right">
                             <a href="<?= e(base_url('admin/view_user.php?id=' . $u['id'])) ?>" class="btn-secondary text-xs py-1 px-2">
-                                <?= e(__('admin.view_profile')) ?>
+                                <?= e('View Profile') ?>
                             </a>
                         </td>
                     </tr>

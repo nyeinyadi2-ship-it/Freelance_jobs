@@ -458,7 +458,7 @@ function update_user_online_status(mysqli $conn, int $user_id, bool $is_online):
 
 function chat_file_url(string $file_path): string
 {
-    return base_url('uploads/' . $file_path);
+    return base_url('uploads/images/' . $file_path);
 }
 
 function chat_file_icon(string $ext): string
