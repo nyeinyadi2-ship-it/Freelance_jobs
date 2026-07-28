@@ -244,6 +244,7 @@ function status_badge(string $status): string
         'approved' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
         'rejected' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
         'completed' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+        'position_filled' => 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300',
         'accepted' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
         'assigned' => 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300',
         'working' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
@@ -256,5 +257,10 @@ function status_badge(string $status): string
 
     $class = $classes[$status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';
 
-    return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $class . '">' . e(ucfirst($status)) . '</span>';
+    $display = match($status) {
+        'position_filled' => 'Position Filled',
+        default => ucfirst($status),
+    };
+
+    return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $class . '">' . e($display) . '</span>';
 }

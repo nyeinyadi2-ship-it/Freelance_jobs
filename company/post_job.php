@@ -59,6 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Please select at least one skill.';
         } elseif ($old['deadline'] !== '' && strtotime($old['deadline']) < time()) {
             $error = 'Deadline cannot be in the past.';
+        } elseif (!is_numeric($old['freelancers_needed']) || (int) $old['freelancers_needed'] < 1) {
+            $error = 'Freelancers needed must be at least 1.';
         } else {
             // Handle attachment upload
             $attachment_name = null;
@@ -92,25 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                     $skill_stmt->close();
-                }
-
-                // Insert milestones
-                $ms_titles = $_POST['ms_title'] ?? [];
-                $ms_amounts = $_POST['ms_amount'] ?? [];
-                $ms_descs = $_POST['ms_desc'] ?? [];
-                if (!empty($ms_titles) && $job_id > 0) {
-                    $ms_stmt = $conn->prepare('INSERT INTO milestones (job_id, title, description, amount, sort_order) VALUES (?, ?, ?, ?, ?)');
-                    foreach ($ms_titles as $idx => $ms_title) {
-                        $ms_title = trim($ms_title);
-                        $ms_amount = (float) ($ms_amounts[$idx] ?? 0);
-                        $ms_desc = trim($ms_descs[$idx] ?? '');
-                        if ($ms_title !== '' && $ms_amount > 0) {
-                            $order = $idx + 1;
-                            $ms_stmt->bind_param('issdi', $job_id, $ms_title, $ms_desc, $ms_amount, $order);
-                            $ms_stmt->execute();
-                        }
-                    }
-                    $ms_stmt->close();
                 }
 
                 // Notify admin
@@ -243,8 +226,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         <div class="p-step active" data-step="1"><span class="p-dot">1</span><span class="p-label">Basics</span></div>
         <div class="p-step" data-step="2"><span class="p-dot">2</span><span class="p-label">Details</span></div>
         <div class="p-step" data-step="3"><span class="p-dot">3</span><span class="p-label">Skills & Attach</span></div>
-        <div class="p-step" data-step="4"><span class="p-dot">4</span><span class="p-label">Milestones</span></div>
-        <div class="p-step" data-step="5"><span class="p-dot">5</span><span class="p-label">Review</span></div>
+        <div class="p-step" data-step="4"><span class="p-dot">4</span><span class="p-label">Review</span></div>
     </div>
 
     <form method="POST" enctype="multipart/form-data" id="jobForm" novalidate>
@@ -412,63 +394,12 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                     </div>
                     <div class="flex justify-between">
                         <button type="button" onclick="goStep(2)" class="btn-back"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg> Back</button>
-                        <button type="button" onclick="goStep(4)" class="btn-next">Next: Milestones <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>
+                        <button type="button" onclick="goStep(4)" class="btn-next">Next: Review <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>
                     </div>
                 </div>
 
-                <!-- STEP 4: Milestones -->
+                <!-- STEP 4: Review -->
                 <div class="step-panel" data-panel="4">
-                    <div class="form-card mb-5">
-                        <div class="form-card-header">
-                            <div class="fc-icon" style="background:linear-gradient(135deg,rgba(245,158,11,0.12),rgba(251,191,36,0.12))">
-                                <svg class="w-5 h-5" style="color:#f59e0b" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-                            </div>
-                            <div>
-                                <h2>Payment Milestones</h2>
-                                <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Break your project into milestones funded via Escrow</p>
-                            </div>
-                        </div>
-
-                        <div id="milestonesContainer" class="space-y-3">
-                            <div class="ms-item relative">
-                                <div class="flex items-center justify-between mb-3">
-                                    <span class="text-xs font-bold uppercase tracking-wider" style="color:var(--color-text-muted)">Milestone 1</span>
-                                </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <div class="sm:col-span-2">
-                                        <label class="form-label">Title <span class="req">*</span></label>
-                                        <input type="text" name="ms_title[]" required placeholder="e.g. Design Mockups" class="form-input" oninput="updatePreview()">
-                                    </div>
-                                    <div>
-                                        <label class="form-label">Amount ($) <span class="req">*</span></label>
-                                        <input type="number" name="ms_amount[]" step="0.01" min="1" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()">
-                                    </div>
-                                    <div>
-                                        <label class="form-label">Description</label>
-                                        <input type="text" name="ms_desc[]" placeholder="Brief description" class="form-input">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="addMilestone()" class="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all" style="border:1.5px dashed var(--color-border);color:var(--color-text-secondary)">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                            Add Milestone
-                        </button>
-
-                        <div class="mt-4 p-3.5 rounded-xl flex items-center justify-between" style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15)">
-                            <span class="text-sm font-medium" style="color:var(--color-text-secondary)">Total Milestones:</span>
-                            <span class="text-lg font-bold" style="color:#f59e0b" id="milestoneTotal">$0.00</span>
-                        </div>
-                    </div>
-                    <div class="flex justify-between">
-                        <button type="button" onclick="goStep(3)" class="btn-back"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg> Back</button>
-                        <button type="button" onclick="goStep(5)" class="btn-next">Next: Review <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></button>
-                    </div>
-                </div>
-
-                <!-- STEP 5: Review -->
-                <div class="step-panel" data-panel="5">
                     <div class="form-card mb-5">
                         <div class="form-card-header">
                             <div class="fc-icon" style="background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(52,211,153,0.12))">
@@ -537,7 +468,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                         </div>
                     </div>
                     <div class="flex justify-between items-center">
-                        <button type="button" onclick="goStep(4)" class="btn-back"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg> Back</button>
+                        <button type="button" onclick="goStep(3)" class="btn-back"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg> Back</button>
                         <div class="flex items-center gap-3">
                             <button type="button" class="btn-draft" onclick="saveDraft()">Save Draft</button>
                             <button type="submit" class="btn-publish flex items-center gap-2">
@@ -619,10 +550,55 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 <script>
 (function(){
     var currentStep = 1;
-    var totalSteps = 5;
+    var totalSteps = 4;
     var milestoneCount = 1;
 
+    // Step validation rules
+    function validateStep(step) {
+        var errors = [];
+        if (step === 1) {
+            var title = document.querySelector('[name="title"]').value.trim();
+            var cat = document.querySelector('[name="category"]').value;
+            var budget = parseFloat(document.querySelector('[name="budget"]').value);
+            if (!title) errors.push('Job title is required.');
+            if (!cat) errors.push('Category is required.');
+            if (!budget || budget <= 0) errors.push('Budget must be greater than zero.');
+        } else if (step === 2) {
+            var desc = document.querySelector('[name="description"]').value.trim();
+            var req = document.querySelector('[name="requirements"]').value.trim();
+            var deadline = document.querySelector('[name="deadline"]').value;
+            if (!desc) errors.push('Job description is required.');
+            if (!req) errors.push('Requirements are required.');
+            if (deadline && new Date(deadline) < new Date()) errors.push('Deadline cannot be in the past.');
+        } else if (step === 3) {
+            var skills = document.querySelectorAll('.skill-chip.selected').length;
+            if (skills === 0) errors.push('Please select at least one skill.');
+        }
+        return errors;
+    }
+
     window.goStep = function(step) {
+        // If moving forward, validate current step first
+        if (step > currentStep) {
+            for (var s = currentStep; s < step; s++) {
+                var errors = validateStep(s);
+                if (errors.length > 0) {
+                    alert(errors[0]);
+                    // Jump to the step with the error
+                    document.querySelectorAll('.step-panel').forEach(function(p){ p.classList.remove('active'); });
+                    document.querySelectorAll('.p-step').forEach(function(d){ d.classList.remove('active','done'); });
+                    for (var i = 1; i < s; i++) {
+                        document.querySelector('.p-step[data-step="'+i+'"]').classList.add('done');
+                    }
+                    document.querySelector('.p-step[data-step="'+s+'"]').classList.add('active');
+                    document.querySelector('.step-panel[data-panel="'+s+'"]').classList.add('active');
+                    currentStep = s;
+                    window.scrollTo({top:0,behavior:'smooth'});
+                    return;
+                }
+            }
+        }
+
         if (step < 1 || step > totalSteps) return;
         document.querySelectorAll('.step-panel').forEach(function(p){ p.classList.remove('active'); });
         document.querySelectorAll('.p-step').forEach(function(d){ d.classList.remove('active','done'); });
@@ -634,7 +610,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         document.querySelector('.step-panel[data-panel="'+step+'"]').classList.add('active');
         currentStep = step;
 
-        if (step === 5) buildReview();
+        if (step === 4) buildReview();
         updatePreview();
         window.scrollTo({top:0,behavior:'smooth'});
     };
@@ -651,7 +627,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             '<div class="sm:col-span-2"><label class="form-label">Title <span class="req">*</span></label>' +
             '<input type="text" name="ms_title[]" required placeholder="e.g. Design Mockups" class="form-input" oninput="updatePreview()"></div>' +
             '<div><label class="form-label">Amount ($) <span class="req">*</span></label>' +
-            '<input type="number" name="ms_amount[]" step="0.01" min="1" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()"></div>' +
+            '<input type="number" name="ms_amount[]" step="0.01" min="0.01" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()"></div>' +
             '<div><label class="form-label">Description</label>' +
             '<input type="text" name="ms_desc[]" placeholder="Brief description" class="form-input"></div>' +
             '</div></div>';
@@ -839,37 +815,50 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 
     // Client-side validation on submit
     document.getElementById('jobForm').addEventListener('submit', function(e){
-        var title = document.querySelector('[name="title"]').value.trim();
-        var cat = document.querySelector('[name="category"]').value;
-        var budget = parseFloat(document.querySelector('[name="budget"]').value);
-        var desc = document.querySelector('[name="description"]').value.trim();
-        var req = document.querySelector('[name="requirements"]').value.trim();
-        var skills = document.querySelectorAll('.skill-chip.selected').length;
-        var deadline = document.querySelector('[name="deadline"]').value;
+        // Validate all steps
+        for (var step = 1; step <= 3; step++) {
+            var errors = validateStep(step);
+            if (errors.length > 0) {
+                alert(errors[0]);
+                e.preventDefault();
+                goStep(step);
+                return;
+            }
+        }
 
-        if(!title){ alert('Job title is required.'); e.preventDefault(); goStep(1); return; }
-        if(!cat){ alert('Category is required.'); e.preventDefault(); goStep(1); return; }
-        if(!budget || budget<=0){ alert('Budget must be greater than zero.'); e.preventDefault(); goStep(1); return; }
-        if(!desc){ alert('Job description is required.'); e.preventDefault(); goStep(2); return; }
-        if(!req){ alert('Requirements are required.'); e.preventDefault(); goStep(2); return; }
-        if(skills===0){ alert('Please select at least one skill.'); e.preventDefault(); goStep(3); return; }
-        if(deadline && new Date(deadline) < new Date()){ alert('Deadline cannot be in the past.'); e.preventDefault(); goStep(2); return; }
-
+        // Validate milestones if any are filled in (optional, but if filled must be valid)
         var msTitles = document.querySelectorAll('[name="ms_title[]"]');
         var msAmounts = document.querySelectorAll('[name="ms_amount[]"]');
-        var hasMilestone = false;
+        var budget = parseFloat(document.querySelector('[name="budget"]').value) || 0;
+        var milestoneTotal = 0;
         for (var i = 0; i < msTitles.length; i++) {
-            if (msTitles[i].value.trim() && parseFloat(msAmounts[i].value) > 0) { hasMilestone = true; break; }
+            var msTitle = msTitles[i].value.trim();
+            var msAmount = parseFloat(msAmounts[i].value) || 0;
+            if (msTitle !== '' && msAmount <= 0) {
+                alert('Milestone amounts must be greater than zero.');
+                e.preventDefault();
+                return;
+            }
+            if (msAmount < 0) {
+                alert('Milestone amounts cannot be negative.');
+                e.preventDefault();
+                return;
+            }
+            milestoneTotal += msAmount;
         }
-        if (!hasMilestone) { alert('Please add at least one milestone with a title and amount.'); e.preventDefault(); goStep(4); return; }
+        if (milestoneTotal > budget && budget > 0) {
+            alert('Total milestone amount ($' + milestoneTotal.toFixed(2) + ') cannot exceed the job budget ($' + budget.toFixed(2) + ').');
+            e.preventDefault();
+            return;
+        }
 
         var fileInput = document.getElementById('attachmentInput');
         if(fileInput.files.length){
             var file = fileInput.files[0];
             var ext = file.name.split('.').pop().toLowerCase();
             var allowed = ['jpg','jpeg','png','gif','webp','pdf','doc','docx','zip','rar'];
-            if(allowed.indexOf(ext)===-1){ alert('Invalid file type.'); e.preventDefault(); goStep(3); return; }
-            if(file.size > 10*1024*1024){ alert('File must be under 10MB.'); e.preventDefault(); goStep(3); return; }
+            if(allowed.indexOf(ext)===-1){ alert('Invalid file type.'); e.preventDefault(); return; }
+            if(file.size > 10*1024*1024){ alert('File must be under 10MB.'); e.preventDefault(); return; }
         }
     });
 

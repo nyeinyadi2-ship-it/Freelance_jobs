@@ -144,12 +144,15 @@ require __DIR__ . '/../includes/header.php';
                     <?php
                     $freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
                     $hired_count = 0;
-                    $hc_st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?");
+                    $active_count = 0;
+                    $hc_st = $conn->prepare("SELECT COUNT(*) AS cnt, SUM(CASE WHEN status != 'completed' THEN 1 ELSE 0 END) AS active FROM assignments WHERE job_id = ?");
                     $hc_st->bind_param('i', $job_id);
                     $hc_st->execute();
-                    $hired_count = (int) $hc_st->get_result()->fetch_assoc()['cnt'];
+                    $hc_row = $hc_st->get_result()->fetch_assoc();
+                    $hired_count = (int) ($hc_row['cnt'] ?? 0);
+                    $active_count = (int) ($hc_row['active'] ?? 0);
                     $hc_st->close();
-                    $is_filled = $hired_count >= $freelancers_needed;
+                    $is_filled = $active_count >= $freelancers_needed;
                     ?>
                     <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:999px;font-size:0.75rem;font-weight:700;background:<?= $is_filled ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)' ?>;border:1px solid <?= $is_filled ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)' ?>"><?= $is_filled ? 'Filled' : 'Open' ?></span>
                     <span style="font-size:0.75rem;color:rgba(255,255,255,0.6)"><?= $hired_count ?>/<?= $freelancers_needed ?> hired</span>

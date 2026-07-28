@@ -25,16 +25,19 @@ if (!$skill_info) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     $job_id = (int) ($_POST['job_id'] ?? 0);
     if ($job_id > 0) {
-        $st = $conn->prepare("SELECT id FROM jobs WHERE id = ? AND status = 'approved'");
+        $st = $conn->prepare("SELECT id, freelancers_needed FROM jobs WHERE id = ? AND status IN ('approved', 'position_filled')");
         $st->bind_param('i', $job_id); $st->execute();
         $job = $st->get_result()->fetch_assoc(); $st->close();
         if (!$job) { set_flash('error', 'Job is not available for application.'); }
         else {
-            $st = $conn->prepare('SELECT id FROM assignments WHERE job_id = ?');
+            // Check position limit
+            $needed = max(1, (int) ($job['freelancers_needed'] ?? 1));
+            $st = $conn->prepare('SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != \'completed\'');
             $st->bind_param('i', $job_id); $st->execute();
-            $has = $st->get_result()->num_rows > 0; $st->close();
-            if ($has) { set_flash('error', 'This job has already been assigned.'); }
-            else {
+            $filled = (int) $st->get_result()->fetch_assoc()['cnt']; $st->close();
+            if ($filled >= $needed) {
+                set_flash('error', 'All positions for this job have been filled.');
+            } else {
                 $st = $conn->prepare('SELECT id FROM job_applications WHERE job_id = ? AND freelancer_id = ?');
                 $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute();
                 $exists = $st->get_result()->num_rows > 0; $st->close();
@@ -59,15 +62,15 @@ $params = [$fl_freelancer_id];
 $types = 'i';
 
 $sql = "SELECT j.id, j.title, j.description, j.budget, j.created_at, j.category, j.experience_level,
-        j.gender_requirement, j.deadline, j.duration, j.freelancers_needed, j.visibility, j.attachment,
+        j.gender_requirement, j.deadline, j.duration, j.freelancers_needed, j.visibility, j.attachment, j.status,
         c.company_name, c.logo_image,
         (SELECT ja.status FROM job_applications ja WHERE ja.job_id = j.id AND ja.freelancer_id = ?) AS my_status,
-        (SELECT COUNT(*) FROM assignments a WHERE a.job_id = j.id) AS is_assigned
+        (SELECT COUNT(*) FROM assignments a WHERE a.job_id = j.id AND a.status != 'completed') AS assigned_count
         FROM jobs j
         JOIN companies c ON j.company_id = c.id
         JOIN job_skills js ON js.job_id = j.id
         JOIN skills s ON js.skill_id = s.id
-        WHERE j.status = 'approved' AND j.category != 'Direct Hire' AND s.skill_name = ?
+        WHERE j.status IN ('approved', 'position_filled') AND j.category != 'Direct Hire' AND s.skill_name = ?
         ORDER BY j.created_at DESC";
 
 $params[] = $skill_info['id'];
@@ -219,8 +222,13 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0">
                         <a href="<?= e(base_url('freelancer/view_job.php?id=' . $job['id'])) ?>" class="px-4 py-2.5 text-sm font-medium rounded-xl border transition-all hover:bg-gray-50 dark:hover:bg-gray-800" style="color:var(--color-text-secondary);border-color:var(--color-border)">View Post</a>
-                        <?php if ((int) $job['is_assigned'] > 0): ?>
-                            <span class="text-sm font-medium px-5 py-2.5 rounded-xl" style="background:var(--color-bg);color:var(--color-text-muted)">Assigned</span>
+                        <?php
+                        $assigned = (int) ($job['assigned_count'] ?? 0);
+                        $needed = max(1, (int) ($job['freelancers_needed'] ?? 1));
+                        $is_filled = $assigned >= $needed || $job['status'] === 'position_filled';
+                        ?>
+                        <?php if ($is_filled): ?>
+                            <span class="text-sm font-medium px-5 py-2.5 rounded-xl" style="background:var(--color-bg);color:var(--color-text-muted)">Positions Filled</span>
                         <?php elseif ($job['my_status']): ?>
                             <?= status_badge($job['my_status']) ?>
                         <?php else: ?>

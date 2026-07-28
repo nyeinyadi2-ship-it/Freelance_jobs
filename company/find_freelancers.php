@@ -30,20 +30,6 @@ if ($sr) {
     while ($r = $sr->fetch_assoc()) $all_skills[] = $r;
 }
 
-// Fetch popular skills (top 12 by freelancer count)
-$popular_skills = [];
-$psr = $conn->query('SELECT s.skill_name, COUNT(fs.freelancer_id) AS cnt FROM freelancer_skills fs JOIN skills s ON fs.skill_id = s.id GROUP BY s.skill_name ORDER BY cnt DESC LIMIT 12');
-if ($psr) {
-    while ($r = $psr->fetch_assoc()) $popular_skills[] = $r;
-}
-
-// Fetch top rated freelancers for sidebar (top 5)
-$top_rated = [];
-$trr = $conn->query("SELECT f.id, f.full_name, f.title, f.hourly_rate, u.profile_image, COALESCE(AVG(r.rating),0) AS avg_rating FROM freelancers f JOIN users u ON f.user_id = u.id LEFT JOIN reviews r ON r.freelancer_id = f.id GROUP BY f.id ORDER BY avg_rating DESC, COUNT(r.id) DESC LIMIT 5");
-if ($trr) {
-    while ($r = $trr->fetch_assoc()) $top_rated[] = $r;
-}
-
 // Build main query
 $where = ['u.role = "freelancer"'];
 $params = [];
@@ -296,7 +282,7 @@ html.dark {
 /* ===== LAYOUT ===== */
 .ff-layout {
     display: grid;
-    grid-template-columns: 260px 1fr 280px;
+    grid-template-columns: 260px 1fr;
     gap: 1.5rem;
     align-items: start;
 }
@@ -614,7 +600,6 @@ html.dark .ff-post-cta {
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1200px) {
     .ff-layout { grid-template-columns: 240px 1fr; }
-    .ff-right-sidebar { display: none; }
     .ff-hero-illustration { display: none; }
 }
 @media (max-width: 768px) {
@@ -937,50 +922,7 @@ html.dark .ff-post-cta {
             <?php endif; ?>
         </div>
 
-        <!-- RIGHT SIDEBAR -->
-        <aside class="ff-right-sidebar">
-            <div class="ff-post-cta">
-                <div class="ff-post-cta-icon">
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                </div>
-                <h4>Post a Job &<br>Hire Top Talent</h4>
-                <p>Post your job and get proposals from qualified freelancers.</p>
-                <a href="<?= e(base_url('company/post_job.php')) ?>" class="ff-post-cta-btn">
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    Post a Job
-                </a>
-            </div>
 
-            <?php if (!empty($popular_skills)): ?>
-                <div class="ff-right-card">
-                    <h3>Popular Skills <a href="#" class="view-all">View All</a></h3>
-                    <div class="ff-skill-list">
-                        <?php
-                        $skill_icons = ['M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z', 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4', 'M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9', 'M13 10V3L4 14h7v7l9-11h-7z', 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z', 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z', 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4'];
-                        foreach ($popular_skills as $idx => $ps):
-                            $icon = $skill_icons[$idx % count($skill_icons)];
-                        ?>
-                            <a href="<?= e(base_url('company/find_freelancers.php?skill=' . urlencode($ps['skill_name']))) ?>" class="ff-skill-row">
-                                <span class="ff-skill-row-name">
-                                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="<?= $icon ?>"/></svg>
-                                    <?= e($ps['skill_name']) ?>
-                                </span>
-                                <span class="ff-skill-row-count"><?= number_format($ps['cnt']) ?></span>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-            <div class="ff-invite-card">
-                <h4>Invite & Earn</h4>
-                <p>Invite other companies and earn rewards.</p>
-                <a href="#" class="ff-invite-btn">
-                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                    Invite Now
-                </a>
-            </div>
-        </aside>
     </div>
 </div>
 

@@ -10,19 +10,25 @@ if ($job_id <= 0) {
 
 // Handle Apply
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'apply' && verify_csrf()) {
-    $st = $conn->prepare("SELECT id, company_id FROM jobs WHERE id = ? AND status = 'approved'");
+    $st = $conn->prepare("SELECT id, company_id FROM jobs WHERE id = ? AND status IN ('approved', 'position_filled')");
     $st->bind_param('i', $job_id); $st->execute();
     $job_check = $st->get_result()->fetch_assoc(); $st->close();
 
     if (!$job_check) {
         set_flash('error', 'Job is not available for application.');
     } else {
-        $st = $conn->prepare('SELECT id FROM assignments WHERE job_id = ?');
+        // Check position limit
+        $st = $conn->prepare("SELECT freelancers_needed FROM jobs WHERE id = ?");
         $st->bind_param('i', $job_id); $st->execute();
-        $already_assigned = $st->get_result()->num_rows > 0; $st->close();
+        $job_meta = $st->get_result()->fetch_assoc(); $st->close();
+        $needed = (int) ($job_meta['freelancers_needed'] ?? 1);
 
-        if ($already_assigned) {
-            set_flash('error', 'This job has already been assigned.');
+        $st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != 'completed'");
+        $st->bind_param('i', $job_id); $st->execute();
+        $filled = (int) $st->get_result()->fetch_assoc()['cnt']; $st->close();
+
+        if ($filled >= $needed) {
+            set_flash('error', 'All positions for this job have been filled.');
         } else {
             $st = $conn->prepare('SELECT id FROM job_applications WHERE job_id = ? AND freelancer_id = ?');
             $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute();
@@ -55,7 +61,7 @@ $stmt = $conn->prepare("
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
     JOIN users u ON c.user_id = u.id
-    WHERE j.id = ? AND j.status IN ('approved', 'completed')
+    WHERE j.id = ? AND j.status IN ('approved', 'completed', 'position_filled')
 ");
 $stmt->bind_param('i', $job_id);
 $stmt->execute();
@@ -102,13 +108,16 @@ $app = $st->get_result()->fetch_assoc();
 $my_status = $app ? $app['status'] : null;
 $st->close();
 
-// Check if job is already assigned
+// Check if job is already fully filled
 $is_assigned = false;
-$st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?");
+$positions_filled = 0;
+$freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
+$st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != 'completed'");
 $st->bind_param('i', $job_id);
 $st->execute();
-$is_assigned = (int) $st->get_result()->fetch_assoc()['cnt'] > 0;
+$positions_filled = (int) $st->get_result()->fetch_assoc()['cnt'];
 $st->close();
+$is_assigned = $positions_filled >= $freelancers_needed;
 
 // Total proposals
 $proposal_count = 0;
@@ -585,8 +594,8 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
                             <svg class="w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                         </div>
-                        <p class="font-bold text-lg" style="color:var(--color-text-primary)">Position Filled</p>
-                        <p class="text-sm mt-1" style="color:var(--color-text-muted)">This job has been assigned to a freelancer.</p>
+                        <p class="font-bold text-lg" style="color:var(--color-text-primary)">All Positions Filled</p>
+                        <p class="text-sm mt-1" style="color:var(--color-text-muted)">All <?= $freelancers_needed ?> position(s) for this job have been filled.</p>
                     </div>
                 <?php elseif ($my_status): ?>
                     <div class="text-center py-6">

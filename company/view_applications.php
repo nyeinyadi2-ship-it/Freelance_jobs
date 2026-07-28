@@ -31,6 +31,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     if ($action === 'accept') {
         $application_id = (int) ($_POST['application_id'] ?? 0);
 
+        // Check hiring limit: count current assigned freelancers
+        $stmt = $conn->prepare("SELECT freelancers_needed FROM jobs WHERE id = ? AND company_id = ?");
+        $stmt->bind_param('ii', $job_id, $company_id);
+        $stmt->execute();
+        $job_info = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $freelancers_needed = max(1, (int) ($job_info['freelancers_needed'] ?? 1));
+
+        $stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != 'completed'");
+        $stmt->bind_param('i', $job_id);
+        $stmt->execute();
+        $current_assigned = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+        $stmt->close();
+
+        if ($current_assigned >= $freelancers_needed) {
+            set_flash('error', "This job only allows {$freelancers_needed} freelancer(s). All positions have been filled.");
+            redirect('company/view_applications.php?id=' . $job_id);
+        }
+
         $stmt = $conn->prepare("
             SELECT ja.id, ja.freelancer_id
             FROM job_applications ja
@@ -52,16 +72,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $stmt->execute();
                 $stmt->close();
 
-                $stmt = $conn->prepare("UPDATE job_applications SET status = 'rejected' WHERE job_id = ? AND id != ? AND status = 'pending'");
-                $stmt->bind_param('ii', $job_id, $application_id);
-                $stmt->execute();
-                $stmt->close();
-
+                // Create the assignment
                 $stmt = $conn->prepare("INSERT INTO assignments (job_id, freelancer_id, status) VALUES (?, ?, 'assigned')");
                 $stmt->bind_param('ii', $job_id, $freelancer_id);
                 $stmt->execute();
+
+                if ($stmt->affected_rows <= 0) {
+                    $stmt->close();
+                    throw new Exception('Failed to create assignment. The database may need migration (run migrate_hiring_workflow.php).');
+                }
                 $assignment_id = $stmt->insert_id;
                 $stmt->close();
+
+                // Count active assignments AFTER the insert to get accurate count
+                $stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != 'completed'");
+                $stmt->bind_param('i', $job_id);
+                $stmt->execute();
+                $new_assigned_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+                $stmt->close();
+
+                // If all positions filled, reject remaining pending and mark job as position_filled
+                if ($new_assigned_count >= $freelancers_needed) {
+                    $stmt = $conn->prepare("UPDATE job_applications SET status = 'rejected' WHERE job_id = ? AND id != ? AND status = 'pending'");
+                    $stmt->bind_param('ii', $job_id, $application_id);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    $new_status = 'position_filled';
+                    $stmt = $conn->prepare("UPDATE jobs SET status = ? WHERE id = ?");
+                    $stmt->bind_param('si', $new_status, $job_id);
+                    $stmt->execute();
+                    $stmt->close();
+                }
 
                 $stmt = $conn->prepare("SELECT u.id FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
                 $stmt->bind_param('i', $freelancer_id);
@@ -74,10 +116,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 }
 
                 $conn->commit();
-                set_flash('success', 'Freelancer hired successfully.');
+                $remaining = $freelancers_needed - $new_assigned_count;
+                $msg = $new_assigned_count >= $freelancers_needed
+                    ? 'Freelancer hired! All positions are now filled.'
+                    : "Freelancer hired successfully. {$remaining} position(s) remaining.";
+                set_flash('success', $msg);
             } catch (Exception $e) {
                 $conn->rollback();
-                set_flash('error', 'Could not hire freelancer. Job may already be assigned.');
+                set_flash('error', 'Could not hire freelancer: ' . $e->getMessage());
             }
         } else {
             set_flash('error', 'Application not found or already processed.');
@@ -140,10 +186,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $stmt->execute();
                 $stmt->close();
 
-                $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
+                // Only mark job as completed when ALL assigned freelancers have completed
+                $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done FROM assignments WHERE job_id = ?");
                 $stmt->bind_param('i', $job_id);
                 $stmt->execute();
+                $progress = $stmt->get_result()->fetch_assoc();
                 $stmt->close();
+
+                if ($progress && (int)$progress['total'] > 0 && (int)$progress['total'] === (int)$progress['done']) {
+                    $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
+                    $stmt->bind_param('i', $job_id);
+                    $stmt->execute();
+                    $stmt->close();
+                }
 
                 $amount = (float) $assignment['budget'];
                 $paid_status = 'paid';
@@ -462,17 +517,27 @@ while ($row = $result->fetch_assoc()) {
 $stmt->close();
 
 $assignment = null;
+$assignments = [];
 $payment = null;
 $stmt = $conn->prepare("
-    SELECT a.id, a.status, a.submission_link, a.assigned_at, f.full_name
+    SELECT a.id, a.status, a.submission_link, a.assigned_at, f.full_name, f.id AS freelancer_id
     FROM assignments a
     JOIN freelancers f ON a.freelancer_id = f.id
     WHERE a.job_id = ?
+    ORDER BY a.assigned_at DESC
 ");
 $stmt->bind_param('i', $job_id);
 $stmt->execute();
-$assignment = $stmt->get_result()->fetch_assoc();
+$ar = $stmt->get_result();
+while ($row = $ar->fetch_assoc()) { $assignments[] = $row; }
 $stmt->close();
+$assignment = $assignments[0] ?? null; // Keep for backward compatibility
+
+// Position tracking
+$freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
+$positions_filled = count($assignments);
+$positions_available = max(0, $freelancers_needed - $positions_filled);
+$all_positions_filled = $positions_filled >= $freelancers_needed;
 
 if ($assignment) {
     $stmt = $conn->prepare('SELECT id, amount, status, paid_at FROM payments WHERE assignment_id = ?');
@@ -515,14 +580,23 @@ require __DIR__ . '/../includes/header.php';
 <div class="mb-6">
     <a href="<?= e(base_url('company/manage_jobs.php')) ?>" class="text-indigo-600 hover:underline text-sm">&larr; <?= 'Back to jobs' ?></a>
     <h1 class="text-2xl font-bold mt-2" style="color:var(--color-text-primary)"><?= e($job['title']) ?></h1>
-    <p style="color:var(--color-text-muted)"><?= 'Budget' ?>: $<?= e(number_format((float) $job['budget'], 2)) ?> &middot; <?= status_badge($job['status']) ?></p>
+    <p style="color:var(--color-text-muted)"><?= 'Budget' ?>: $<?= e(number_format((float) $job['budget'], 2)) ?> &middot; <?= status_badge($job['status']) ?> &middot; Positions: <?= $positions_filled ?>/<?= $freelancers_needed ?> filled</p>
 </div>
 
-<?php if ($assignment): ?>
+<?php if (!empty($assignments)): ?>
     <div class="card mb-6">
-        <h2 class="text-lg font-semibold mb-3"><?= 'Assignment' ?></h2>
-        <p class="text-sm mb-2" style="color:var(--color-text-secondary)"><?= 'Assigned to' ?>: <strong><?= e($assignment['full_name']) ?></strong></p>
-        <p class="mb-3">Status: <?= status_badge($all_approved ? 'completed' : $assignment['status']) ?></p>
+        <h2 class="text-lg font-semibold mb-3"><?= 'Assignments' ?> (<?= count($assignments) ?>/<?= $freelancers_needed ?>)</h2>
+        <?php foreach ($assignments as $asgn): ?>
+        <div class="p-4 rounded-xl mb-3" style="background:var(--color-bg);border:1px solid var(--color-border)">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div>
+                    <p class="text-sm font-medium" style="color:var(--color-text-secondary)"><?= 'Assigned to' ?>: <strong><?= e($asgn['full_name']) ?></strong></p>
+                    <p class="text-xs mt-1" style="color:var(--color-text-muted)">Assigned: <?= e($asgn['assigned_at']) ?></p>
+                </div>
+                <?= status_badge($asgn['status']) ?>
+            </div>
+        </div>
+        <?php endforeach; ?>
 
         <!-- Milestones Section -->
         <?php if (!empty($milestones)): ?>
@@ -732,7 +806,7 @@ require __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="flex items-center gap-2">
                         <?= status_badge($app['status']) ?>
-                        <?php if ($app['status'] === 'pending' && !$assignment): ?>
+                        <?php if ($app['status'] === 'pending' && $positions_available > 0): ?>
                             <form method="POST">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="job_id" value="<?= $job_id ?>">
