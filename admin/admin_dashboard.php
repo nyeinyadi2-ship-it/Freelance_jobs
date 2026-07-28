@@ -13,7 +13,6 @@ $stats = [
     'total_jobs' => 0,
     'total_users' => 0,
     'completed_jobs' => 0,
-    'total_revenue' => 0,
 ];
 
 try {
@@ -40,16 +39,10 @@ try {
     $stats['completed_jobs'] = (int) $r->fetch_assoc()['cnt'];
 } catch (mysqli_sql_exception $e) {}
 
-try {
-    $r = $conn->query("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE status = 'paid'");
-    $stats['total_revenue'] = (float) $r->fetch_assoc()['total'];
-} catch (mysqli_sql_exception $e) {
-    $stats['total_revenue'] = 0;
-}
-
 // Recent jobs (exclude direct hire)
 $recent_jobs = [];
 try {
+    
     $r = $conn->query("
         SELECT j.id, j.title, j.budget, j.status, j.created_at, c.company_name
         FROM jobs j JOIN companies c ON j.company_id = c.id
@@ -149,10 +142,10 @@ require __DIR__ . '/includes/admin_header.php';
     </div>
 </div>
 
-<!-- Quick Actions + Revenue -->
-<div class="grid lg:grid-cols-3 gap-6 mb-8">
+<!-- Quick Actions -->
+<div class="mb-8">
     <!-- Quick Actions -->
-    <div class="lg:col-span-1 card admin-fade">
+    <div class="card admin-fade">
         <h3 class="font-bold mb-4" style="color:var(--color-text-primary)"><?= e('Quick Actions') ?></h3>
         <div class="space-y-3">
             <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="quick-action-card">
@@ -182,33 +175,6 @@ require __DIR__ . '/includes/admin_header.php';
                     <p class="text-xs" style="color:var(--color-text-muted)">View platform overview</p>
                 </div>
             </a>
-        </div>
-    </div>
-
-    <!-- Revenue Card -->
-    <div class="lg:col-span-2 card admin-fade" style="background:linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);color:white;border:none">
-        <div class="flex items-start justify-between mb-6">
-            <div>
-                <p class="text-indigo-200 text-sm font-medium"><?= e('Total Revenue') ?></p>
-                <p class="text-4xl font-extrabold mt-1">$<?= e(number_format($stats['total_revenue'], 2)) ?></p>
-            </div>
-            <div class="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                <svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-        </div>
-        <div class="grid grid-cols-3 gap-4">
-            <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-indigo-200 text-xs"><?= e('completed') ?></p>
-                <p class="text-xl font-bold mt-1"><?= $stats['completed_jobs'] ?></p>
-            </div>
-            <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-indigo-200 text-xs"><?= e('Total Users') ?></p>
-                <p class="text-xl font-bold mt-1"><?= $stats['total_users'] ?></p>
-            </div>
-            <div class="bg-white/10 rounded-xl p-4">
-                <p class="text-indigo-200 text-xs"><?= e('Jobs Created') ?></p>
-                <p class="text-xl font-bold mt-1"><?= $stats['total_jobs'] ?></p>
-            </div>
         </div>
     </div>
 </div>

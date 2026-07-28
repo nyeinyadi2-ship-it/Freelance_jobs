@@ -10,7 +10,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
     set_flash('error', 'Company profile not found.');
-    redirect('login.php');
+    redirect('auth/login.php');
 }
 
 $stmt = $conn->prepare("
@@ -26,7 +26,7 @@ $stmt->close();
 
 if (!$profile) {
     set_flash('error', 'Profile not found.');
-    redirect('login.php');
+    redirect('auth/login.php');
 }
 
 $error = '';

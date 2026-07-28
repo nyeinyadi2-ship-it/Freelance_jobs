@@ -7,7 +7,7 @@ require_once __DIR__ . '/../config/notifications.php';
 require_once __DIR__ . '/../config/chat.php';
 
 $fid = (int) ($_GET['id'] ?? 0);
-if ($fid <= 0) { redirect('login.php'); }
+if ($fid <= 0) { redirect('auth/login.php'); }
 
 // Fetch freelancer info
 $st = $conn->prepare("SELECT f.id, f.full_name, f.title, f.location, f.bio, f.experience_years, f.hourly_rate, f.portfolio_url, u.profile_image, u.username
@@ -16,7 +16,7 @@ $st->bind_param('i', $fid);
 $st->execute();
 $freelancer = $st->get_result()->fetch_assoc();
 $st->close();
-if (!$freelancer) { redirect('login.php'); }
+if (!$freelancer) { redirect('auth/login.php'); }
 
 $profileImgUrl = $freelancer['profile_image'] ? base_url('uploads/images/' . $freelancer['profile_image']) : null;
 
@@ -107,7 +107,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
 <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-12">
 
 <!-- Back link -->
-<a href="<?= e(base_url('javascript:history.back()')) ?>" class="inline-flex items-center gap-1.5 text-sm font-medium mb-6 transition-colors" style="color:var(--color-text-muted)">
+<a href="javascript:history.back()" class="inline-flex items-center gap-1.5 text-sm font-medium mb-6 transition-colors" style="color:var(--color-text-muted)">
     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
     Back
     <?php if ($is_own): ?> | <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="ml-2 btn-grad px-4 py-1.5 text-xs font-semibold rounded-xl text-white">Manage Portfolio</a><?php endif; ?>

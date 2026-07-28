@@ -55,15 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['home_login'])) {
                         $company = $stmt->get_result()->fetch_assoc();
                         $_SESSION['logo_image'] = $company['logo_image'] ?? null;
                         $stmt->close();
+                        redirect('company/index.php');
                     } elseif ($user['role'] === 'freelancer') {
                         $_SESSION['profile_id'] = get_freelancer_id($conn, (int) $user['id']);
                         $_SESSION['logo_image'] = null;
+                        redirect('freelancer/dashboard.php');
                     } else {
                         $_SESSION['profile_id'] = null;
                         $_SESSION['logo_image'] = null;
                         redirect('admin/admin_dashboard.php');
                     }
-                    // Stay on home page — page will re-render with logged-in navbar
                 }
             } else {
                 $login_error = 'Invalid email or password.';
@@ -173,7 +174,7 @@ if ($r) {
     }
 }
 
-// Fetch featured skills for categories
+// Fetch all skills for the Skills section
 $skills_list = [];
 $r = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
 if ($r) {
@@ -753,6 +754,22 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
             pointer-events: none;
         }
 
+        /* Skill selector — hide native arrow across all browsers */
+        .skill-select-no-arrow {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: none !important;
+        }
+        .skill-select-no-arrow::-ms-expand {
+            display: none;
+        }
+        @supports (-webkit-touch-callout: none) {
+            .skill-select-no-arrow {
+                padding-right: 1rem;
+            }
+        }
+
         /* Job card */
         .job-card {
             background: white;
@@ -953,7 +970,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                         </svg>
                         Find Jobs
                     </a>
-                    <a href="<?= e(base_url('register.php')) ?>" class="px-8 py-4 rounded-xl font-semibold text-white text-base bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 hover:border-white/30 transition-all inline-flex items-center gap-2">
+                    <a href="<?= e(base_url('auth/register.php')) ?>" class="px-8 py-4 rounded-xl font-semibold text-white text-base bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 hover:border-white/30 transition-all inline-flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
@@ -1008,52 +1025,187 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
         </div>
     </section>
 
-    <!-- ===== POPULAR CATEGORIES ===== -->
-    <section id="categories" class="py-28 bg-white/50 dark:bg-slate-800/30">
+    <!-- ===== BROWSE BY SKILL ===== -->
+    <section id="skills" class="py-28 bg-white/50 dark:bg-slate-800/30">
         <div class="max-w-7xl mx-auto px-4 sm:px-6">
-            <div class="text-center mb-16 reveal">
-                <span class="section-eyebrow justify-center">Categories</span>
-                <h2 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">Explore Top Skills</h2>
-                <p class="text-gray-500 dark:text-gray-400 max-w-xl mx-auto text-lg">Find talent across the most in-demand technical and creative skills</p>
+            <div class="text-center mb-10 reveal">
+                <span class="section-eyebrow justify-center">Skills</span>
+                <h2 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">Browse Jobs by Skill</h2>
+                <p class="text-gray-500 dark:text-gray-400 max-w-xl mx-auto text-lg">Select a skill to find matching job opportunities</p>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
-                <?php
-                $category_data = [
-                    'PHP' => ['color' => 'from-blue-500 to-indigo-600', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>'],
-                    'JavaScript' => ['color' => 'from-yellow-400 to-orange-500', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>'],
-                    'React.js' => ['color' => 'from-cyan-400 to-blue-500', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>'],
-                    'UI/UX Design' => ['color' => 'from-pink-500 to-rose-600', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>'],
-                    'Python' => ['color' => 'from-green-500 to-emerald-600', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>'],
-                    'Content Writing' => ['color' => 'from-violet-500 to-purple-600', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>'],
-                    'Video Editing' => ['color' => 'from-red-500 to-pink-600', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>'],
-                    'Digital Marketing' => ['color' => 'from-teal-500 to-cyan-600', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/>'],
-                    'Laravel' => ['color' => 'from-red-600 to-rose-700', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>'],
-                    'MySQL' => ['color' => 'from-blue-600 to-indigo-700', 'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>'],
-                ];
+            <!-- Skill Selector -->
+            <div class="max-w-md mx-auto mb-10 reveal">
+                <div class="relative">
+                    <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                    <select id="skill-selector" class="skill-select-no-arrow w-full pl-12 pr-4 py-4 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all" style="background-color:var(--color-card,#fff);border:1px solid var(--color-border,#e5e7eb);color:var(--color-text-primary,#111827)">
+                        <option value="">Select a skill...</option>
+                        <?php foreach ($skills_list as $sk): ?>
+                            <option value="<?= e($sk['skill_name']) ?>"><?= e($sk['skill_name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
 
-                $shown = 0;
-                foreach ($skills_list as $skill):
-                    if ($shown >= 10) break;
-                    if (!isset($category_data[$skill['skill_name']])) continue;
-                    $cd = $category_data[$skill['skill_name']];
-                    $shown++;
-                    $cnt_r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs j JOIN job_skills js ON js.job_id = j.id JOIN skills s ON js.skill_id = s.id WHERE s.skill_name = '" . $conn->real_escape_string($skill['skill_name']) . "' AND j.status = 'approved' AND j.category != 'Direct Hire'");
-                    $job_cnt = $cnt_r ? (int) $cnt_r->fetch_assoc()['cnt'] : 0;
-                ?>
-                    <a href="<?= e(base_url('freelancer/skill_jobs.php?skill=' . urlencode($skill['skill_name']))) ?>" class="cat-card bg-gradient-to-br <?= $cd['color'] ?> reveal reveal-d<?= ($shown % 5) + 1 ?>">
-                        <div class="relative z-10">
-                            <div class="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform duration-300">
-                                <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><?= $cd['icon'] ?></svg>
-                            </div>
-                            <h3 class="font-bold text-base mb-1 relative z-10"><?= e($skill['skill_name']) ?></h3>
-                            <p class="text-white/70 text-sm relative z-10"><?= $job_cnt ?>+ open jobs</p>
-                        </div>
+            <!-- Filtered Jobs Container -->
+            <div id="skill-jobs-container" class="hidden">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white" id="skill-jobs-title">Jobs</h3>
+                    <span class="text-sm text-gray-500 dark:text-gray-400" id="skill-jobs-count"></span>
+                </div>
+                <div id="skill-jobs-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                </div>
+                <div id="skill-jobs-loading" class="hidden text-center py-12">
+                    <div class="inline-flex items-center gap-3 text-gray-500 dark:text-gray-400">
+                        <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Loading jobs...
+                    </div>
+                </div>
+                <div id="skill-jobs-empty" class="hidden text-center py-12 bg-white dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-700/50">
+                    <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    <p class="text-gray-500 dark:text-gray-400">No jobs found for this skill.</p>
+                </div>
+                <div class="text-center mt-8" id="skill-jows-view-all" style="display:none">
+                    <a id="skill-view-all-link" href="#" class="btn-gradient inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white text-sm shadow-lg shadow-primary-500/25">
+                        View All Matching Jobs
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
                     </a>
+                </div>
+            </div>
+
+            <!-- Default: show top skills as pills -->
+            <div id="skills-pills" class="flex flex-wrap justify-center gap-3 reveal">
+                <?php
+                $top_skills = ['PHP', 'JavaScript', 'React.js', 'UI/UX Design', 'Python', 'Content Writing', 'Laravel', 'MySQL', 'Figma', 'Node.js'];
+                $pill_colors = [
+                    'PHP' => 'from-blue-500 to-indigo-600',
+                    'JavaScript' => 'from-yellow-400 to-orange-500',
+                    'React.js' => 'from-cyan-400 to-blue-500',
+                    'UI/UX Design' => 'from-pink-500 to-rose-600',
+                    'Python' => 'from-green-500 to-emerald-600',
+                    'Content Writing' => 'from-violet-500 to-purple-600',
+                    'Laravel' => 'from-red-600 to-rose-700',
+                    'MySQL' => 'from-blue-600 to-indigo-700',
+                    'Figma' => 'from-purple-500 to-fuchsia-600',
+                    'Node.js' => 'from-green-600 to-teal-700',
+                ];
+                foreach ($skills_list as $sk):
+                    if (!in_array($sk['skill_name'], $top_skills)) continue;
+                    $color = $pill_colors[$sk['skill_name']] ?? 'from-gray-500 to-gray-600';
+                ?>
+                    <button type="button" onclick="selectSkill('<?= e($sk['skill_name']) ?>')" class="skill-pill inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-br <?= $color ?> shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
+                        <?= e($sk['skill_name']) ?>
+                    </button>
                 <?php endforeach; ?>
             </div>
         </div>
     </section>
+
+<script>
+(function() {
+    var selector = document.getElementById('skill-selector');
+    var container = document.getElementById('skill-jobs-container');
+    var grid = document.getElementById('skill-jobs-grid');
+    var loading = document.getElementById('skill-jobs-loading');
+    var empty = document.getElementById('skill-jobs-empty');
+    var title = document.getElementById('skill-jobs-title');
+    var count = document.getElementById('skill-jobs-count');
+    var pills = document.getElementById('skills-pills');
+    var viewAllWrap = document.getElementById('skill-jows-view-all');
+    var viewAllLink = document.getElementById('skill-view-all-link');
+
+    if (!selector) return;
+
+    var debounceTimer = null;
+
+    selector.addEventListener('change', function() {
+        selectSkill(this.value);
+    });
+
+    window.selectSkill = function(skill) {
+        if (!skill) {
+            container.classList.add('hidden');
+            pills.classList.remove('hidden');
+            return;
+        }
+        // Update dropdown to match
+        selector.value = skill;
+
+        // Show container, hide pills
+        container.classList.remove('hidden');
+        pills.classList.add('hidden');
+        grid.innerHTML = '';
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        viewAllWrap.style.display = 'none';
+        title.textContent = skill + ' Jobs';
+
+        fetch('<?= e(base_url("api/skill_jobs.php")) ?>?skill=' + encodeURIComponent(skill) + '&limit=6')
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                loading.classList.add('hidden');
+                if (!d.success || !d.jobs || d.jobs.length === 0) {
+                    empty.classList.remove('hidden');
+                    count.textContent = '';
+                    return;
+                }
+                count.textContent = d.count + ' job' + (d.count !== 1 ? 's' : '') + ' found';
+                viewAllWrap.style.display = '';
+                viewAllLink.href = '<?= e(base_url("freelancer/skill_jobs.php?skill=")) ?>' + encodeURIComponent(skill);
+
+                d.jobs.forEach(function(job) {
+                    var logoHtml = job.logo_url
+                        ? '<img src="' + escHtml(job.logo_url) + '" alt="" class="w-10 h-10 rounded-lg object-cover">'
+                        : '<div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">' + escHtml(job.company_name.charAt(0).toUpperCase()) + '</div>';
+
+                    var expLabel = job.experience_level === 'beginner' ? 'Beginner' : job.experience_level === 'expert' ? 'Expert' : 'Intermediate';
+                    var timeAgo = timeSince(job.created_at);
+
+                    grid.innerHTML +=
+                        '<div class="job-card bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-gray-700/50 p-6 hover:border-indigo-300 dark:hover:border-indigo-600 transition-all">' +
+                            '<div class="flex items-start gap-3 mb-4">' +
+                                logoHtml +
+                                '<div class="flex-1 min-w-0">' +
+                                    '<p class="text-xs text-gray-400 mb-0.5">' + escHtml(job.company_name) + '</p>' +
+                                    '<h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug line-clamp-2">' + escHtml(job.title) + '</h3>' +
+                                '</div>' +
+                            '</div>' +
+                            '<p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-4 line-clamp-3">' + escHtml(job.description) + '</p>' +
+                            '<div class="flex flex-wrap gap-1.5 mb-4">' +
+                                '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">' + escHtml(expLabel) + '</span>' +
+                                (job.duration ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">' + escHtml(job.duration) + '</span>' : '') +
+                            '</div>' +
+                            '<div class="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700/50">' +
+                                '<span class="text-sm font-bold text-emerald-600 dark:text-emerald-400">$' + Number(job.budget).toLocaleString() + '</span>' +
+                                '<a href="<?= e(base_url("freelancer/view_job.php?id=")) ?>' + job.id + '" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition-colors">View Details →</a>' +
+                            '</div>' +
+                        '</div>';
+                });
+            })
+            .catch(function() {
+                loading.classList.add('hidden');
+                empty.classList.remove('hidden');
+            });
+    };
+
+    function escHtml(s) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(s || ''));
+        return d.innerHTML;
+    }
+
+    function timeSince(dateStr) {
+        var now = new Date();
+        var d = new Date(dateStr);
+        var diff = Math.floor((now - d) / 1000);
+        if (diff < 60) return 'just now';
+        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        if (diff < 2592000) return Math.floor(diff / 86400) + 'd ago';
+        return d.toLocaleDateString();
+    }
+})();
+</script>
 
     <!-- ===== FEATURED JOBS ===== -->
     <section id="find-jobs" class="py-28">
@@ -1205,7 +1357,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                                             </button>
                                         </form>
                                     <?php else: ?>
-                                        <a href="<?= e(base_url('login.php')) ?>" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 shadow-md shadow-primary-500/20 hover:shadow-lg hover:-translate-y-0.5 transition-all" onclick="event.stopPropagation()">
+                                        <a href="<?= e(base_url('auth/login.php')) ?>" class="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-accent-500 hover:from-primary-600 hover:to-accent-600 shadow-md shadow-primary-500/20 hover:shadow-lg hover:-translate-y-0.5 transition-all" onclick="event.stopPropagation()">
                                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                                             </svg>
@@ -1614,7 +1766,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                     <h2 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-5">Ready to Start Your<br class="hidden sm:block"> Freelance Journey?</h2>
                     <p class="text-lg text-white/80 mb-10 max-w-2xl mx-auto">Join thousands of companies and freelancers already using HireWork to build amazing things together.</p>
                     <div class="flex flex-wrap justify-center gap-4">
-                        <a href="<?= e(base_url('register.php')) ?>" class="inline-flex items-center px-8 py-4 rounded-xl font-bold text-primary-600 bg-white hover:bg-gray-50 transition-all shadow-xl shadow-black/10 hover:shadow-2xl hover:-translate-y-1">
+                        <a href="<?= e(base_url('auth/register.php')) ?>" class="inline-flex items-center px-8 py-4 rounded-xl font-bold text-primary-600 bg-white hover:bg-gray-50 transition-all shadow-xl shadow-black/10 hover:shadow-2xl hover:-translate-y-1">
                             <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
@@ -1670,7 +1822,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                 <div>
                     <h4 class="text-white font-bold mb-5 text-sm">For Companies</h4>
                     <ul class="space-y-2.5">
-                        <li><a href="<?= e(base_url('register.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Post a Job</a></li>
+                        <li><a href="<?= e(base_url('auth/register.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Post a Job</a></li>
                         <li><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Browse Jobs</a></li>
                         <li><a href="<?= $is_logged_in ? e(base_url('company/dashboard.php')) : 'javascript:void(0)' ?>" <?= $is_logged_in ? '' : 'onclick="document.getElementById(\'loginModal\').classList.remove(\'hidden\')"' ?> class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Login</a></li>
                     </ul>
@@ -1681,7 +1833,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                     <h4 class="text-white font-bold mb-5 text-sm">For Freelancers</h4>
                     <ul class="space-y-2.5">
                         <li><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Find Work</a></li>
-                        <li><a href="<?= e(base_url('register.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Create Profile</a></li>
+                        <li><a href="<?= e(base_url('auth/register.php')) ?>" class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Create Profile</a></li>
                         <li><a href="<?= $is_logged_in ? e(base_url('freelancer/dashboard.php')) : 'javascript:void(0)' ?>" <?= $is_logged_in ? '' : 'onclick="document.getElementById(\'loginModal\').classList.remove(\'hidden\')"' ?> class="text-gray-400 hover:text-primary-400 text-sm transition-colors duration-200">Login</a></li>
                     </ul>
                 </div>
@@ -1804,7 +1956,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
             <div class="px-8 pb-8 text-center">
                 <p class="text-sm text-gray-500 dark:text-gray-400">
                     Don't have an account?
-                    <a href="<?= e(base_url('register.php')) ?>" class="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors">Register</a>
+                    <a href="<?= e(base_url('auth/register.php')) ?>" class="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors">Register</a>
                 </p>
             </div>
         </div>

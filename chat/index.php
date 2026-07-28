@@ -8,7 +8,7 @@ require_login();
 $role = $_SESSION['role'] ?? '';
 if (!in_array($role, ['company', 'freelancer', 'admin'], true)) {
     set_flash('error', 'You do not have permission to access that page.');
-    redirect('login.php');
+    redirect('auth/login.php');
 }
 
 $user_id = (int) $_SESSION['user_id'];

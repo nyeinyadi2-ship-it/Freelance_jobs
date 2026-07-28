@@ -10,7 +10,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 
 if (!$company_id) {
     set_flash('error', 'Company profile not found.');
-    redirect('login.php');
+    redirect('auth/login.php');
 }
 
 // Fetch all skills for multi-select

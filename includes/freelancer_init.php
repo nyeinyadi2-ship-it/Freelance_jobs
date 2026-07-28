@@ -16,7 +16,7 @@ require_role('freelancer');
 $fl_user = current_user();
 $fl_uid = (int) $fl_user['user_id'];
 $fl_freelancer_id = get_freelancer_id($conn, $fl_uid);
-if (!$fl_freelancer_id) { set_flash('error', 'Freelancer profile not found.'); redirect('login.php'); }
+if (!$fl_freelancer_id) { set_flash('error', 'Freelancer profile not found.'); redirect('auth/login.php'); }
 
 // Profile
 $fl_stmt = $conn->prepare("SELECT f.*, u.email, u.profile_image, u.username, u.created_at FROM freelancers f JOIN users u ON u.id = f.user_id WHERE f.id = ?");

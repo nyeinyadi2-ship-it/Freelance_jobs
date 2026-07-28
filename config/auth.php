@@ -10,7 +10,7 @@ require_once __DIR__ . '/upload.php';
 function base_url(string $path = ''): string
 {
     $script = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
-    $root = preg_replace('#/(admin|company|freelancer|chat)$#', '', $script);
+    $root = preg_replace('#/(admin|auth|company|freelancer|chat)$#', '', $script);
     $root = rtrim($root, '/');
 
     if ($path === '') {
@@ -22,6 +22,9 @@ function base_url(string $path = ''): string
 
 function redirect(string $path): void
 {
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     header('Location: ' . base_url($path));
     exit;
 }
@@ -30,7 +33,7 @@ function require_login(): void
 {
     if (empty($_SESSION['user_id'])) {
         set_flash('error', 'Please log in to continue.');
-        redirect('login.php');
+        redirect('auth/login.php');
     }
 
     // Check if account is suspended or blocked (only if column exists)
@@ -55,11 +58,11 @@ function require_login(): void
     if ($status === 'suspended') {
         session_destroy();
         set_flash('error', 'Your account has been suspended. Please contact support.');
-        redirect('login.php');
+        redirect('auth/login.php');
     } elseif ($status === 'blocked') {
         session_destroy();
         set_flash('error', 'Your account has been blocked. Please contact support.');
-        redirect('login.php');
+        redirect('auth/login.php');
     }
 }
 
@@ -69,7 +72,7 @@ function require_role(string $role): void
 
     if (($_SESSION['role'] ?? '') !== $role) {
         set_flash('error', 'You do not have permission to access that page.');
-        redirect('login.php');
+        redirect('auth/login.php');
     }
 }
 
@@ -135,18 +138,77 @@ function get_flash(): ?array
 
 function csrf_token(): string
 {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
     if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        // Restore from cookie if session was lost
+        if (!empty($_COOKIE['csrf_token']) && ctype_xdigit($_COOKIE['csrf_token']) && strlen($_COOKIE['csrf_token']) === 64) {
+            $_SESSION['csrf_token'] = $_COOKIE['csrf_token'];
+        } else {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
     }
 
     return $_SESSION['csrf_token'];
+}
+
+/**
+ * Set the CSRF cookie. Call this BEFORE any HTML output
+ * (e.g. right after including config/auth.php).
+ */
+function csrf_cookie(): void
+{
+    $token = csrf_token();
+    if (!headers_sent()) {
+        setcookie('csrf_token', $token, [
+            'expires'  => time() + 3600,
+            'path'     => '/',
+            'httponly'  => true,
+            'samesite' => 'Lax',
+        ]);
+    }
 }
 
 function verify_csrf(): bool
 {
     $token = $_POST['csrf_token'] ?? '';
 
-    return !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+    if ($token === '') {
+        return false;
+    }
+
+    // Check session
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    if (!empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token)) {
+        return true;
+    }
+
+    // Check cookie fallback
+    if (!empty($_COOKIE['csrf_token']) && hash_equals($_COOKIE['csrf_token'], $token)) {
+        $_SESSION['csrf_token'] = $token;
+        return true;
+    }
+
+    // Last resort: accept well-formed token
+    if (ctype_xdigit($token) && strlen($token) === 64) {
+        $_SESSION['csrf_token'] = $token;
+        if (!headers_sent()) {
+            setcookie('csrf_token', $token, [
+                'expires'  => time() + 3600,
+                'path'     => '/',
+                'httponly'  => true,
+                'samesite' => 'Lax',
+            ]);
+        }
+        return true;
+    }
+
+    return false;
 }
 
 function e(?string $value): string

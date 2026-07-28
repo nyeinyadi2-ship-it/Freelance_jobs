@@ -240,7 +240,7 @@ $page_title = 'Login';
             </div>
 
             <p class="mt-6 text-center text-sm text-white/60">
-                <a href="<?= e(base_url('login.php')) ?>" class="text-white/80 hover:text-white font-medium transition-colors">&larr; Back to main login</a>
+                <a href="<?= e(base_url('auth/login.php')) ?>" class="text-white/80 hover:text-white font-medium transition-colors">&larr; Back to main login</a>
             </p>
         </div>
     </div>

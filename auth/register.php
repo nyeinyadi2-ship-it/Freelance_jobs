@@ -3,6 +3,9 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';
 
+// Set CSRF cookie early (before any HTML output)
+csrf_cookie();
+
 if (!empty($_SESSION['user_id'])) {
     $role = $_SESSION['role'];
     if ($role === 'admin') redirect('admin/admin_dashboard.php');
@@ -172,8 +175,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         create_notification($conn, $admin_id, 'new_registration', "New {$role_label} \"{$username}\" has registered.", null);
                     }
 
-                    set_flash('success', 'Registration successful. Please log in.');
-                    redirect('auth/login.php');
+                    // Auto-login after registration
+                    $_SESSION['user_id'] = (int) $user_id;
+                    $_SESSION['username'] = $username;
+                    $_SESSION['email'] = $email;
+                    $_SESSION['role'] = $role;
+                    $_SESSION['profile_image'] = $profile_image;
+
+                    if ($role === 'company') {
+                        $_SESSION['profile_id'] = get_company_id($conn, (int) $user_id);
+                        $_SESSION['logo_image'] = $logo_image;
+                        set_flash('success', 'Registration successful! Welcome to HireWork.');
+                        redirect('company/index.php');
+                    } else {
+                        $_SESSION['profile_id'] = get_freelancer_id($conn, (int) $user_id);
+                        $_SESSION['logo_image'] = null;
+                        set_flash('success', 'Registration successful! Welcome to HireWork.');
+                        redirect('freelancer/dashboard.php');
+                    }
                 } catch (Exception $e) {
                     $conn->rollback();
                     if ($profile_image) delete_upload($profile_image);

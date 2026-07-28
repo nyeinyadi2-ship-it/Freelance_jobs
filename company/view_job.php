@@ -232,7 +232,7 @@ require __DIR__ . '/../includes/header.php';
     <?php if (!empty($job['attachment'])): ?>
         <div class="vj-section">
             <h3>Attachment</h3>
-            <a href="<?= e(base_url('uploads/images/' . $job['attachment'])) ?>" target="_blank" class="vj-btn vj-btn-outline" style="display:inline-flex">
+            <a href="<?= e(attachment_url($job['attachment'])) ?>" target="_blank" class="vj-btn vj-btn-outline" style="display:inline-flex">
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 Download Attachment
             </a>

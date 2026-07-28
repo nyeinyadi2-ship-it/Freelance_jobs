@@ -443,7 +443,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
                         Attachments
                     </h3>
-                    <a href="<?= e(base_url('uploads/images/' . $job['attachment'])) ?>" target="_blank" class="inline-flex items-center gap-3 px-5 py-3.5 rounded-xl text-sm font-medium transition-all hover:shadow-md" style="background:rgba(99,102,241,0.06);color:var(--color-text-secondary);border:1px solid var(--color-border)">
+                    <a href="<?= e(attachment_url($job['attachment'])) ?>" target="_blank" class="inline-flex items-center gap-3 px-5 py-3.5 rounded-xl text-sm font-medium transition-all hover:shadow-md" style="background:rgba(99,102,241,0.06);color:var(--color-text-secondary);border:1px solid var(--color-border)">
                         <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:rgba(99,102,241,0.1)">
                             <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                         </div>
