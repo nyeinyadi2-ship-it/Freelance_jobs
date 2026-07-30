@@ -4,6 +4,9 @@ require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/notifications.php';
 require_once __DIR__ . '/config/chat.php';
 
+// Set CSRF cookie early (before any HTML output)
+csrf_cookie();
+
 // Handle login POST from home page
 $login_error = '';
 $login_success = false;

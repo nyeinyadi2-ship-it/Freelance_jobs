@@ -7,6 +7,9 @@ require_once __DIR__ . '/../config/notifications.php';
 require_once __DIR__ . '/../config/chat.php';
 require_once __DIR__ . '/../config/upload.php';
 
+// Set CSRF cookie early (before any HTML output)
+csrf_cookie();
+
 $fid = (int) ($_GET['id'] ?? 0);
 $viewer_role = $_SESSION['role'] ?? null;
 $fallback_url = ($viewer_role === 'company') ? 'company/index.php' : (($viewer_role === 'freelancer') ? 'freelancer/dashboard.php' : 'index.php');

@@ -3,6 +3,9 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/upload.php';
 
+// Set CSRF cookie early (before any HTML output)
+csrf_cookie();
+
 require_role('company');
 
 $user = current_user();

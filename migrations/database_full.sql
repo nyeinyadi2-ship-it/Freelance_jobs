@@ -113,13 +113,16 @@ CREATE TABLE IF NOT EXISTS job_applications (
 -- 8. Assignments Table
 CREATE TABLE IF NOT EXISTS assignments (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    job_id INT UNIQUE,
-    freelancer_id INT,
+    job_id INT NOT NULL,
+    freelancer_id INT NOT NULL,
     status ENUM('assigned', 'working', 'submitted', 'completed') DEFAULT 'assigned',
     submission_link VARCHAR(255),
     assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
-    FOREIGN KEY (freelancer_id) REFERENCES freelancers(id) ON DELETE CASCADE
+    FOREIGN KEY (freelancer_id) REFERENCES freelancers(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_assignment_job_freelancer (job_id, freelancer_id),
+    INDEX idx_assignments_job_id (job_id),
+    INDEX idx_assignments_freelancer_id (freelancer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 9. Notifications Table

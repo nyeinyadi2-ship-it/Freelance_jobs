@@ -14,7 +14,7 @@ if (!$company_id || $job_id <= 0) {
     redirect('company/manage_jobs.php');
 }
 
-$stmt = $conn->prepare('SELECT id, title, budget, status FROM jobs WHERE id = ? AND company_id = ?');
+$stmt = $conn->prepare('SELECT id, title, budget, status, freelancers_needed FROM jobs WHERE id = ? AND company_id = ?');
 $stmt->bind_param('ii', $job_id, $company_id);
 $stmt->execute();
 $job = $stmt->get_result()->fetch_assoc();

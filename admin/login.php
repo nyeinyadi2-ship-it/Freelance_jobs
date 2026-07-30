@@ -3,6 +3,9 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';
 
+// Set CSRF cookie early (before any HTML output)
+csrf_cookie();
+
 if (!empty($_SESSION['user_id'])) {
     $role = $_SESSION['role'];
     if ($role === 'admin') redirect('admin/admin_dashboard.php');

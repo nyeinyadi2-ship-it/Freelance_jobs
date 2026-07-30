@@ -168,10 +168,14 @@ require __DIR__ . '/../includes/header.php';
     </div>
 
     <!-- Quick Info -->
-    <div class="grid sm:grid-cols-3 gap-4 mb-6">
+    <div class="grid sm:grid-cols-4 gap-4 mb-6">
         <div class="vj-section" style="text-align:center;margin-bottom:0">
             <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Budget</p>
             <p style="font-size:1.5rem;font-weight:800;color:#2563eb">$<?= e(number_format((float) $job['budget'], 2)) ?></p>
+        </div>
+        <div class="vj-section" style="text-align:center;margin-bottom:0">
+            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Positions</p>
+            <p style="font-size:1.5rem;font-weight:800;color:var(--color-text-primary)"><?= $hired_count ?>/<?= $freelancers_needed ?></p>
         </div>
         <div class="vj-section" style="text-align:center;margin-bottom:0">
             <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Proposals</p>
