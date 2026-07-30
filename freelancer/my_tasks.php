@@ -149,8 +149,8 @@ $st->close();
 // Fetch milestones for each task
 foreach ($tasks as &$task) {
     $task['milestones'] = [];
-    $ms = $conn->prepare("SELECT * FROM milestones WHERE job_id = ? ORDER BY sort_order ASC");
-    $ms->bind_param('i', $task['job_id']);
+    $ms = $conn->prepare("SELECT * FROM milestones WHERE job_id = ? AND (freelancer_id = ? OR freelancer_id IS NULL) ORDER BY sort_order ASC");
+    $ms->bind_param('ii', $task['job_id'], $fl_freelancer_id);
     $ms->execute();
     $mr = $ms->get_result();
     while ($m = $mr->fetch_assoc()) { $task['milestones'][] = $m; }

@@ -216,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         $stmt->close();
                         if ($job_id > 0) {
                             if ($payment_type === 'milestone' && !empty($ms_titles)) {
-                                $ms_stmt = $conn->prepare('INSERT INTO milestones (job_id, title, description, amount, deadline, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
+                                $ms_stmt = $conn->prepare('INSERT INTO milestones (job_id, freelancer_id, title, description, amount, deadline, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
                                 foreach ($ms_titles as $idx => $ms_t) {
                                     $ms_t = trim($ms_t);
                                     $ms_a = (float) ($ms_amounts[$idx] ?? 0);
@@ -224,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                     $ms_dl = trim($ms_deadlines[$idx] ?? '') !== '' ? trim($ms_deadlines[$idx]) : null;
                                     if ($ms_t !== '' && $ms_a > 0) {
                                         $order = $idx + 1;
-                                        $ms_stmt->bind_param('issdsi', $job_id, $ms_t, $ms_d, $ms_a, $ms_dl, $order);
+                                        $ms_stmt->bind_param('iissdsi', $job_id, $fid, $ms_t, $ms_d, $ms_a, $ms_dl, $order);
                                         $ms_stmt->execute();
                                     }
                                 }

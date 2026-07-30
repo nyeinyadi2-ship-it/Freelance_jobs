@@ -17,8 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             FROM milestones m
             JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
             WHERE m.id = ? AND m.status = 'funded'
+              AND (m.freelancer_id = ? OR m.freelancer_id IS NULL)
         ");
-        $st->bind_param('ii', $fl_freelancer_id, $post_milestone_id);
+        $st->bind_param('iii', $fl_freelancer_id, $post_milestone_id, $fl_freelancer_id);
         $st->execute();
         $ms_check = $st->get_result()->fetch_assoc();
         $st->close();
@@ -32,8 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $st->close();
 
                 // Update assignment status to working (from any active state)
-                $st = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status IN ('assigned', 'submitted')");
-                $st->bind_param('i', $ms_check['job_id']);
+                $st = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND freelancer_id = ? AND status IN ('assigned', 'submitted')");
+                $st->bind_param('ii', $ms_check['job_id'], $fl_freelancer_id);
                 $st->execute();
                 $st->close();
 
@@ -53,8 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             FROM milestones m
             JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
             WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested')
+              AND (m.freelancer_id = ? OR m.freelancer_id IS NULL)
         ");
-        $st->bind_param('ii', $fl_freelancer_id, $post_milestone_id);
+        $st->bind_param('iii', $fl_freelancer_id, $post_milestone_id, $fl_freelancer_id);
         $st->execute();
         $ms_check = $st->get_result()->fetch_assoc();
         $st->close();
@@ -94,8 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $st->execute();
                 $st->close();
 
-                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND status IN ('working', 'assigned')");
-                $st->bind_param('i', $ms_check['job_id']);
+                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
+                $st->bind_param('ii', $ms_check['job_id'], $fl_freelancer_id);
                 $st->execute();
                 $st->close();
 
@@ -144,18 +146,19 @@ $st = $conn->prepare("
     JOIN assignments a ON a.job_id = j.id AND a.freelancer_id = ?
     LEFT JOIN escrow e ON e.milestone_id = m.id
     WHERE m.id = ?
+      AND (m.freelancer_id = ? OR m.freelancer_id IS NULL)
 ");
-$st->bind_param('ii', $fl_freelancer_id, $ms_id);
+$st->bind_param('iii', $fl_freelancer_id, $ms_id, $fl_freelancer_id);
 $st->execute();
 $milestone = $st->get_result()->fetch_assoc();
 $st->close();
 
 if (!$milestone) { redirect('freelancer/my_tasks.php'); }
 
-// Fetch all milestones for this job (for sidebar/progress)
+// Fetch all milestones for this job (for sidebar/progress) — only those assigned to this freelancer
 $all_ms = [];
-$st = $conn->prepare("SELECT id, title, amount, status, sort_order FROM milestones WHERE job_id = ? ORDER BY sort_order ASC");
-$st->bind_param('i', $milestone['job_id']);
+$st = $conn->prepare("SELECT id, title, amount, status, sort_order FROM milestones WHERE job_id = ? AND (freelancer_id = ? OR freelancer_id IS NULL) ORDER BY sort_order ASC");
+$st->bind_param('ii', $milestone['job_id'], $fl_freelancer_id);
 $st->execute();
 $mr = $st->get_result();
 while ($row = $mr->fetch_assoc()) { $all_ms[] = $row; }

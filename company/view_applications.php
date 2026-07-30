@@ -318,7 +318,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $ms_action = $_POST['ms_action'];
         $milestone_id = (int) ($_POST['milestone_id'] ?? 0);
 
-        if ($ms_action === 'fund' && $milestone_id > 0) {
+        if ($ms_action === 'create_milestone') {
+            $ms_title = trim($_POST['ms_title'] ?? '');
+            $ms_description = trim($_POST['ms_description'] ?? '');
+            $ms_amount = (float) ($_POST['ms_amount'] ?? 0);
+            $ms_deadline = trim($_POST['ms_deadline'] ?? '');
+            $ms_freelancer_id = (int) ($_POST['ms_freelancer_id'] ?? 0);
+
+            if ($ms_title === '') {
+                set_flash('error', 'Milestone title is required.');
+            } elseif ($ms_amount <= 0) {
+                set_flash('error', 'Milestone amount must be greater than 0.');
+            } elseif ($ms_freelancer_id <= 0) {
+                set_flash('error', 'Please select a freelancer to assign this milestone.');
+            } else {
+                // Verify freelancer is assigned to this job
+                $chk = $conn->prepare("SELECT id FROM assignments WHERE job_id = ? AND freelancer_id = ? AND status != 'completed'");
+                $chk->bind_param('ii', $job_id, $ms_freelancer_id);
+                $chk->execute();
+                $valid_assignment = $chk->get_result()->fetch_assoc();
+                $chk->close();
+
+                if (!$valid_assignment) {
+                    set_flash('error', 'Selected freelancer is not assigned to this job.');
+                } else {
+                    // Get next sort order
+                    $so = $conn->prepare("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM milestones WHERE job_id = ?");
+                    $so->bind_param('i', $job_id);
+                    $so->execute();
+                    $next_order = (int) $so->get_result()->fetch_assoc()['next_order'];
+                    $so->close();
+
+                    $ms_deadline_val = $ms_deadline !== '' ? $ms_deadline : null;
+                    $ms_desc_val = $ms_description !== '' ? $ms_description : null;
+
+                    $stmt = $conn->prepare("INSERT INTO milestones (job_id, freelancer_id, title, description, amount, deadline, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)");
+                    $stmt->bind_param('iissdsi', $job_id, $ms_freelancer_id, $ms_title, $ms_desc_val, $ms_amount, $ms_deadline_val, $next_order);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    set_flash('success', 'Milestone created and assigned successfully!');
+                }
+            }
+            redirect('company/view_applications.php?id=' . $job_id);
+        } elseif ($ms_action === 'fund' && $milestone_id > 0) {
             $stmt = $conn->prepare("SELECT m.id, m.amount, m.status FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.job_id = ? AND j.company_id = ? AND m.status = 'draft'");
             $stmt->bind_param('iii', $milestone_id, $job_id, $company_id);
             $stmt->execute();
@@ -348,7 +391,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 set_flash('error', 'Milestone not found or already funded.');
             }
         } elseif ($ms_action === 'approve' && $milestone_id > 0) {
-            $stmt = $conn->prepare("SELECT m.id, m.amount, m.status FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.job_id = ? AND j.company_id = ? AND m.status = 'submitted'");
+            $stmt = $conn->prepare("SELECT m.id, m.amount, m.status, m.freelancer_id FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.job_id = ? AND j.company_id = ? AND m.status = 'submitted'");
             $stmt->bind_param('iii', $milestone_id, $job_id, $company_id);
             $stmt->execute();
             $ms = $stmt->get_result()->fetch_assoc();
@@ -368,9 +411,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     $stmt->execute();
                     $stmt->close();
 
-                    // Create payment record (skip if one already exists for this assignment)
-                    $stmt = $conn->prepare("SELECT a.id FROM assignments a WHERE a.job_id = ?");
-                    $stmt->bind_param('i', $job_id);
+                    // Create payment record for the specific freelancer's assignment
+                    $ms_freelancer_id = (int) ($ms['freelancer_id'] ?? 0);
+                    if ($ms_freelancer_id > 0) {
+                        $stmt = $conn->prepare("SELECT a.id FROM assignments a WHERE a.job_id = ? AND a.freelancer_id = ?");
+                        $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
+                    } else {
+                        $stmt = $conn->prepare("SELECT a.id FROM assignments a WHERE a.job_id = ?");
+                        $stmt->bind_param('i', $job_id);
+                    }
                     $stmt->execute();
                     $assignment_row = $stmt->get_result()->fetch_assoc();
                     $stmt->close();
@@ -388,35 +437,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                         }
                     }
 
-                    // Check if all milestones are approved → complete job
-                    $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved FROM milestones WHERE job_id = ?");
-                    $stmt->bind_param('i', $job_id);
+                    // Check if all milestones for this freelancer are approved
+                    if ($ms_freelancer_id > 0) {
+                        $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved FROM milestones WHERE job_id = ? AND freelancer_id = ?");
+                        $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
+                    } else {
+                        $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved FROM milestones WHERE job_id = ?");
+                        $stmt->bind_param('i', $job_id);
+                    }
                     $stmt->execute();
                     $counts = $stmt->get_result()->fetch_assoc();
                     $stmt->close();
+
                     if ($counts && $counts['total'] == $counts['approved']) {
-                        $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
-                        $stmt->bind_param('i', $job_id);
+                        // All milestones for this freelancer done — complete their assignment
+                        if ($ms_freelancer_id > 0) {
+                            $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE job_id = ? AND freelancer_id = ?");
+                            $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
+                        } else {
+                            $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE job_id = ?");
+                            $stmt->bind_param('i', $job_id);
+                        }
                         $stmt->execute();
                         $stmt->close();
-                        $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE job_id = ?");
+
+                        // Check if ALL assignments for the job are completed
+                        $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done FROM assignments WHERE job_id = ?");
                         $stmt->bind_param('i', $job_id);
                         $stmt->execute();
+                        $ac = $stmt->get_result()->fetch_assoc();
                         $stmt->close();
+                        if ($ac && $ac['total'] == $ac['done']) {
+                            $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
+                            $stmt->bind_param('i', $job_id);
+                            $stmt->execute();
+                            $stmt->close();
+                        }
                     } else {
                         // Not all done yet — set assignment back to working for next milestone
-                        $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'submitted'");
-                        $stmt->bind_param('i', $job_id);
+                        if ($ms_freelancer_id > 0) {
+                            $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND freelancer_id = ? AND status = 'submitted'");
+                            $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
+                        } else {
+                            $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'submitted'");
+                            $stmt->bind_param('i', $job_id);
+                        }
                         $stmt->execute();
                         $stmt->close();
                     }
 
                     $conn->commit();
 
-                    // Notify freelancer (after commit so notification failure doesn't roll back approval)
+                    // Notify the specific freelancer
                     try {
-                        $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
-                        $stmt->bind_param('i', $job_id);
+                        if ($ms_freelancer_id > 0) {
+                            $stmt = $conn->prepare("SELECT u.id FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
+                            $stmt->bind_param('i', $ms_freelancer_id);
+                        } else {
+                            $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
+                            $stmt->bind_param('i', $job_id);
+                        }
                         $stmt->execute();
                         $fl_user = $stmt->get_result()->fetch_assoc();
                         $stmt->close();
@@ -437,13 +517,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 set_flash('error', 'Milestone not found or not submitted.');
             }
         } elseif ($ms_action === 'revision' && $milestone_id > 0) {
-            $stmt = $conn->prepare("SELECT m.id, m.status FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.job_id = ? AND j.company_id = ? AND m.status = 'submitted'");
+            $stmt = $conn->prepare("SELECT m.id, m.status, m.freelancer_id FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.job_id = ? AND j.company_id = ? AND m.status = 'submitted'");
             $stmt->bind_param('iii', $milestone_id, $job_id, $company_id);
             $stmt->execute();
             $ms = $stmt->get_result()->fetch_assoc();
             $stmt->close();
 
             if ($ms) {
+                $ms_freelancer_id = (int) ($ms['freelancer_id'] ?? 0);
                 $conn->begin_transaction();
                 try {
                     $del_stmt = $conn->prepare("SELECT submission_file FROM milestones WHERE id = ?");
@@ -461,17 +542,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                         delete_attachment($del_row['submission_file']);
                     }
 
-                    $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'submitted'");
-                    $stmt->bind_param('i', $job_id);
+                    // Update only the specific freelancer's assignment
+                    if ($ms_freelancer_id > 0) {
+                        $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND freelancer_id = ? AND status = 'submitted'");
+                        $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
+                    } else {
+                        $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'submitted'");
+                        $stmt->bind_param('i', $job_id);
+                    }
                     $stmt->execute();
                     $stmt->close();
 
                     $conn->commit();
 
-                    // Notify freelancer (after commit so notification failure doesn't roll back)
+                    // Notify the specific freelancer
                     try {
-                        $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
-                        $stmt->bind_param('i', $job_id);
+                        if ($ms_freelancer_id > 0) {
+                            $stmt = $conn->prepare("SELECT u.id FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
+                            $stmt->bind_param('i', $ms_freelancer_id);
+                        } else {
+                            $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
+                            $stmt->bind_param('i', $job_id);
+                        }
                         $stmt->execute();
                         $fl_user = $stmt->get_result()->fetch_assoc();
                         $stmt->close();
@@ -553,9 +645,9 @@ if ($assignment) {
     $stmt->close();
 }
 
-// Fetch milestones
+// Fetch milestones with assigned freelancer name
 $milestones = [];
-$stmt = $conn->prepare("SELECT m.*, e.status AS escrow_status, e.funded_at, e.released_at FROM milestones m LEFT JOIN escrow e ON e.milestone_id = m.id WHERE m.job_id = ? ORDER BY m.sort_order ASC");
+$stmt = $conn->prepare("SELECT m.*, e.status AS escrow_status, e.funded_at, e.released_at, f.full_name AS assigned_freelancer_name FROM milestones m LEFT JOIN escrow e ON e.milestone_id = m.id LEFT JOIN freelancers f ON f.id = m.freelancer_id WHERE m.job_id = ? ORDER BY m.sort_order ASC");
 $stmt->bind_param('i', $job_id);
 $stmt->execute();
 $mr = $stmt->get_result();
@@ -572,6 +664,15 @@ foreach ($milestones as $m) {
     $total_milestone_amount += (float) $m['amount'];
 }
 $all_approved = $total_milestones > 0 && $approved_count === $total_milestones;
+
+// Fetch accepted freelancers for milestone assignment dropdown
+$accepted_freelancers = [];
+$stmt = $conn->prepare("SELECT a.freelancer_id, f.full_name, u.profile_image FROM assignments a JOIN freelancers f ON f.id = a.freelancer_id JOIN users u ON f.user_id = u.id WHERE a.job_id = ? AND a.status != 'completed' ORDER BY f.full_name");
+$stmt->bind_param('i', $job_id);
+$stmt->execute();
+$af = $stmt->get_result();
+while ($row = $af->fetch_assoc()) { $accepted_freelancers[] = $row; }
+$stmt->close();
 
 $page_title = 'Applications';
 require __DIR__ . '/../includes/header.php';
@@ -628,7 +729,10 @@ require __DIR__ . '/../includes/header.php';
                             <div>
                                 <p class="text-sm font-bold" style="color:var(--color-text-primary)"><?= e($ms['title']) ?></p>
                                 <?php if ($ms['description']): ?><p class="text-xs" style="color:var(--color-text-muted)"><?= e($ms['description']) ?></p><?php endif; ?>
-                                <?php if (!empty($ms['deadline'])): ?><p class="text-[11px] mt-0.5" style="color:var(--color-text-muted)">Deadline: <?= date('M j, Y', strtotime($ms['deadline'])) ?></p><?php endif; ?>
+                                <p class="text-[11px] mt-0.5" style="color:var(--color-text-muted)">
+                                    <?php if (!empty($ms['deadline'])): ?>Deadline: <?= date('M j, Y', strtotime($ms['deadline'])) ?> &middot; <?php endif; ?>
+                                    Assigned to: <strong><?= e($ms['assigned_freelancer_name'] ?? 'Unassigned') ?></strong>
+                                </p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
@@ -727,6 +831,51 @@ require __DIR__ . '/../includes/header.php';
         </div>
         <?php else: ?>
             <p class="text-sm" style="color:var(--color-text-muted)">No milestones defined for this project.</p>
+        <?php endif; ?>
+
+        <!-- Create Milestone Form -->
+        <?php if (!empty($accepted_freelancers)): ?>
+        <div class="mt-4 p-4 rounded-xl" style="background:var(--color-card-hover,rgba(0,0,0,0.03));border:1px solid var(--color-border)">
+            <h3 class="text-sm font-bold mb-3" style="color:var(--color-text-primary)">Add New Milestone</h3>
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                <input type="hidden" name="ms_action" value="create_milestone">
+                <div class="grid sm:grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="text-xs font-medium" style="color:var(--color-text-secondary)">Title <span class="text-red-500">*</span></label>
+                        <input type="text" name="ms_title" required maxlength="200" placeholder="e.g. Design Phase" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium" style="color:var(--color-text-secondary)">Amount ($) <span class="text-red-500">*</span></label>
+                        <input type="number" name="ms_amount" step="0.01" min="0.01" required placeholder="0.00" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="text-xs font-medium" style="color:var(--color-text-secondary)">Description</label>
+                    <textarea name="ms_description" rows="2" placeholder="Brief description of this milestone..." class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)"></textarea>
+                </div>
+                <div class="grid sm:grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="text-xs font-medium" style="color:var(--color-text-secondary)">Deadline</label>
+                        <input type="date" name="ms_deadline" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium" style="color:var(--color-text-secondary)">Assign to Freelancer <span class="text-red-500">*</span></label>
+                        <select name="ms_freelancer_id" required class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
+                            <option value="">Select a freelancer</option>
+                            <?php foreach ($accepted_freelancers as $af): ?>
+                                <option value="<?= (int) $af['freelancer_id'] ?>"><?= e($af['full_name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 2px 8px rgba(79,70,229,0.3)">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                    Create Milestone
+                </button>
+            </form>
+        </div>
         <?php endif; ?>
 
         <!-- Review section (after all milestones approved) -->
