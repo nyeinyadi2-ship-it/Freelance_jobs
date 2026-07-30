@@ -49,19 +49,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Validation
         if ($old['title'] === '') {
-            $error = 'Job title is required.';
+            $error = 'Job title is required. Please enter a title for your job posting.';
         } elseif ($old['category'] === '') {
-            $error = 'Category is required.';
-        } elseif (!is_numeric($old['budget']) || (float) $old['budget'] <= 0) {
-            $error = 'Budget must be greater than zero.';
+            $error = 'Category is required. Please select a category for your job.';
+        } elseif (!is_numeric($old['budget'])) {
+            $error = 'Please enter a valid budget amount.';
+        } elseif ((float) $old['budget'] <= 0) {
+            $error = 'Budget must be greater than zero. Please enter a positive amount.';
+        } elseif ((float) $old['budget'] < 1) {
+            $error = 'Budget must be at least $1.00.';
         } elseif ($old['description'] === '') {
-            $error = 'Job description is required.';
+            $error = 'Job description is required. Please describe your project.';
         } elseif ($old['requirements'] === '') {
-            $error = 'Requirements are required.';
+            $error = 'Requirements are required. Please list the qualifications needed.';
         } elseif (empty($old['skills'])) {
-            $error = 'Please select at least one skill.';
+            $error = 'Please select at least one required skill.';
         } elseif ($old['deadline'] !== '' && strtotime($old['deadline']) < time()) {
-            $error = 'Deadline cannot be in the past.';
+            $error = 'Deadline cannot be in the past. Please select a future date.';
         } elseif (!is_numeric($old['freelancers_needed']) || (int) $old['freelancers_needed'] < 1) {
             $error = 'Freelancers needed must be at least 1.';
         } else {
@@ -169,6 +173,19 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 /* ===== Milestone ===== */
 .ms-item { padding:1.25rem; border-radius:0.75rem; background:var(--color-bg); border:1.5px solid var(--color-border); transition:all .2s; }
 .ms-item:hover { border-color:#818cf8; }
+.ms-item.has-error { border-color:#ef4444; background:rgba(239,68,68,0.02); }
+
+/* ===== Validation ===== */
+.field-error { font-size:0.75rem; color:#ef4444; margin-top:0.375rem; display:none; align-items:center; gap:0.25rem; }
+.field-error.visible { display:flex; }
+.form-input.input-error { border-color:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,0.1); }
+.step-error-banner { padding:0.75rem 1rem; border-radius:0.75rem; margin-bottom:1rem; font-size:0.8125rem; font-weight:500; display:none; align-items:center; gap:0.5rem; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); color:#ef4444; }
+.step-error-banner.visible { display:flex; }
+.ms-total-warning { padding:0.5rem 0.75rem; border-radius:0.5rem; font-size:0.75rem; font-weight:600; margin-top:0.5rem; display:none; }
+.ms-total-warning.visible { display:block; }
+.ms-total-warning.over { background:rgba(239,68,68,0.08); color:#ef4444; border:1px solid rgba(239,68,68,0.2); }
+.ms-total-warning.under { background:rgba(245,158,11,0.08); color:#f59e0b; border:1px solid rgba(245,158,11,0.2); }
+.ms-total-warning.match { background:rgba(16,185,129,0.08); color:#10b981; border:1px solid rgba(16,185,129,0.2); }
 
 /* ===== Buttons ===== */
 .btn-publish { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; font-weight:600; padding:0.875rem 2rem; border-radius:0.75rem; transition:all .3s cubic-bezier(.4,0,.2,1); box-shadow:0 4px 14px rgba(99,102,241,0.3); border:none; cursor:pointer; font-size:0.9375rem; }
@@ -241,6 +258,10 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 
                 <!-- STEP 1: Basics -->
                 <div class="step-panel active" data-panel="1">
+                    <div class="step-error-banner">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span></span>
+                    </div>
                     <div class="form-card mb-5">
                         <div class="form-card-header">
                             <div class="fc-icon" style="background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.12))">
@@ -251,11 +272,15 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                         <div class="space-y-5">
                             <div>
                                 <label class="form-label">Job Title <span class="req">*</span></label>
-                                <input type="text" name="title" required maxlength="200" placeholder="e.g. Full-Stack Web Developer Needed" class="form-input" value="<?= e($old['title']) ?>" oninput="updatePreview()">
+                                <input type="text" name="title" required maxlength="200" placeholder="e.g. Full-Stack Web Developer Needed" class="form-input" value="<?= e($old['title']) ?>" oninput="clearFieldError(this); updatePreview()">
+                                <div class="field-error" id="err-title">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                    <span></span>
+                                </div>
                             </div>
                             <div>
                                 <label class="form-label">Category <span class="req">*</span></label>
-                                <select name="category" required class="form-input" onchange="updatePreview()">
+                                <select name="category" required class="form-input" onchange="clearFieldError(this); updatePreview()">
                                     <option value="">Select a category</option>
                                     <?php
                                     $cats = ['Web Development','Mobile Development','UI/UX Design','Graphic Design','Content Writing','Digital Marketing','Data Science','DevOps','Blockchain','Video & Animation','Translation','Other'];
@@ -264,11 +289,19 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                         <option value="<?= e($cat) ?>" <?= $old['category'] === $cat ? 'selected' : '' ?>><?= e($cat) ?></option>
                                     <?php endforeach; ?>
                                 </select>
+                                <div class="field-error" id="err-category">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                    <span></span>
+                                </div>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div>
                                     <label class="form-label">Budget ($) <span class="req">*</span></label>
-                                    <input type="number" name="budget" step="0.01" min="0.01" required placeholder="0.00" class="form-input" value="<?= e($old['budget']) ?>" oninput="updatePreview()">
+                                    <input type="number" name="budget" step="0.01" min="0.01" required placeholder="0.00" class="form-input" value="<?= e($old['budget']) ?>" oninput="clearFieldError(this); updateMilestoneTotal(); updatePreview()">
+                                    <div class="field-error" id="err-budget">
+                                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                        <span></span>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="form-label">Visibility</label>
@@ -287,6 +320,10 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 
                 <!-- STEP 2: Details -->
                 <div class="step-panel" data-panel="2">
+                    <div class="step-error-banner">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span></span>
+                    </div>
                     <div class="form-card mb-5">
                         <div class="form-card-header">
                             <div class="fc-icon" style="background:linear-gradient(135deg,rgba(139,92,246,0.12),rgba(168,85,247,0.12))">
@@ -297,11 +334,19 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                         <div class="space-y-5">
                             <div>
                                 <label class="form-label">Job Description <span class="req">*</span></label>
-                                <textarea name="description" rows="5" required placeholder="Describe the project, goals, and what you're looking for..." class="form-input" oninput="updatePreview()"><?= e($old['description']) ?></textarea>
+                                <textarea name="description" rows="5" required placeholder="Describe the project, goals, and what you're looking for..." class="form-input" oninput="clearFieldError(this); updatePreview()"><?= e($old['description']) ?></textarea>
+                                <div class="field-error" id="err-description">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                    <span></span>
+                                </div>
                             </div>
                             <div>
                                 <label class="form-label">Requirements <span class="req">*</span></label>
-                                <textarea name="requirements" rows="4" required placeholder="List the required qualifications, experience, and deliverables..." class="form-input" oninput="updatePreview()"><?= e($old['requirements']) ?></textarea>
+                                <textarea name="requirements" rows="4" required placeholder="List the required qualifications, experience, and deliverables..." class="form-input" oninput="clearFieldError(this); updatePreview()"><?= e($old['requirements']) ?></textarea>
+                                <div class="field-error" id="err-requirements">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                    <span></span>
+                                </div>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div>
@@ -353,6 +398,10 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 
                 <!-- STEP 3: Skills & Attachment -->
                 <div class="step-panel" data-panel="3">
+                    <div class="step-error-banner">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span></span>
+                    </div>
                     <div class="form-card mb-5">
                         <div class="form-card-header">
                             <div class="fc-icon" style="background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(52,211,153,0.12))">
@@ -366,12 +415,16 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 <p class="form-hint mb-3">Click to select the skills needed for this job</p>
                                 <div class="flex flex-wrap gap-2" id="skillsContainer">
                                     <?php foreach ($all_skills as $sk): ?>
-                                        <label class="skill-chip <?= in_array($sk['id'], $old['skills']) ? 'selected' : '' ?>">
+                                        <label class="skill-chip <?= in_array($sk['id'], $old['skills']) ? 'selected' : '' ?>" onclick="clearSkillsError()">
                                             <input type="checkbox" name="skills[]" value="<?= (int)$sk['id'] ?>" <?= in_array($sk['id'], $old['skills']) ? 'checked' : '' ?>>
                                             <span class="chip-check"></span>
                                             <?= e($sk['skill_name']) ?>
                                         </label>
                                     <?php endforeach; ?>
+                                </div>
+                                <div class="field-error" id="err-skills">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                    <span></span>
                                 </div>
                             </div>
                             <div>
@@ -556,28 +609,160 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     var totalSteps = 4;
     var milestoneCount = 1;
 
-    // Step validation rules
+    // ===== Error Display Helpers =====
+    function showFieldError(fieldName, message) {
+        var errEl = document.getElementById('err-' + fieldName);
+        if (errEl) {
+            errEl.querySelector('span').textContent = message;
+            errEl.classList.add('visible');
+        }
+        var input = document.querySelector('[name="' + fieldName + '"]');
+        if (input) input.classList.add('input-error');
+    }
+
+    function clearAllFieldErrors() {
+        document.querySelectorAll('.field-error').forEach(function(el) {
+            el.classList.remove('visible');
+        });
+        document.querySelectorAll('.form-input.input-error').forEach(function(el) {
+            el.classList.remove('input-error');
+        });
+        document.querySelectorAll('.step-error-banner').forEach(function(el) {
+            el.classList.remove('visible');
+        });
+    }
+
+    window.clearFieldError = function(input) {
+        input.classList.remove('input-error');
+        var name = input.getAttribute('name');
+        var errEl = document.getElementById('err-' + name);
+        if (errEl) errEl.classList.remove('visible');
+        // Also hide step banner
+        var panel = input.closest('.step-panel');
+        if (panel) {
+            var banner = panel.querySelector('.step-error-banner');
+            if (banner) banner.classList.remove('visible');
+        }
+    };
+
+    window.clearSkillsError = function() {
+        var errEl = document.getElementById('err-skills');
+        if (errEl) errEl.classList.remove('visible');
+        var panel = document.getElementById('skillsContainer').closest('.step-panel');
+        if (panel) {
+            var banner = panel.querySelector('.step-error-banner');
+            if (banner) banner.classList.remove('visible');
+        }
+    };
+
+    function showStepError(step, message) {
+        var panel = document.querySelector('.step-panel[data-panel="' + step + '"]');
+        if (panel) {
+            var banner = panel.querySelector('.step-error-banner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.className = 'step-error-banner';
+                banner.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span></span>';
+                var formCard = panel.querySelector('.form-card');
+                if (formCard) formCard.insertBefore(banner, formCard.firstChild);
+            }
+            banner.querySelector('span').textContent = message;
+            banner.classList.add('visible');
+        }
+    }
+
+    // ===== Step Validation Rules =====
     function validateStep(step) {
         var errors = [];
+        clearAllFieldErrors();
+
         if (step === 1) {
             var title = document.querySelector('[name="title"]').value.trim();
             var cat = document.querySelector('[name="category"]').value;
-            var budget = parseFloat(document.querySelector('[name="budget"]').value);
-            if (!title) errors.push('Job title is required.');
-            if (!cat) errors.push('Category is required.');
-            if (!budget || budget <= 0) errors.push('Budget must be greater than zero.');
+            var budgetStr = document.querySelector('[name="budget"]').value.trim();
+            var budget = parseFloat(budgetStr);
+
+            if (!title) {
+                errors.push('Job title is required.');
+                showFieldError('title', 'Job title is required.');
+            }
+            if (!cat) {
+                errors.push('Category is required.');
+                showFieldError('category', 'Please select a category.');
+            }
+            if (!budgetStr || isNaN(budget)) {
+                errors.push('Budget is required.');
+                showFieldError('budget', 'Please enter a valid budget amount.');
+            } else if (budget <= 0) {
+                errors.push('Budget must be greater than zero.');
+                showFieldError('budget', 'Budget must be greater than zero.');
+            }
         } else if (step === 2) {
             var desc = document.querySelector('[name="description"]').value.trim();
             var req = document.querySelector('[name="requirements"]').value.trim();
             var deadline = document.querySelector('[name="deadline"]').value;
-            if (!desc) errors.push('Job description is required.');
-            if (!req) errors.push('Requirements are required.');
-            if (deadline && new Date(deadline) < new Date()) errors.push('Deadline cannot be in the past.');
+
+            if (!desc) {
+                errors.push('Job description is required.');
+                showFieldError('description', 'Job description is required.');
+            }
+            if (!req) {
+                errors.push('Requirements are required.');
+                showFieldError('requirements', 'Requirements are required.');
+            }
+            if (deadline && new Date(deadline) < new Date()) {
+                errors.push('Deadline cannot be in the past.');
+                showFieldError('deadline', 'Deadline cannot be in the past.');
+            }
         } else if (step === 3) {
             var skills = document.querySelectorAll('.skill-chip.selected').length;
-            if (skills === 0) errors.push('Please select at least one skill.');
+            if (skills === 0) {
+                errors.push('Please select at least one skill.');
+                showFieldError('skills', 'Please select at least one skill.');
+            }
+        }
+
+        if (errors.length > 0) {
+            showStepError(step, errors[0]);
         }
         return errors;
+    }
+
+    // ===== Milestone Validation =====
+    function validateMilestones() {
+        var msTitles = document.querySelectorAll('[name="ms_title[]"]');
+        var msAmounts = document.querySelectorAll('[name="ms_amount[]"]');
+        var budget = parseFloat(document.querySelector('[name="budget"]').value) || 0;
+        var milestoneTotal = 0;
+        var errors = [];
+
+        // Clear previous milestone errors
+        document.querySelectorAll('.ms-item.has-error').forEach(function(el) {
+            el.classList.remove('has-error');
+        });
+
+        for (var i = 0; i < msTitles.length; i++) {
+            var msTitle = msTitles[i].value.trim();
+            var msAmount = parseFloat(msAmounts[i].value) || 0;
+
+            if (msTitle !== '') {
+                if (msAmount <= 0) {
+                    errors.push('Milestone "' + msTitle + '" amount must be greater than zero.');
+                    msAmounts[i].closest('.ms-item').classList.add('has-error');
+                }
+                if (msAmount < 0) {
+                    errors.push('Milestone amounts cannot be negative.');
+                    msAmounts[i].closest('.ms-item').classList.add('has-error');
+                }
+                milestoneTotal += msAmount;
+            }
+        }
+
+        if (milestoneTotal > budget && budget > 0) {
+            errors.push('Total milestone amount ($' + milestoneTotal.toFixed(2) + ') cannot exceed the job budget ($' + budget.toFixed(2) + ').');
+        }
+
+        return { errors: errors, total: milestoneTotal, budget: budget };
     }
 
     window.goStep = function(step) {
@@ -586,8 +771,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             for (var s = currentStep; s < step; s++) {
                 var errors = validateStep(s);
                 if (errors.length > 0) {
-                    alert(errors[0]);
-                    // Jump to the step with the error
+                    // Stay on the step with errors - no alert, inline errors shown
                     document.querySelectorAll('.step-panel').forEach(function(p){ p.classList.remove('active'); });
                     document.querySelectorAll('.p-step').forEach(function(d){ d.classList.remove('active','done'); });
                     for (var i = 1; i < s; i++) {
@@ -596,13 +780,20 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                     document.querySelector('.p-step[data-step="'+s+'"]').classList.add('active');
                     document.querySelector('.step-panel[data-panel="'+s+'"]').classList.add('active');
                     currentStep = s;
-                    window.scrollTo({top:0,behavior:'smooth'});
+                    // Scroll to first error
+                    var firstError = document.querySelector('.step-panel[data-panel="'+s+'"] .field-error.visible');
+                    if (firstError) {
+                        firstError.scrollIntoView({behavior:'smooth', block:'center'});
+                    } else {
+                        window.scrollTo({top:0,behavior:'smooth'});
+                    }
                     return;
                 }
             }
         }
 
         if (step < 1 || step > totalSteps) return;
+        clearAllFieldErrors();
         document.querySelectorAll('.step-panel').forEach(function(p){ p.classList.remove('active'); });
         document.querySelectorAll('.p-step').forEach(function(d){ d.classList.remove('active','done'); });
 
@@ -655,6 +846,30 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             total += parseFloat(input.value) || 0;
         });
         document.getElementById('milestoneTotal').textContent = '$' + total.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+        // Update warning message
+        var budget = parseFloat(document.querySelector('[name="budget"]').value) || 0;
+        var warningEl = document.getElementById('msTotalWarning');
+        if (!warningEl) return;
+
+        if (total > 0 && budget > 0) {
+            if (total > budget) {
+                warningEl.className = 'ms-total-warning visible over';
+                warningEl.textContent = 'Total ($' + total.toFixed(2) + ') exceeds budget ($' + budget.toFixed(2) + ') by $' + (total - budget).toFixed(2);
+            } else if (total < budget) {
+                warningEl.className = 'ms-total-warning visible under';
+                warningEl.textContent = 'Total ($' + total.toFixed(2) + ') is under budget ($' + budget.toFixed(2) + ') by $' + (budget - total).toFixed(2);
+            } else {
+                warningEl.className = 'ms-total-warning visible match';
+                warningEl.textContent = 'Total matches budget exactly ($' + total.toFixed(2) + ')';
+            }
+        } else if (total > 0 && budget <= 0) {
+            warningEl.className = 'ms-total-warning visible over';
+            warningEl.textContent = 'Please set a budget first before adding milestones.';
+        } else {
+            warningEl.className = 'ms-total-warning';
+            warningEl.textContent = '';
+        }
     };
 
     // ===== Live Preview =====
@@ -818,50 +1033,49 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 
     // Client-side validation on submit
     document.getElementById('jobForm').addEventListener('submit', function(e){
+        clearAllFieldErrors();
+        var firstErrorStep = null;
+
         // Validate all steps
         for (var step = 1; step <= 3; step++) {
             var errors = validateStep(step);
-            if (errors.length > 0) {
-                alert(errors[0]);
-                e.preventDefault();
-                goStep(step);
-                return;
+            if (errors.length > 0 && !firstErrorStep) {
+                firstErrorStep = step;
             }
         }
 
-        // Validate milestones if any are filled in (optional, but if filled must be valid)
+        // Validate milestones if any are filled in
         var msTitles = document.querySelectorAll('[name="ms_title[]"]');
         var msAmounts = document.querySelectorAll('[name="ms_amount[]"]');
-        var budget = parseFloat(document.querySelector('[name="budget"]').value) || 0;
-        var milestoneTotal = 0;
-        for (var i = 0; i < msTitles.length; i++) {
-            var msTitle = msTitles[i].value.trim();
-            var msAmount = parseFloat(msAmounts[i].value) || 0;
-            if (msTitle !== '' && msAmount <= 0) {
-                alert('Milestone amounts must be greater than zero.');
-                e.preventDefault();
-                return;
+        if (msTitles.length > 0) {
+            var msResult = validateMilestones();
+            if (msResult.errors.length > 0) {
+                showStepError(3, msResult.errors[0]);
+                if (!firstErrorStep) firstErrorStep = 3;
             }
-            if (msAmount < 0) {
-                alert('Milestone amounts cannot be negative.');
-                e.preventDefault();
-                return;
-            }
-            milestoneTotal += msAmount;
-        }
-        if (milestoneTotal > budget && budget > 0) {
-            alert('Total milestone amount ($' + milestoneTotal.toFixed(2) + ') cannot exceed the job budget ($' + budget.toFixed(2) + ').');
-            e.preventDefault();
-            return;
         }
 
+        // Validate file attachment
         var fileInput = document.getElementById('attachmentInput');
-        if(fileInput.files.length){
+        if (fileInput.files.length) {
             var file = fileInput.files[0];
             var ext = file.name.split('.').pop().toLowerCase();
             var allowed = ['jpg','jpeg','png','gif','webp','pdf','doc','docx','zip','rar'];
-            if(allowed.indexOf(ext)===-1){ alert('Invalid file type.'); e.preventDefault(); return; }
-            if(file.size > 10*1024*1024){ alert('File must be under 10MB.'); e.preventDefault(); return; }
+            if (allowed.indexOf(ext) === -1) {
+                showStepError(3, 'Invalid file type. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR.');
+                if (!firstErrorStep) firstErrorStep = 3;
+            }
+            if (file.size > 10*1024*1024) {
+                showStepError(3, 'File must be under 10MB.');
+                if (!firstErrorStep) firstErrorStep = 3;
+            }
+        }
+
+        // If there are errors, prevent submission and go to the first error step
+        if (firstErrorStep) {
+            e.preventDefault();
+            goStep(firstErrorStep);
+            return;
         }
     });
 
