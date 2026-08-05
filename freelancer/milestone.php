@@ -7,7 +7,19 @@ $ms_id = (int) ($_GET['id'] ?? 0);
 if ($ms_id <= 0) { redirect('freelancer/my_tasks.php'); }
 
 // Handle milestone actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verify_csrf()) {
+        $content_length = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+        $post_max = _ini_bytes(ini_get('post_max_size'));
+        if ($content_length > $post_max) {
+            set_flash('error', 'Your file is too large. Maximum total upload size is ' . round($post_max / 1048576) . 'MB. Please use a smaller file.');
+        } else {
+            set_flash('error', 'Invalid request. Please try again.');
+        }
+        $redirect_id = (int) ($_POST['milestone_id'] ?? ($_GET['id'] ?? 0));
+        if ($redirect_id > 0) redirect('freelancer/milestone.php?id=' . $redirect_id);
+        redirect('freelancer/my_tasks.php');
+    }
     $ms_action = $_POST['ms_action'] ?? '';
     $post_milestone_id = (int) ($_POST['milestone_id'] ?? 0);
 
@@ -124,6 +136,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     delete_attachment($submission_file);
                 }
                 set_flash('error', 'Failed to submit work. Please try again.');
+            }
+        } else {
+            set_flash('error', 'Milestone not found or not ready for submission.');
+        }
+        redirect('freelancer/milestone.php?id=' . $post_milestone_id);
+    } elseif ($ms_action === 'quick_submit' && $post_milestone_id > 0) {
+        // Quick submit: change status to submitted without requiring link/file
+        $st = $conn->prepare("
+            SELECT m.id, m.job_id, m.status
+            FROM milestones m
+            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
+            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested')
+              AND (m.freelancer_id = ? OR m.freelancer_id IS NULL)
+        ");
+        $st->bind_param('iii', $fl_freelancer_id, $post_milestone_id, $fl_freelancer_id);
+        $st->execute();
+        $ms_check = $st->get_result()->fetch_assoc();
+        $st->close();
+
+        if ($ms_check) {
+            $conn->begin_transaction();
+            try {
+                $now = date('Y-m-d H:i:s');
+                $st = $conn->prepare("UPDATE milestones SET status='submitted', submitted_at=? WHERE id=?");
+                $st->bind_param('si', $now, $post_milestone_id);
+                $st->execute();
+                $st->close();
+
+                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
+                $st->bind_param('ii', $ms_check['job_id'], $fl_freelancer_id);
+                $st->execute();
+                $st->close();
+
+                $conn->commit();
+
+                try {
+                    $ns = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.id=?");
+                    $ns->bind_param('i', $ms_check['job_id']);
+                    $ns->execute();
+                    $ni = $ns->get_result()->fetch_assoc();
+                    $ns->close();
+                    if ($ni) {
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for a milestone.", 'company/view_applications.php?id=' . $ms_check['job_id']);
+                    }
+                } catch (Exception $ne) {
+                    error_log("Notification failed after submission: " . $ne->getMessage());
+                }
+
+                set_flash('success', 'Milestone submitted for review!');
+            } catch (Exception $e) {
+                $conn->rollback();
+                set_flash('error', 'Failed to submit milestone. Please try again.');
             }
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
@@ -364,9 +428,22 @@ $draft_enabled = ($milestone['status'] === 'draft');
 
                         <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 4px 15px rgba(139,92,246,0.3)" onclick="return confirmSubmit()">
                             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                            Submit for Review
+                            Submit with Details
                         </button>
                     </form>
+
+                    <div class="mt-4 pt-4 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
+                        <p class="text-xs" style="color:var(--color-text-muted)">Or submit without attachments</p>
+                        <form method="POST" style="display:inline" onsubmit="return confirm('Submit this milestone for review without a link or file?')">
+                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                            <input type="hidden" name="ms_action" value="quick_submit">
+                            <input type="hidden" name="milestone_id" value="<?= (int) $milestone['id'] ?>">
+                            <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 15px rgba(16,185,129,0.3)">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                Submit Milestone
+                            </button>
+                        </form>
+                    </div>
                 </div>
 
             <?php elseif ($milestone['status'] === 'revision_requested'): ?>
@@ -420,9 +497,22 @@ $draft_enabled = ($milestone['status'] === 'draft');
 
                         <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 4px 15px rgba(239,68,68,0.3)" onclick="return confirmSubmit()">
                             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            Resubmit Work
+                            Resubmit with Details
                         </button>
                     </form>
+
+                    <div class="mt-4 pt-4 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
+                        <p class="text-xs" style="color:var(--color-text-muted)">Or resubmit without attachments</p>
+                        <form method="POST" style="display:inline" onsubmit="return confirm('Resubmit this milestone for review without a link or file?')">
+                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                            <input type="hidden" name="ms_action" value="quick_submit">
+                            <input type="hidden" name="milestone_id" value="<?= (int) $milestone['id'] ?>">
+                            <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 15px rgba(16,185,129,0.3)">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                Submit Milestone
+                            </button>
+                        </form>
+                    </div>
                 </div>
 
             <?php elseif ($milestone['status'] === 'submitted'): ?>
@@ -608,6 +698,10 @@ function confirmSubmit() {
     var fileInput = form.querySelector('[name="submission_file"]');
     if (!link && (!fileInput.files || !fileInput.files.length)) {
         alert('Please provide a submission link or upload a file.');
+        return false;
+    }
+    if (fileInput.files && fileInput.files.length && fileInput.files[0].size > 10 * 1024 * 1024) {
+        alert('File is too large. Maximum size is 10MB.');
         return false;
     }
     return confirm('Submit this work for review?');

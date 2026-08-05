@@ -52,6 +52,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['profile_id'] = null;
                     $_SESSION['logo_image'] = null;
 
+                    // Regenerate session ID to prevent session fixation
+                    regenerate_session();
+
                     $admin_id = get_admin_user_id($conn);
                     if ($admin_id && $admin_id !== (int) $user['id']) {
                         create_notification($conn, $admin_id, 'login_event', "Admin \"{$user['username']}\" has logged in.", null);

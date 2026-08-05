@@ -11,7 +11,14 @@
  */
 
 require_once __DIR__ . '/../config/db.php';
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.gc_maxlifetime', '86400');
+    ini_set('session.cookie_lifetime', '0');
+    session_start();
+}
 
 $userId = (int) ($_SESSION['user_id'] ?? 0);
 $lastCheck = $_SERVER['HTTP_LAST_EVENT_ID'] ?? 0;

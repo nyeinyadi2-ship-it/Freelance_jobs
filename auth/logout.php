@@ -13,6 +13,7 @@ if (ini_get("session.use_cookies")) {
     );
 }
 session_destroy();
+delete_csrf_cookie();
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

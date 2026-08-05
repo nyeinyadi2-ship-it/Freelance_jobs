@@ -43,7 +43,7 @@ $ss->close();
 $app_count = 0;
 $apps = [];
 $st = $conn->prepare("
-    SELECT ja.id, ja.status, ja.applied_at, f.full_name, f.title AS fl_title, u.profile_image
+    SELECT ja.id, ja.status, ja.applied_at, ja.freelancer_id, f.full_name, f.title AS fl_title, u.profile_image
     FROM job_applications ja
     JOIN freelancers f ON ja.freelancer_id = f.id
     JOIN users u ON f.user_id = u.id
@@ -140,20 +140,20 @@ require __DIR__ . '/../includes/header.php';
             <h1 class="text-2xl md:text-3xl font-extrabold mb-3"><?= e($job['title']) ?></h1>
             <div class="flex flex-wrap items-center gap-3">
                 <span class="vj-status vj-status-<?= $job['status'] ?>"><?= ucfirst(e($job['status'])) ?></span>
+                <?php
+                $freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
+                $hired_count = 0;
+                $active_count = 0;
+                $hc_st = $conn->prepare("SELECT COUNT(*) AS cnt, SUM(CASE WHEN status != 'completed' THEN 1 ELSE 0 END) AS active FROM assignments WHERE job_id = ?");
+                $hc_st->bind_param('i', $job_id);
+                $hc_st->execute();
+                $hc_row = $hc_st->get_result()->fetch_assoc();
+                $hired_count = (int) ($hc_row['cnt'] ?? 0);
+                $active_count = (int) ($hc_row['active'] ?? 0);
+                $hc_st->close();
+                $is_filled = $active_count >= $freelancers_needed;
+                ?>
                 <?php if ($job['status'] === 'approved'): ?>
-                    <?php
-                    $freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
-                    $hired_count = 0;
-                    $active_count = 0;
-                    $hc_st = $conn->prepare("SELECT COUNT(*) AS cnt, SUM(CASE WHEN status != 'completed' THEN 1 ELSE 0 END) AS active FROM assignments WHERE job_id = ?");
-                    $hc_st->bind_param('i', $job_id);
-                    $hc_st->execute();
-                    $hc_row = $hc_st->get_result()->fetch_assoc();
-                    $hired_count = (int) ($hc_row['cnt'] ?? 0);
-                    $active_count = (int) ($hc_row['active'] ?? 0);
-                    $hc_st->close();
-                    $is_filled = $active_count >= $freelancers_needed;
-                    ?>
                     <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:999px;font-size:0.75rem;font-weight:700;background:<?= $is_filled ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)' ?>;border:1px solid <?= $is_filled ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)' ?>"><?= $is_filled ? 'Filled' : 'Open' ?></span>
                     <span style="font-size:0.75rem;color:rgba(255,255,255,0.6)"><?= $hired_count ?>/<?= $freelancers_needed ?> hired</span>
                 <?php endif; ?>

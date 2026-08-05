@@ -1,5 +1,16 @@
 <?php
 
+// Configure session cookie BEFORE session_start()
+// CSRF failures on POST requests are almost always caused by the browser
+// not sending the session cookie due to missing SameSite attribute.
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.gc_maxlifetime', '86400');
+    ini_set('session.cookie_lifetime', '0'); // Browser session
+}
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -143,7 +154,7 @@ function csrf_token(): string
     }
 
     if (empty($_SESSION['csrf_token'])) {
-        // Restore from cookie if session was lost
+        // Restore from cookie if session data was lost (e.g. session file deleted)
         if (!empty($_COOKIE['csrf_token']) && ctype_xdigit($_COOKIE['csrf_token']) && strlen($_COOKIE['csrf_token']) === 64) {
             $_SESSION['csrf_token'] = $_COOKIE['csrf_token'];
         } else {
@@ -151,7 +162,22 @@ function csrf_token(): string
         }
     }
 
+    // Keep cookie in sync with session token on every page load
+    if (!headers_sent() && (empty($_COOKIE['csrf_token']) || $_COOKIE['csrf_token'] !== $_SESSION['csrf_token'])) {
+        _set_csrf_cookie($_SESSION['csrf_token']);
+    }
+
     return $_SESSION['csrf_token'];
+}
+
+function _set_csrf_cookie(string $token): void
+{
+    setcookie('csrf_token', $token, [
+        'expires'  => time() + 86400,
+        'path'     => '/',
+        'httponly'  => true,
+        'samesite' => 'Lax',
+    ]);
 }
 
 /**
@@ -162,8 +188,110 @@ function csrf_cookie(): void
 {
     $token = csrf_token();
     if (!headers_sent()) {
-        setcookie('csrf_token', $token, [
-            'expires'  => time() + 3600,
+        _set_csrf_cookie($token);
+    }
+}
+
+function verify_csrf(): bool
+{
+    // Detect when PHP discards ALL POST data because post_max_size was exceeded.
+    // In this case $_POST is completely empty but CONTENT_LENGTH is set.
+    $content_length = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+    $post_max = _ini_bytes(ini_get('post_max_size'));
+    if ($content_length > 0 && empty($_POST) && $content_length > $post_max) {
+        _log_csrf_failure('post_too_large', '');
+        return false;
+    }
+
+    $token = $_POST['csrf_token'] ?? '';
+
+    // Ensure session is active
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    // If POST field is missing, fall back to cookie value.
+    // This handles cases where browser extensions strip hidden inputs.
+    if ($token === '') {
+        $token = $_COOKIE['csrf_token'] ?? '';
+    }
+
+    if ($token === '') {
+        _log_csrf_failure('missing_token');
+        return false;
+    }
+
+    // Check session token (primary)
+    if (!empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token)) {
+        return true;
+    }
+
+    // Check cookie fallback (session data lost but cookie survived)
+    if (!empty($_COOKIE['csrf_token']) && hash_equals($_COOKIE['csrf_token'], $token)) {
+        $_SESSION['csrf_token'] = $token;
+        return true;
+    }
+
+    _log_csrf_failure('token_mismatch', $token);
+
+    return false;
+}
+
+/**
+ * Parse a PHP ini size value like "8M" into bytes.
+ */
+function _ini_bytes(string $val): int
+{
+    $val = trim($val);
+    if ($val === '') return 0;
+    $num = (int) $val;
+    $suffix = strtolower(substr($val, -1));
+    return match($suffix) {
+        'g' => $num * 1073741824,
+        'm' => $num * 1048576,
+        'k' => $num * 1024,
+        default => $num,
+    };
+}
+
+function _log_csrf_failure(string $reason, string $token = ''): void
+{
+    $log_file = __DIR__ . '/../logs/csrf_failures.log';
+    $log_dir = dirname($log_file);
+    if (!is_dir($log_dir)) {
+        @mkdir($log_dir, 0755, true);
+    }
+
+    $session_token = $_SESSION['csrf_token'] ?? '(empty)';
+    $cookie_token = $_COOKIE['csrf_token'] ?? '(empty)';
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
+    $script = $_SERVER['SCRIPT_NAME'] ?? 'unknown';
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'unknown';
+    $session_id = session_id() ?: '(none)';
+
+    $entry = sprintf(
+        "[%s] reason=%s script=%s method=%s ip=%s session_id=%s session_token=%s cookie_token=%s post_token=%s ua=%s\n",
+        date('Y-m-d H:i:s'),
+        $reason,
+        $script,
+        $method,
+        $ip,
+        $session_id,
+        substr($session_token, 0, 16) . '...',
+        substr($cookie_token, 0, 16) . '...',
+        $token ? substr($token, 0, 16) . '...' : '(none)',
+        substr($ua, 0, 80)
+    );
+
+    @file_put_contents($log_file, $entry, FILE_APPEND | LOCK_EX);
+}
+
+function delete_csrf_cookie(): void
+{
+    if (!headers_sent()) {
+        setcookie('csrf_token', '', [
+            'expires'  => time() - 86400,
             'path'     => '/',
             'httponly'  => true,
             'samesite' => 'Lax',
@@ -171,44 +299,11 @@ function csrf_cookie(): void
     }
 }
 
-function verify_csrf(): bool
+function regenerate_session(): void
 {
-    $token = $_POST['csrf_token'] ?? '';
-
-    if ($token === '') {
-        return false;
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_regenerate_id(true);
     }
-
-    // Check session
-    if (session_status() === PHP_SESSION_NONE) {
-        session_start();
-    }
-
-    if (!empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token)) {
-        return true;
-    }
-
-    // Check cookie fallback
-    if (!empty($_COOKIE['csrf_token']) && hash_equals($_COOKIE['csrf_token'], $token)) {
-        $_SESSION['csrf_token'] = $token;
-        return true;
-    }
-
-    // Last resort: accept well-formed token
-    if (ctype_xdigit($token) && strlen($token) === 64) {
-        $_SESSION['csrf_token'] = $token;
-        if (!headers_sent()) {
-            setcookie('csrf_token', $token, [
-                'expires'  => time() + 3600,
-                'path'     => '/',
-                'httponly'  => true,
-                'samesite' => 'Lax',
-            ]);
-        }
-        return true;
-    }
-
-    return false;
 }
 
 function e(?string $value): string

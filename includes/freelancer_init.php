@@ -5,7 +5,14 @@
  * Then include freelancer_layout.php for the HTML output.
  * Set $page_title before including freelancer_layout.php.
  */
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.gc_maxlifetime', '86400');
+    ini_set('session.cookie_lifetime', '0');
+    session_start();
+}
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';

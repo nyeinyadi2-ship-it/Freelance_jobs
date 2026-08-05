@@ -748,24 +748,143 @@ require __DIR__ . '/../includes/header.php';
                     </div>
 
                     <?php if ($ms['status'] === 'submitted'): ?>
-                        <div class="mt-2 space-y-1.5">
-                            <?php if ($ms['submission_link']): ?>
-                                <div class="flex items-center gap-2 text-xs" style="color:var(--color-text-muted)">
-                                    <svg class="w-3.5 h-3.5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                    Link: <a href="<?= e($ms['submission_link']) ?>" target="_blank" class="text-indigo-600 hover:underline">View Submission</a>
+                        <!-- Submission Preview (compact) -->
+                        <div class="mt-2 p-3 rounded-lg" style="background:rgba(139,92,246,0.04);border:1px solid rgba(139,92,246,0.12)">
+                            <div class="flex items-center justify-between gap-2 mb-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
+                                    <span class="text-xs font-semibold text-purple-600 dark:text-purple-400">Work Submitted</span>
                                 </div>
-                            <?php endif; ?>
-                            <?php if (!empty($ms['submission_file'])): ?>
-                                <div class="flex items-center gap-2 text-xs" style="color:var(--color-text-muted)">
-                                    <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                                    File: <a href="<?= e(base_url('uploads/attachments/' . $ms['submission_file'])) ?>" target="_blank" class="text-emerald-600 hover:underline"><?= e($ms['submission_file']) ?></a>
+                                <?php if ($ms['submitted_at']): ?>
+                                    <span class="text-[11px]" style="color:var(--color-text-muted)"><?= date('M j, Y g:ia', strtotime($ms['submitted_at'])) ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" onclick="document.getElementById('submissionModal-<?= $ms['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:-translate-y-0.5" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 2px 8px rgba(139,92,246,0.3)">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    View Submission
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Submission Detail Modal -->
+                        <div id="submissionModal-<?= $ms['id'] ?>" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+                            <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('submissionModal-<?= $ms['id'] ?>').classList.add('hidden')"></div>
+                            <div class="relative w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden" style="background:var(--color-card);border:1px solid var(--color-border);max-height:85vh;display:flex;flex-direction:column">
+                                <!-- Modal Header -->
+                                <div class="flex items-center justify-between p-5 border-b" style="border-color:var(--color-border)">
+                                    <div>
+                                        <h3 class="text-base font-bold" style="color:var(--color-text-primary)">Submission Details</h3>
+                                        <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Milestone: <?= e($ms['title']) ?></p>
+                                    </div>
+                                    <button type="button" onclick="document.getElementById('submissionModal-<?= $ms['id'] ?>').classList.add('hidden')" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                                        <svg class="w-5 h-5" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
                                 </div>
-                            <?php endif; ?>
-                            <?php if (!empty($ms['submission_note'])): ?>
-                                <div class="mt-2 p-2.5 rounded-lg text-xs leading-relaxed" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-secondary)">
-                                    <?= nl2br(e($ms['submission_note'])) ?>
+                                <!-- Modal Body -->
+                                <div class="p-5 space-y-4 overflow-y-auto flex-1">
+                                    <!-- Submission Date -->
+                                    <?php if ($ms['submitted_at']): ?>
+                                    <div class="flex items-center gap-2.5 p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                                        <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(139,92,246,0.1)">
+                                            <svg class="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        </div>
+                                        <div>
+                                            <p class="text-[11px] font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)">Submitted</p>
+                                            <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= date('F j, Y \a\t g:ia', strtotime($ms['submitted_at'])) ?></p>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <!-- Submission Link -->
+                                    <?php if ($ms['submission_link']): ?>
+                                    <div class="p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                                            <span class="text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)">Submission Link</span>
+                                        </div>
+                                        <a href="<?= e($ms['submission_link']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold w-full transition-all hover:-translate-y-0.5" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);color:#6366f1">
+                                            <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                                            <span class="truncate"><?= e($ms['submission_link']) ?></span>
+                                        </a>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <!-- Submission File -->
+                                    <?php if (!empty($ms['submission_file'])):
+                                        $file_ext = strtolower(pathinfo($ms['submission_file'], PATHINFO_EXTENSION));
+                                        $file_icons = ['pdf'=>'text-red-500','doc'=>'text-blue-500','docx'=>'text-blue-600','zip'=>'text-yellow-600','rar'=>'text-purple-600','jpg'=>'text-green-500','jpeg'=>'text-green-500','png'=>'text-green-500','gif'=>'text-green-500','webp'=>'text-green-500'];
+                                        $file_color = $file_icons[$file_ext] ?? 'text-gray-500';
+                                        $is_image = in_array($file_ext, ['jpg','jpeg','png','gif','webp']);
+                                    ?>
+                                    <div class="p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                            <span class="text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)">Uploaded File</span>
+                                        </div>
+                                        <?php if ($is_image): ?>
+                                            <div class="rounded-xl overflow-hidden mb-3 border" style="border-color:var(--color-border)">
+                                                <img src="<?= e(base_url('uploads/attachments/' . $ms['submission_file'])) ?>" alt="Submission preview" class="w-full max-h-48 object-contain bg-gray-50 dark:bg-gray-900">
+                                            </div>
+                                        <?php endif; ?>
+                                        <div class="flex items-center gap-3 p-3 rounded-xl" style="background:var(--color-card);border:1px solid var(--color-border)">
+                                            <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(16,185,129,0.1)">
+                                                <svg class="w-5 h-5 <?= $file_color ?>" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+                                            </div>
+                                            <div class="flex-1 min-w-0">
+                                                <p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e(basename($ms['submission_file'])) ?></p>
+                                                <p class="text-[11px] uppercase font-semibold" style="color:var(--color-text-muted)"><?= e($file_ext) ?> file</p>
+                                            </div>
+                                            <a href="<?= e(base_url('uploads/attachments/' . $ms['submission_file'])) ?>" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669)">
+                                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                                Download
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <!-- Submission Note -->
+                                    <?php if (!empty($ms['submission_note'])): ?>
+                                    <div class="p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443 48.282 48.282 0 005.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"/></svg>
+                                            <span class="text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)">Freelancer's Note</span>
+                                        </div>
+                                        <div class="p-3 rounded-lg text-sm leading-relaxed whitespace-pre-wrap" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-secondary)"><?= nl2br(e($ms['submission_note'])) ?></div>
+                                    </div>
+                                    <?php endif; ?>
+
+                                    <?php if (empty($ms['submission_link']) && empty($ms['submission_file']) && empty($ms['submission_note'])): ?>
+                                        <div class="text-center py-6" style="color:var(--color-text-muted)">
+                                            <svg class="w-10 h-10 mx-auto mb-2 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                            <p class="text-xs">No submission details provided.</p>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
-                            <?php endif; ?>
+                                <!-- Modal Footer: Approve & Revision -->
+                                <div class="p-5 border-t flex flex-wrap gap-3" style="border-color:var(--color-border)">
+                                    <form method="POST" class="flex-1">
+                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                        <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                        <input type="hidden" name="ms_action" value="approve">
+                                        <input type="hidden" name="milestone_id" value="<?= (int) $ms['id'] ?>">
+                                        <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 2px 8px rgba(16,185,129,0.3)" onclick="return confirm('Approve this milestone and release $<?= number_format((float) $ms['amount'], 2) ?> payment?')">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                            Approve & Pay $<?= number_format((float) $ms['amount'], 2) ?>
+                                        </button>
+                                    </form>
+                                    <form method="POST">
+                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                        <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                        <input type="hidden" name="ms_action" value="revision">
+                                        <input type="hidden" name="milestone_id" value="<?= (int) $ms['id'] ?>">
+                                        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all" style="border:1.5px solid var(--color-border);color:var(--color-text-secondary)" onclick="return confirm('Request revision for this milestone?')">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            Revision
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
                     <?php endif; ?>
 
@@ -793,26 +912,10 @@ require __DIR__ . '/../includes/header.php';
                                 Freelancer working — awaiting submission
                             </span>
                         <?php elseif ($ms['status'] === 'submitted'): ?>
-                            <form method="POST" style="display:inline">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="job_id" value="<?= $job_id ?>">
-                                <input type="hidden" name="ms_action" value="approve">
-                                <input type="hidden" name="milestone_id" value="<?= (int) $ms['id'] ?>">
-                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 2px 8px rgba(16,185,129,0.3)" onclick="return confirm('Approve this milestone and release $<?= number_format((float) $ms['amount'], 2) ?> payment?')">
-                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                    Approve & Pay
-                                </button>
-                            </form>
-                            <form method="POST" style="display:inline">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="job_id" value="<?= $job_id ?>">
-                                <input type="hidden" name="ms_action" value="revision">
-                                <input type="hidden" name="milestone_id" value="<?= (int) $ms['id'] ?>">
-                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style="border:1.5px solid var(--color-border);color:var(--color-text-secondary)" onclick="return confirm('Request revision for this milestone?')">
-                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                                    Request Revision
-                                </button>
-                            </form>
+                            <button type="button" onclick="document.getElementById('submissionModal-<?= $ms['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 2px 8px rgba(139,92,246,0.3)">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                View Submission & Review
+                            </button>
                         <?php elseif ($ms['status'] === 'approved'): ?>
                             <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#10b981">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>

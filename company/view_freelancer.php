@@ -1,6 +1,13 @@
 <?php
 $page_title = 'Freelancer Profile';
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', '1');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.gc_maxlifetime', '86400');
+    ini_set('session.cookie_lifetime', '0');
+    session_start();
+}
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';
@@ -153,7 +160,7 @@ $hire_error = '';
 if ($is_company) {
     $logged_in_company = get_company_id($conn, $viewer_user_id);
     if ($logged_in_company) {
-        $chk = $conn->prepare("SELECT a.id FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.freelancer_id = ?");
+        $chk = $conn->prepare("SELECT a.id FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.freelancer_id = ? AND a.freelancer_response != 'rejected'");
         $chk->bind_param('ii', $logged_in_company, $fid);
         $chk->execute();
         $is_hired = $chk->get_result()->num_rows > 0;

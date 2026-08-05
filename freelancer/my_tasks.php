@@ -4,7 +4,17 @@ require __DIR__ . '/../includes/freelancer_init.php';
 require_once __DIR__ . '/../config/upload.php';
 
 // Handle milestone actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!verify_csrf()) {
+        $content_length = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+        $post_max = _ini_bytes(ini_get('post_max_size'));
+        if ($content_length > $post_max) {
+            set_flash('error', 'Your file is too large. Maximum total upload size is ' . round($post_max / 1048576) . 'MB. Please use a smaller file.');
+        } else {
+            set_flash('error', 'Invalid request. Please try again.');
+        }
+        redirect('freelancer/my_tasks.php');
+    }
     $ms_action = $_POST['ms_action'] ?? '';
     $milestone_id = (int) ($_POST['milestone_id'] ?? 0);
 
@@ -120,6 +130,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     delete_attachment($submission_file);
                 }
                 set_flash('error', 'Failed to submit work. Please try again.');
+            }
+        } else {
+            set_flash('error', 'Milestone not found or not ready for submission.');
+        }
+    } elseif ($ms_action === 'quick_submit' && $milestone_id > 0) {
+        // Quick submit: change status to submitted without requiring link/file
+        $st = $conn->prepare("
+            SELECT m.id, m.job_id, m.status
+            FROM milestones m
+            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
+            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested')
+              AND (m.freelancer_id = ? OR m.freelancer_id IS NULL)
+        ");
+        $st->bind_param('iii', $fl_freelancer_id, $milestone_id, $fl_freelancer_id);
+        $st->execute();
+        $ms = $st->get_result()->fetch_assoc();
+        $st->close();
+
+        if ($ms) {
+            $conn->begin_transaction();
+            try {
+                $now = date('Y-m-d H:i:s');
+                $st = $conn->prepare("UPDATE milestones SET status='submitted', submitted_at=? WHERE id=?");
+                $st->bind_param('si', $now, $milestone_id);
+                $st->execute();
+                $st->close();
+
+                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
+                $st->bind_param('ii', $ms['job_id'], $fl_freelancer_id);
+                $st->execute();
+                $st->close();
+
+                $conn->commit();
+
+                try {
+                    $ns = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.id=?");
+                    $ns->bind_param('i', $ms['job_id']);
+                    $ns->execute();
+                    $ni = $ns->get_result()->fetch_assoc();
+                    $ns->close();
+                    if ($ni) {
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id']);
+                    }
+                } catch (Exception $ne) {
+                    error_log("Notification failed after submission: " . $ne->getMessage());
+                }
+
+                set_flash('success', 'Milestone submitted for review!');
+            } catch (Exception $e) {
+                $conn->rollback();
+                set_flash('error', 'Failed to submit milestone. Please try again.');
             }
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
@@ -314,7 +375,18 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <?php elseif ($ms['status'] === 'in_progress' || $ms['status'] === 'revision_requested'): ?>
                                 <div class="p-3 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
                                     <span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= $ms['status'] === 'revision_requested' ? 'Revision needed — resubmit work' : 'Working on this milestone' ?></span>
-                                    <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)">Submit Work</a>
+                                    <div class="flex items-center gap-2">
+                                        <form method="POST" style="display:inline" onsubmit="return confirm('Submit this milestone for review?')">
+                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                            <input type="hidden" name="ms_action" value="quick_submit">
+                                            <input type="hidden" name="milestone_id" value="<?= (int) $ms['id'] ?>">
+                                            <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style="background:linear-gradient(135deg,#10b981,#059669)">
+                                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                                Submit Milestone
+                                            </button>
+                                        </form>
+                                        <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)">Details</a>
+                                    </div>
                                 </div>
                             <?php elseif ($ms['status'] === 'submitted'): ?>
                                 <div class="p-3 flex items-center gap-2" style="border-top:1px solid var(--color-border)">

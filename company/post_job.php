@@ -32,7 +32,13 @@ $old = [
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
-        $error = 'Invalid request. Please try again.';
+        $content_length = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+        $post_max = _ini_bytes(ini_get('post_max_size'));
+        if ($content_length > $post_max) {
+            $error = 'Your file is too large. Maximum total upload size is ' . round($post_max / 1048576) . 'MB. Please use a smaller file.';
+        } else {
+            $error = 'Invalid request. Please try again.';
+        }
     } else {
         $old['title'] = trim($_POST['title'] ?? '');
         $old['category'] = trim($_POST['category'] ?? '');
@@ -1009,6 +1015,11 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     fileInput.addEventListener('change', function(){ if(fileInput.files.length) showFile(fileInput.files[0]); });
 
     function showFile(file) {
+        if (file.size > 10*1024*1024) {
+            alert('File is too large. Maximum size is 10MB.');
+            fileInput.value = '';
+            return;
+        }
         var ext = file.name.split('.').pop().toLowerCase();
         var icons = {
             pdf:'<svg class="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>',

@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
 
         if ($assignment_id > 0 && in_array($action, ['accept', 'reject'])) {
             $response = $action === 'accept' ? 'accepted' : 'rejected';
-            $new_status = $action === 'accept' ? 'working' : 'assigned';
+            $new_status = $action === 'accept' ? 'working' : 'rejected';
 
             try {
                 // For milestone-based assignments, keep status as 'assigned' after acceptance
