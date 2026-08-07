@@ -62,6 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $application = $stmt->get_result()->fetch_assoc();
         $stmt->close();
 
+        $proposal_id = isset($_POST['proposal_id']) ? (int) $_POST['proposal_id'] : 0;
+
         if ($application) {
             $conn->begin_transaction();
             try {
@@ -84,6 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $assignment_id = $stmt->insert_id;
                 $stmt->close();
 
+                // Update job status to in_progress since a freelancer has been hired
+                $stmt = $conn->prepare("UPDATE jobs SET status = 'in_progress' WHERE id = ? AND status = 'open'");
+                $stmt->bind_param('i', $job_id);
+                $stmt->execute();
+                $stmt->close();
+
                 // Count active assignments AFTER the insert to get accurate count
                 $stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != 'completed'");
                 $stmt->bind_param('i', $job_id);
@@ -103,6 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     $stmt->bind_param('si', $new_status, $job_id);
                     $stmt->execute();
                     $stmt->close();
+                }
+
+                if ($proposal_id > 0) {
+                    $conn->query("UPDATE proposal_projects SET status = 'hired' WHERE id = " . $proposal_id);
                 }
 
                 $stmt = $conn->prepare("SELECT u.id FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
@@ -130,6 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         }
     } elseif ($action === 'reject') {
         $application_id = (int) ($_POST['application_id'] ?? 0);
+        $proposal_id = isset($_POST['proposal_id']) ? (int) $_POST['proposal_id'] : 0;
 
         $stmt = $conn->prepare("
             SELECT ja.freelancer_id
@@ -153,6 +166,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $stmt->close();
 
         if ($rejected_app) {
+            if ($proposal_id > 0) {
+                $conn->query("UPDATE proposal_projects SET status = 'rejected' WHERE id = " . $proposal_id);
+            }
+
             $stmt = $conn->prepare("SELECT u.id FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
             $stmt->bind_param('i', $rejected_app['freelancer_id']);
             $stmt->execute();
@@ -460,6 +477,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                         }
                         $stmt->execute();
                         $stmt->close();
+                        
+                        // Mark the job itself as completed since the freelancer finished the work
+                        $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
+                        $stmt->bind_param('i', $job_id);
+                        $stmt->execute();
+                        $stmt->close();
 
                         // Check if ALL assignments for the job are completed
                         $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done FROM assignments WHERE job_id = ?");
@@ -593,7 +616,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 
 $applications = [];
 $stmt = $conn->prepare("
-    SELECT ja.id, ja.status, ja.applied_at, f.full_name, f.portfolio_url, u.email, u.profile_image
+    SELECT ja.id, ja.status, ja.applied_at, f.full_name, f.portfolio_url, u.email, u.profile_image, f.id AS freelancer_id
     FROM job_applications ja
     JOIN freelancers f ON ja.freelancer_id = f.id
     JOIN users u ON f.user_id = u.id
@@ -605,6 +628,16 @@ $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
     $applications[] = $row;
+}
+$stmt->close();
+
+$proposal_projects = [];
+$stmt = $conn->prepare("SELECT * FROM proposal_projects WHERE job_id = ? AND company_id = ?");
+$stmt->bind_param('ii', $job_id, $company_id);
+$stmt->execute();
+$res = $stmt->get_result();
+while($row = $res->fetch_assoc()) {
+    $proposal_projects[$row['freelancer_id']] = $row;
 }
 $stmt->close();
 
@@ -1056,23 +1089,44 @@ require __DIR__ . '/../includes/header.php';
                             <p class="text-xs mt-1" style="color:var(--color-text-placeholder)"><?= 'Applied' ?>: <?= e($app['applied_at']) ?></p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-col gap-2 items-end">
                         <?= status_badge($app['status']) ?>
                         <?php if ($app['status'] === 'pending' && $positions_available > 0): ?>
-                            <form method="POST">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="job_id" value="<?= $job_id ?>">
-                                <input type="hidden" name="action" value="accept">
-                                <input type="hidden" name="application_id" value="<?= (int) $app['id'] ?>">
-                                <button type="submit" class="btn-primary text-sm"><?= 'Accept' ?></button>
-                            </form>
-                            <form method="POST">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="job_id" value="<?= $job_id ?>">
-                                <input type="hidden" name="action" value="reject">
-                                <input type="hidden" name="application_id" value="<?= (int) $app['id'] ?>">
-                                <button type="submit" class="btn-danger text-sm"><?= 'Hide' ?></button>
-                            </form>
+                            <div class="flex gap-2">
+                                <form method="POST">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                    <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                    <input type="hidden" name="action" value="accept">
+                                    <input type="hidden" name="application_id" value="<?= (int) $app['id'] ?>">
+                                    <button type="submit" class="btn-primary text-sm"><?= 'Accept (Hire)' ?></button>
+                                </form>
+                                <form method="POST">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                    <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                    <input type="hidden" name="action" value="reject">
+                                    <input type="hidden" name="application_id" value="<?= (int) $app['id'] ?>">
+                                    <button type="submit" class="btn-danger text-sm"><?= 'Reject' ?></button>
+                                </form>
+                            </div>
+                            
+                            <!-- Proposal Project Actions -->
+                            <div class="mt-2 w-full flex justify-end">
+                                <?php if (isset($proposal_projects[$app['freelancer_id']])): ?>
+                                    <?php $prop = $proposal_projects[$app['freelancer_id']]; ?>
+                                    <div class="flex flex-col items-end gap-1 bg-gray-50 dark:bg-gray-800 p-2 rounded-lg w-full max-w-xs">
+                                        <span class="text-xs font-semibold text-gray-500 uppercase">Test Assignment</span>
+                                        <?= status_badge($prop['status']) ?>
+                                        <?php if(in_array($prop['status'], ['submitted', 'reviewed'])): ?>
+                                            <a href="<?= e(base_url('company/review_proposal.php?id=' . $prop['id'])) ?>" class="text-indigo-600 hover:underline text-sm font-medium mt-1">Review Submission</a>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <button type="button" onclick="openProposalModal(<?= $app['freelancer_id'] ?>, '<?= e(addslashes($app['full_name'])) ?>')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all" style="background:rgba(99,102,241,0.08);color:#6366f1">
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        Send Test Assignment
+                                    </button>
+                                <?php endif; ?>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1081,9 +1135,66 @@ require __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
+<!-- Send Proposal Project Modal -->
+<div id="proposalModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden transform transition-all">
+        <form action="<?= e(base_url('api/send_proposal_project.php')) ?>" method="POST" enctype="multipart/form-data" class="p-6 max-h-[90vh] overflow-y-auto">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="job_id" value="<?= $job_id ?>">
+            <input type="hidden" name="freelancer_id" id="proposal_freelancer_id" value="">
+            
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-xl font-bold" style="color:var(--color-text-primary)">Send Test Assignment to <span id="proposal_freelancer_name" class="text-indigo-600"></span></h3>
+                <button type="button" onclick="closeProposalModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Assignment Title</label>
+                <input type="text" name="title" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="e.g., Build a quick prototype">
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Description</label>
+                <textarea name="description" rows="3" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="Describe the test assignment briefly..."></textarea>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Instructions (Optional)</label>
+                <textarea name="instructions" rows="2" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="Any specific requirements?"></textarea>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Deadline</label>
+                <input type="date" name="deadline" required min="<?= date('Y-m-d') ?>" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow">
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Attachment (Optional)</label>
+                <input type="file" name="attachment" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-gray-700 dark:file:text-indigo-400">
+            </div>
+            
+            <div class="flex gap-3 justify-end">
+                <button type="button" onclick="closeProposalModal()" class="px-5 py-2.5 rounded-xl font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+                <button type="submit" class="px-5 py-2.5 rounded-xl font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none">Send Assignment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <?php require __DIR__ . '/../includes/footer.php'; ?>
 
 <script>
+function openProposalModal(freelancerId, freelancerName) {
+    document.getElementById('proposal_freelancer_id').value = freelancerId;
+    document.getElementById('proposal_freelancer_name').innerText = freelancerName;
+    document.getElementById('proposalModal').classList.remove('hidden');
+}
+function closeProposalModal() {
+    document.getElementById('proposalModal').classList.add('hidden');
+}
+
 function setRating(stars) {
     document.getElementById('reviewRating').value = stars;
     var btns = document.querySelectorAll('.star-btn');

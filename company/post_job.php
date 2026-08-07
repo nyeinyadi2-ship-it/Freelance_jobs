@@ -16,19 +16,20 @@ if (!$company_id) {
     redirect('auth/login.php');
 }
 
-// Fetch all skills for multi-select
-$all_skills = [];
-$sr = $conn->query('SELECT id, skill_name FROM skills ORDER BY skill_name');
-while ($row = $sr->fetch_assoc()) {
-    $all_skills[] = $row;
-}
-
 $error = '';
 $old = [
     'title' => '', 'category' => '', 'budget' => '', 'experience_level' => 'intermediate',
-    'gender_requirement' => 'any', 'skills' => [], 'description' => '', 'requirements' => '',
+    'gender_requirement' => 'any', 'description' => '', 'requirements' => '',
     'deadline' => '', 'duration' => '', 'freelancers_needed' => '1', 'visibility' => 'public',
 ];
+
+$skills = [];
+$skills_result = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name ASC");
+if ($skills_result) {
+    while ($row = $skills_result->fetch_assoc()) {
+        $skills[] = $row;
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
@@ -45,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $old['budget'] = trim($_POST['budget'] ?? '');
         $old['experience_level'] = $_POST['experience_level'] ?? 'intermediate';
         $old['gender_requirement'] = $_POST['gender_requirement'] ?? 'any';
-        $old['skills'] = $_POST['skills'] ?? [];
         $old['description'] = trim($_POST['description'] ?? '');
         $old['requirements'] = trim($_POST['requirements'] ?? '');
         $old['deadline'] = trim($_POST['deadline'] ?? '');
@@ -68,8 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Job description is required. Please describe your project.';
         } elseif ($old['requirements'] === '') {
             $error = 'Requirements are required. Please list the qualifications needed.';
-        } elseif (empty($old['skills'])) {
-            $error = 'Please select at least one required skill.';
         } elseif ($old['deadline'] !== '' && strtotime($old['deadline']) < time()) {
             $error = 'Deadline cannot be in the past. Please select a future date.';
         } elseif (!is_numeric($old['freelancers_needed']) || (int) $old['freelancers_needed'] < 1) {
@@ -88,25 +86,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $budget = (float) $old['budget'];
                 $deadline = $old['deadline'] !== '' ? $old['deadline'] : null;
                 $freelancers_needed = max(1, (int) $old['freelancers_needed']);
-                $status = 'approved';
+                $status = 'open';
 
-                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, budget, deadline, duration, freelancers_needed, visibility, attachment, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param('isssssdssisss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $budget, $deadline, $old['duration'], $freelancers_needed, $old['visibility'], $attachment_name, $status);
+                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, requirements, budget, deadline, duration, freelancers_needed, visibility, attachment, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('issssssdssisss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $old['requirements'], $budget, $deadline, $old['duration'], $freelancers_needed, $old['visibility'], $attachment_name, $status);
                 $stmt->execute();
                 $job_id = $stmt->insert_id;
                 $stmt->close();
 
-                // Insert job skills
-                if (!empty($old['skills']) && $job_id > 0) {
-                    $skill_stmt = $conn->prepare('INSERT INTO job_skills (job_id, skill_id) VALUES (?, ?)');
-                    foreach ($old['skills'] as $skill_id) {
-                        $sid = (int) $skill_id;
-                        if ($sid > 0) {
-                            $skill_stmt->bind_param('ii', $job_id, $sid);
-                            $skill_stmt->execute();
-                        }
+                if (!empty($_POST['skills']) && is_array($_POST['skills'])) {
+                    $stmt_skill = $conn->prepare("INSERT INTO job_skills (job_id, skill_id) VALUES (?, ?)");
+                    foreach ($_POST['skills'] as $skill_id) {
+                        $skill_id = (int)$skill_id;
+                        $stmt_skill->bind_param('ii', $job_id, $skill_id);
+                        $stmt_skill->execute();
                     }
-                    $skill_stmt->close();
+                    $stmt_skill->close();
                 }
 
                 // Notify admin
@@ -160,15 +155,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 .form-label { display:block; font-size:0.8125rem; font-weight:600; color:var(--color-text-secondary); margin-bottom:0.5rem; }
 .form-label .req { color:#ef4444; }
 .form-hint { font-size:0.75rem; color:var(--color-text-muted); margin-top:0.25rem; }
-
-/* ===== Skill Chips ===== */
-.skill-chip { display:inline-flex; align-items:center; gap:0.375rem; padding:0.5rem 0.875rem; border-radius:9999px; font-size:0.8125rem; font-weight:500; cursor:pointer; transition:all .25s cubic-bezier(.4,0,.2,1); border:1.5px solid var(--color-border); color:var(--color-text-secondary); user-select:none; background:var(--color-card); }
-.skill-chip:hover { border-color:#818cf8; color:#6366f1; background:rgba(99,102,241,0.04); }
-.skill-chip.selected { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border-color:transparent; box-shadow:0 2px 10px rgba(99,102,241,0.3); }
-.skill-chip input { display:none; }
-.skill-chip .chip-check { width:14px; height:14px; border-radius:50%; border:1.5px solid var(--color-border); display:inline-flex; align-items:center; justify-content:center; transition:all .2s; flex-shrink:0; }
-.skill-chip.selected .chip-check { border-color:transparent; background:rgba(255,255,255,0.3); }
-.skill-chip.selected .chip-check::after { content:''; width:6px; height:6px; border-radius:50%; background:#fff; }
 
 /* ===== Drop Zone ===== */
 .drop-zone { border:2px dashed var(--color-border); border-radius:1rem; padding:2.5rem 1.5rem; text-align:center; cursor:pointer; transition:all .3s; position:relative; background:var(--color-bg); }
@@ -251,7 +237,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     <div class="post-progress">
         <div class="p-step active" data-step="1"><span class="p-dot">1</span><span class="p-label">Basics</span></div>
         <div class="p-step" data-step="2"><span class="p-dot">2</span><span class="p-label">Details</span></div>
-        <div class="p-step" data-step="3"><span class="p-dot">3</span><span class="p-label">Skills & Attach</span></div>
+        <div class="p-step" data-step="3"><span class="p-dot">3</span><span class="p-label">Attachment</span></div>
         <div class="p-step" data-step="4"><span class="p-dot">4</span><span class="p-label">Review</span></div>
     </div>
 
@@ -413,26 +399,21 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                             <div class="fc-icon" style="background:linear-gradient(135deg,rgba(16,185,129,0.12),rgba(52,211,153,0.12))">
                                 <svg class="w-5 h-5" style="color:#10b981" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
                             </div>
-                            <h2>Skills & Attachment</h2>
+                            <h2>Attachment</h2>
                         </div>
                         <div class="space-y-6">
                             <div>
-                                <label class="form-label">Required Skills <span class="req">*</span></label>
-                                <p class="form-hint mb-3">Click to select the skills needed for this job</p>
-                                <div class="flex flex-wrap gap-2" id="skillsContainer">
-                                    <?php foreach ($all_skills as $sk): ?>
-                                        <label class="skill-chip <?= in_array($sk['id'], $old['skills']) ? 'selected' : '' ?>" onclick="clearSkillsError()">
-                                            <input type="checkbox" name="skills[]" value="<?= (int)$sk['id'] ?>" <?= in_array($sk['id'], $old['skills']) ? 'checked' : '' ?>>
-                                            <span class="chip-check"></span>
-                                            <?= e($sk['skill_name']) ?>
+                                <label class="form-label">Required Skills (Optional)</label>
+                                <div class="flex flex-wrap gap-2.5">
+                                    <?php foreach ($skills as $skill): ?>
+                                        <label class="flex items-center gap-2 text-sm p-2.5 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" style="border:1px solid var(--color-border);background:var(--color-bg)">
+                                            <input type="checkbox" name="skills[]" value="<?= (int) $skill['id'] ?>" <?= in_array((string) $skill['id'], $_POST['skills'] ?? [], true) ? 'checked' : '' ?> class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                            <span style="color:var(--color-text-primary);font-weight:500;"><?= e($skill['skill_name']) ?></span>
                                         </label>
                                     <?php endforeach; ?>
                                 </div>
-                                <div class="field-error" id="err-skills">
-                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                                    <span></span>
-                                </div>
                             </div>
+                            <hr style="border:none;border-top:1px solid var(--color-border);">
                             <div>
                                 <label class="form-label">Attachment (Optional)</label>
                                 <div class="drop-zone" id="dropZone">
@@ -516,10 +497,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 <p class="text-sm leading-relaxed" style="color:var(--color-text-secondary)" id="reviewReq">-</p>
                             </div>
                             <div class="py-2.5 border-b" style="border-color:var(--color-border)">
-                                <span class="text-sm font-medium block mb-1.5" style="color:var(--color-text-muted)">Skills</span>
-                                <div class="flex flex-wrap gap-1.5" id="reviewSkills"></div>
-                            </div>
-                            <div class="py-2.5 border-b" style="border-color:var(--color-border)">
                                 <span class="text-sm font-medium block mb-1.5" style="color:var(--color-text-muted)">Milestones</span>
                                 <div id="reviewMilestones" class="space-y-1.5"></div>
                             </div>
@@ -585,12 +562,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                             <p class="preview-value" id="pvDesc" style="white-space:pre-wrap;max-height:120px;overflow:hidden"><span class="preview-empty">Start typing to see preview...</span></p>
                         </div>
 
-                        <!-- Skills -->
-                        <div class="preview-section">
-                            <p class="preview-section-title">Required Skills</p>
-                            <div class="flex flex-wrap gap-1.5" id="pvSkills"><span class="preview-empty">No skills selected</span></div>
-                        </div>
-
                         <!-- Milestones -->
                         <div class="preview-section">
                             <p class="preview-section-title">Milestones</p>
@@ -645,16 +616,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         if (errEl) errEl.classList.remove('visible');
         // Also hide step banner
         var panel = input.closest('.step-panel');
-        if (panel) {
-            var banner = panel.querySelector('.step-error-banner');
-            if (banner) banner.classList.remove('visible');
-        }
-    };
-
-    window.clearSkillsError = function() {
-        var errEl = document.getElementById('err-skills');
-        if (errEl) errEl.classList.remove('visible');
-        var panel = document.getElementById('skillsContainer').closest('.step-panel');
         if (panel) {
             var banner = panel.querySelector('.step-error-banner');
             if (banner) banner.classList.remove('visible');
@@ -719,12 +680,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             if (deadline && new Date(deadline) < new Date()) {
                 errors.push('Deadline cannot be in the past.');
                 showFieldError('deadline', 'Deadline cannot be in the past.');
-            }
-        } else if (step === 3) {
-            var skills = document.querySelectorAll('.skill-chip.selected').length;
-            if (skills === 0) {
-                errors.push('Please select at least one skill.');
-                showFieldError('skills', 'Please select at least one skill.');
             }
         }
 
@@ -912,14 +867,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             descEl.innerHTML = '<span class="preview-empty">Start typing to see preview...</span>';
         }
 
-        // Skills
-        var skillsHtml = '';
-        document.querySelectorAll('.skill-chip.selected').forEach(function(c){
-            var name = c.textContent.trim();
-            skillsHtml += '<span class="preview-tag">' + name + '</span>';
-        });
-        document.getElementById('pvSkills').innerHTML = skillsHtml || '<span class="preview-empty">No skills selected</span>';
-
         // Milestones
         var msHtml = '';
         var titles = document.querySelectorAll('[name="ms_title[]"]');
@@ -956,12 +903,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         document.getElementById('reviewDesc').textContent = g('description') || '-';
         document.getElementById('reviewReq').textContent = g('requirements') || '-';
 
-        var skillsHtml = '';
-        document.querySelectorAll('.skill-chip.selected').forEach(function(c){
-            skillsHtml += '<span class="inline-flex px-2.5 py-1 text-xs font-medium rounded-full" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff">'+c.textContent.trim()+'</span>';
-        });
-        document.getElementById('reviewSkills').innerHTML = skillsHtml || '<span class="text-xs" style="color:var(--color-text-muted)">No skills selected</span>';
-
         var msHtml = '';
         var titles = document.querySelectorAll('[name="ms_title[]"]');
         var amounts = document.querySelectorAll('[name="ms_amount[]"]');
@@ -982,17 +923,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     window.saveDraft = function() {
         alert('Draft saved! (Feature placeholder)');
     };
-
-    // Skill chips toggle
-    document.querySelectorAll('.skill-chip').forEach(function(chip){
-        chip.addEventListener('click', function(e){
-            e.preventDefault();
-            var cb = chip.querySelector('input[type=checkbox]');
-            cb.checked = !cb.checked;
-            chip.classList.toggle('selected', cb.checked);
-            updatePreview();
-        });
-    });
 
     // Drag & drop
     var dropZone = document.getElementById('dropZone');

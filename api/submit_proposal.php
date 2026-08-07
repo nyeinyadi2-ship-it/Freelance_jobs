@@ -1,0 +1,81 @@
+<?php
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/notifications.php';
+require_once __DIR__ . '/../config/upload.php';
+
+require_role('freelancer');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verify_csrf()) {
+    set_flash('error', 'Invalid request.');
+    redirect('freelancer/dashboard.php');
+}
+
+$user = current_user();
+$freelancer_id = get_freelancer_id($conn, (int) $user['user_id']);
+$proposal_id = (int) ($_POST['proposal_id'] ?? 0);
+$github_link = trim($_POST['github_link'] ?? '');
+$comment = trim($_POST['comment'] ?? '');
+
+if (!$freelancer_id || $proposal_id <= 0) {
+    set_flash('error', 'Invalid input.');
+    redirect('freelancer/dashboard.php');
+}
+
+$stmt = $conn->prepare("SELECT p.id, p.company_id, p.status, j.title FROM proposal_projects p JOIN jobs j ON p.job_id = j.id WHERE p.id = ? AND p.freelancer_id = ? AND p.status = 'accepted'");
+$stmt->bind_param('ii', $proposal_id, $freelancer_id);
+$stmt->execute();
+$proposal = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+if (!$proposal) {
+    set_flash('error', 'Proposal project not found or not in accepted state.');
+    redirect("freelancer/view_proposal.php?id=$proposal_id");
+}
+
+// Handle file upload
+$file_path = null;
+if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
+    $upload_result = handle_file_upload($_FILES['file'], 'submissions');
+    if ($upload_result['success']) {
+        $file_path = $upload_result['path'];
+    } else {
+        set_flash('error', 'Failed to upload file: ' . $upload_result['error']);
+        redirect("freelancer/view_proposal.php?id=$proposal_id");
+    }
+}
+
+if (empty($github_link) && empty($file_path) && empty($comment)) {
+    set_flash('error', 'Please provide a file, a link, or a comment.');
+    redirect("freelancer/view_proposal.php?id=$proposal_id");
+}
+
+$stmt = $conn->prepare("
+    INSERT INTO proposal_project_submissions (proposal_project_id, freelancer_id, file, github_link, comment)
+    VALUES (?, ?, ?, ?, ?)
+");
+$stmt->bind_param('iisss', $proposal_id, $freelancer_id, $file_path, $github_link, $comment);
+
+if ($stmt->execute()) {
+    // Update proposal status to 'submitted'
+    $conn->query("UPDATE proposal_projects SET status = 'submitted' WHERE id = $proposal_id");
+
+    // Notify company
+    $stmt2 = $conn->prepare("SELECT user_id FROM companies WHERE id = ?");
+    $stmt2->bind_param('i', $proposal['company_id']);
+    $stmt2->execute();
+    $company_user = $stmt2->get_result()->fetch_assoc();
+    $stmt2->close();
+
+    if ($company_user) {
+        $fl_name = $user['username'];
+        create_notification($conn, (int)$company_user['user_id'], 'system', "Freelancer submitted their work for '{$proposal['title']}'.", 'company/dashboard.php');
+    }
+
+    set_flash('success', 'Your test assignment has been submitted successfully.');
+} else {
+    set_flash('error', 'Could not submit assignment.');
+}
+$stmt->close();
+
+redirect("freelancer/view_proposal.php?id=$proposal_id");

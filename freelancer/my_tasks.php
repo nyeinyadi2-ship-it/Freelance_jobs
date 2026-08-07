@@ -105,6 +105,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND status IN ('working', 'assigned')");
                 $st->bind_param('i', $ms['job_id']);
                 $st->execute();
+
+                // Update job status
+                $st_job = $conn->prepare("UPDATE jobs SET status='submitted' WHERE id=? AND status='in_progress'");
+                $st_job->bind_param('i', $ms['job_id']);
+                $st_job->execute();
                 $st->close();
 
                 $conn->commit();
@@ -160,6 +165,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
                 $st->bind_param('ii', $ms['job_id'], $fl_freelancer_id);
                 $st->execute();
+
+                // Update job status
+                $st_job = $conn->prepare("UPDATE jobs SET status='submitted' WHERE id=? AND status='in_progress'");
+                $st_job->bind_param('i', $ms['job_id']);
+                $st_job->execute();
                 $st->close();
 
                 $conn->commit();

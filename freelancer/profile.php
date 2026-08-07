@@ -27,8 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
             $old_img = $fl_profile['profile_image'];
             $new_img = $old_img;
             if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
-                $uploaded = upload_image($_FILES['profile_image']);
-                if ($uploaded) $new_img = $uploaded; else $error = 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
+                $uploaded = upload_image($_FILES['profile_image'], 10 * 1024 * 1024, $upload_err);
+                if ($uploaded) $new_img = $uploaded; else $error = $upload_err ?: 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 10MB.';
             }
             if ($error === '') {
                 $conn->begin_transaction();

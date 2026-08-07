@@ -89,9 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Handle profile avatar upload
                 $profile_image = null;
                 if (isset($_FILES['profile_photo']) && $_FILES['profile_photo']['error'] === UPLOAD_ERR_OK) {
-                    $profile_image = upload_image($_FILES['profile_photo']);
+                    $profile_image = upload_image($_FILES['profile_photo'], 10 * 1024 * 1024, $upload_err);
                     if (!$profile_image) {
-                        $error = 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
+                        $error = $upload_err ?: 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 10MB.';
                     }
                 }
 
@@ -99,9 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $logo_image = null;
                 if ($error === '' && $role === 'company') {
                     if (isset($_FILES['logo_image']) && $_FILES['logo_image']['error'] === UPLOAD_ERR_OK) {
-                        $logo_image = upload_image($_FILES['logo_image']);
+                        $logo_image = upload_image($_FILES['logo_image'], 10 * 1024 * 1024, $upload_err);
                         if (!$logo_image) {
-                            $error = 'Invalid company logo. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
+                            $error = $upload_err ?: 'Invalid company logo. Allowed types: jpg, png, gif, webp. Max size: 10MB.';
                         }
                     }
                 }
@@ -422,6 +422,9 @@ require __DIR__ . '/../includes/header.php';
     background: rgba(99,102,241,0.08);
     color: #4f46e5;
   }
+  .skill-checkbox:checked + .skill-label .check-icon {
+    display: block !important;
+  }
   .grid-skills { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
   /* ─── Password strength ───────────────────────────────── */
@@ -720,7 +723,7 @@ require __DIR__ . '/../includes/header.php';
                       <div>
                         <input type="checkbox" name="skills[]" value="<?= (int) $skill['id'] ?>" id="skill_<?= (int) $skill['id'] ?>" class="skill-checkbox" <?= in_array((string) $skill['id'], $_POST['skills'] ?? [], true) ? 'checked' : '' ?>>
                         <label for="skill_<?= (int) $skill['id'] ?>" class="skill-label">
-                          <svg class="w-3 h-3 check-icon hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                          <svg class="w-3 h-3 check-icon" style="display:none;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                           <?= e($skill['skill_name']) ?>
                         </label>
                       </div>

@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     experience_level ENUM('beginner', 'intermediate', 'expert') DEFAULT 'intermediate',
     gender_requirement ENUM('any', 'male', 'female') DEFAULT 'any',
     description TEXT,
+    requirements TEXT,
     budget DECIMAL(10, 2),
     deadline DATETIME NULL,
     duration VARCHAR(100) DEFAULT NULL,

@@ -55,20 +55,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
             $new_logo = $old_logo;
 
             if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
-                $uploaded = upload_image($_FILES['profile_image']);
+                $uploaded = upload_image($_FILES['profile_image'], 10 * 1024 * 1024, $upload_err);
                 if ($uploaded) {
                     $new_profile_image = $uploaded;
                 } else {
-                    $error = 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
+                    $error = $upload_err ?: 'Invalid profile image. Allowed types: jpg, png, gif, webp. Max size: 10MB.';
                 }
             }
 
             if ($error === '' && isset($_FILES['logo_image']) && $_FILES['logo_image']['error'] === UPLOAD_ERR_OK) {
-                $uploaded = upload_image($_FILES['logo_image']);
+                $uploaded = upload_image($_FILES['logo_image'], 10 * 1024 * 1024, $upload_err);
                 if ($uploaded) {
                     $new_logo = $uploaded;
                 } else {
-                    $error = 'Invalid company logo. Allowed types: jpg, png, gif, webp. Max size: 2MB.';
+                    $error = $upload_err ?: 'Invalid company logo. Allowed types: jpg, png, gif, webp. Max size: 10MB.';
                 }
             }
 

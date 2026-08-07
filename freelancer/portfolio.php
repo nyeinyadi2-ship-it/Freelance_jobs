@@ -25,13 +25,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         } else {
             $cover = null;
             if (!empty($_FILES['cover_image']['name'])) {
-                $cover = upload_image($_FILES['cover_image']);
-                if (!$cover) { set_flash('error', 'Invalid cover image. Allowed: JPG, PNG, GIF, WebP.'); redirect('freelancer/portfolio.php'); }
+                $cover = upload_image($_FILES['cover_image'], 10 * 1024 * 1024, $upload_err);
+                if (!$cover) { set_flash('error', $upload_err ?: 'Invalid cover image. Allowed: JPG, PNG, GIF, WebP. Max 10MB.'); redirect('freelancer/portfolio.php'); }
             }
             $att = null; $att_name = null;
             if (!empty($_FILES['attachment']['name'])) {
-                $att = upload_attachment($_FILES['attachment']);
-                if (!$att) { set_flash('error', 'Invalid attachment. Allowed: PDF, DOC, DOCX, ZIP, RAR, images. Max 10MB.'); redirect('freelancer/portfolio.php'); }
+                $att = upload_attachment($_FILES['attachment'], 10 * 1024 * 1024, $upload_err);
+                if (!$att) { set_flash('error', $upload_err ?: 'Invalid attachment. Allowed: PDF, DOC, DOCX, ZIP, RAR, images. Max 10MB.'); redirect('freelancer/portfolio.php'); }
                 $att_name = $_FILES['attachment']['name'];
             }
 
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     foreach ($_FILES['images']['name'] as $idx => $img_name) {
                         if ($_FILES['images']['error'][$idx] !== UPLOAD_ERR_OK) continue;
                         $tmp = ['name' => $img_name, 'type' => $_FILES['images']['type'][$idx], 'tmp_name' => $_FILES['images']['tmp_name'][$idx], 'error' => $_FILES['images']['error'][$idx], 'size' => $_FILES['images']['size'][$idx]];
-                        $uploaded = upload_image($tmp);
+                        $uploaded = upload_image($tmp, 10 * 1024 * 1024, $upload_err);
                         if ($uploaded) {
                             $img_st->bind_param('isi', $item_id, $uploaded, $order);
                             $img_st->execute();
@@ -110,15 +110,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 
         $cover = $existing['cover_image'];
         if (!empty($_FILES['cover_image']['name'])) {
-            $new_cover = upload_image($_FILES['cover_image']);
-            if ($new_cover) { $cover = $new_cover; } else { set_flash('error', 'Invalid cover image.'); redirect('freelancer/portfolio.php?edit=' . $item_id); }
+            $new_cover = upload_image($_FILES['cover_image'], 10 * 1024 * 1024, $upload_err);
+            if ($new_cover) { $cover = $new_cover; } else { set_flash('error', $upload_err ?: 'Invalid cover image. Max 10MB.'); redirect('freelancer/portfolio.php?edit=' . $item_id); }
         }
 
         $att = $existing['attachment'];
         $att_name = $_POST['existing_attachment_name'] ?? null;
         if (!empty($_FILES['attachment']['name'])) {
-            $new_att = upload_attachment($_FILES['attachment']);
-            if ($new_att) { $att = $new_att; $att_name = $_FILES['attachment']['name']; } else { set_flash('error', 'Invalid attachment.'); redirect('freelancer/portfolio.php?edit=' . $item_id); }
+            $new_att = upload_attachment($_FILES['attachment'], 10 * 1024 * 1024, $upload_err);
+            if ($new_att) { $att = $new_att; $att_name = $_FILES['attachment']['name']; } else { set_flash('error', $upload_err ?: 'Invalid attachment. Max 10MB.'); redirect('freelancer/portfolio.php?edit=' . $item_id); }
         }
 
         // Handle new gallery images
@@ -127,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             foreach ($_FILES['images']['name'] as $idx => $img_name) {
                 if ($_FILES['images']['error'][$idx] !== UPLOAD_ERR_OK) continue;
                 $tmp = ['name' => $img_name, 'type' => $_FILES['images']['type'][$idx], 'tmp_name' => $_FILES['images']['tmp_name'][$idx], 'error' => $_FILES['images']['error'][$idx], 'size' => $_FILES['images']['size'][$idx]];
-                $uploaded = upload_image($tmp);
+                $uploaded = upload_image($tmp, 10 * 1024 * 1024, $upload_err);
                 if ($uploaded) $new_images[] = $uploaded;
             }
         }

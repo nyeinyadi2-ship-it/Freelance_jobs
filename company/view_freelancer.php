@@ -216,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         if (abs($ms_total - $budget) > 0.01) { $hire_error = 'Milestone total ($' . number_format($ms_total, 2) . ') must match the budget ($' . number_format($budget, 2) . ').'; }
                     }
                     if (empty($hire_error)) {
-                        $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'approved', '')");
+                        $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'open', '')");
                         $stmt->bind_param('issds', $company_id, $title, $description, $budget, $deadline);
                         $stmt->execute();
                         $job_id = $stmt->insert_id;

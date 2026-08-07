@@ -113,6 +113,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st->execute();
                 $st->close();
 
+                // Update job status
+                $st_job = $conn->prepare("UPDATE jobs SET status='submitted' WHERE id=? AND status='in_progress'");
+                $st_job->bind_param('i', $ms_check['job_id']);
+                $st_job->execute();
+                $st_job->close();
+
                 $conn->commit();
 
                 // Notify company (after commit so notification failure doesn't roll back submission)
@@ -168,6 +174,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st->bind_param('ii', $ms_check['job_id'], $fl_freelancer_id);
                 $st->execute();
                 $st->close();
+
+                // Update job status
+                $st_job = $conn->prepare("UPDATE jobs SET status='submitted' WHERE id=? AND status='in_progress'");
+                $st_job->bind_param('i', $ms_check['job_id']);
+                $st_job->execute();
+                $st_job->close();
 
                 $conn->commit();
 

@@ -27,28 +27,28 @@ if (!$job) {
     redirect('company/manage_jobs.php');
 }
 
+$all_skills = [];
+$res = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
+if ($res) {
+    while ($row = $res->fetch_assoc()) {
+        $all_skills[] = $row;
+    }
+}
+
+$current_skills = [];
+$st = $conn->prepare("SELECT skill_id FROM job_skills WHERE job_id = ?");
+$st->bind_param('i', $job_id);
+$st->execute();
+$rs = $st->get_result();
+while ($r = $rs->fetch_assoc()) {
+    $current_skills[] = (int) $r['skill_id'];
+}
+$st->close();
+
 if ($job['status'] === 'completed') {
     set_flash('error', 'Completed jobs cannot be edited.');
     redirect('company/manage_jobs.php');
 }
-
-// Fetch all skills
-$all_skills = [];
-$sr = $conn->query('SELECT id, skill_name FROM skills ORDER BY skill_name');
-while ($row = $sr->fetch_assoc()) {
-    $all_skills[] = $row;
-}
-
-// Fetch current job skills
-$current_skills = [];
-$ss = $conn->prepare('SELECT skill_id FROM job_skills WHERE job_id = ?');
-$ss->bind_param('i', $job_id);
-$ss->execute();
-$sr2 = $ss->get_result();
-while ($row = $sr2->fetch_assoc()) {
-    $current_skills[] = (int) $row['skill_id'];
-}
-$ss->close();
 
 $error = '';
 
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $duration = trim($_POST['duration'] ?? '');
         $freelancers_needed = max(1, (int) ($_POST['freelancers_needed'] ?? 1));
         $visibility = $_POST['visibility'] ?? 'public';
-        $skills = $_POST['skills'] ?? [];
+        $selected_skills = $_POST['skills'] ?? [];
 
         if ($title === '' || $category === '') {
             $error = 'Job title and category are required.';
@@ -77,8 +77,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Job description is required.';
         } elseif ($requirements === '') {
             $error = 'Requirements are required.';
-        } elseif (empty($skills)) {
-            $error = 'Please select at least one skill.';
         } elseif ($deadline !== null && strtotime($deadline) < time()) {
             $error = 'Deadline cannot be in the past.';
         } else {
@@ -106,31 +104,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (!$error) {
-                $stmt = $conn->prepare('UPDATE jobs SET title=?, category=?, experience_level=?, gender_requirement=?, description=?, budget=?, deadline=?, duration=?, freelancers_needed=?, visibility=?, attachment=? WHERE id=? AND company_id=?');
-                $stmt->bind_param('sssssdssissii', $title, $category, $experience_level, $gender_requirement, $description, $budget, $deadline, $duration, $freelancers_needed, $visibility, $attachment_name, $job_id, $company_id);
-                $stmt->execute();
-                $stmt->close();
+                $conn->begin_transaction();
+                try {
+                    $stmt = $conn->prepare('UPDATE jobs SET title=?, category=?, experience_level=?, gender_requirement=?, description=?, requirements=?, budget=?, deadline=?, duration=?, freelancers_needed=?, visibility=?, attachment=? WHERE id=? AND company_id=?');
+                    $stmt->bind_param('ssssssdssissii', $title, $category, $experience_level, $gender_requirement, $description, $requirements, $budget, $deadline, $duration, $freelancers_needed, $visibility, $attachment_name, $job_id, $company_id);
+                    $stmt->execute();
+                    $stmt->close();
 
-                // Update skills: delete old, insert new
-                $ds = $conn->prepare('DELETE FROM job_skills WHERE job_id = ?');
-                $ds->bind_param('i', $job_id);
-                $ds->execute();
-                $ds->close();
+                    $stmt = $conn->prepare("DELETE FROM job_skills WHERE job_id = ?");
+                    $stmt->bind_param('i', $job_id);
+                    $stmt->execute();
+                    $stmt->close();
 
-                if (!empty($skills)) {
-                    $ins = $conn->prepare('INSERT INTO job_skills (job_id, skill_id) VALUES (?, ?)');
-                    foreach ($skills as $sid) {
-                        $sid = (int) $sid;
-                        if ($sid > 0) {
-                            $ins->bind_param('ii', $job_id, $sid);
-                            $ins->execute();
+                    if (!empty($selected_skills)) {
+                        $stmt = $conn->prepare("INSERT INTO job_skills (job_id, skill_id) VALUES (?, ?)");
+                        foreach ($selected_skills as $sid) {
+                            $sid = (int) $sid;
+                            $stmt->bind_param('ii', $job_id, $sid);
+                            $stmt->execute();
                         }
+                        $stmt->close();
                     }
-                    $ins->close();
-                }
 
-                set_flash('success', 'Job updated successfully.');
-                redirect('company/manage_jobs.php');
+                    $conn->commit();
+                    set_flash('success', 'Job updated successfully.');
+                    redirect('company/manage_jobs.php');
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    $error = 'Error updating job: ' . $e->getMessage();
+                }
             }
         }
     }
@@ -141,10 +143,6 @@ require __DIR__ . '/../includes/header.php';
 ?>
 
 <style>
-.skill-chip { display:inline-flex; align-items:center; gap:0.375rem; padding:0.375rem 0.75rem; border-radius:9999px; font-size:0.8125rem; font-weight:500; cursor:pointer; transition:all .2s; border:1.5px solid var(--color-border); color:var(--color-text-secondary); user-select:none; }
-.skill-chip:hover { border-color:#6366f1; color:#6366f1; }
-.skill-chip.selected { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border-color:transparent; box-shadow:0 2px 8px rgba(99,102,241,0.3); }
-.skill-chip input { display:none; }
 .drop-zone { border:2px dashed var(--color-border); border-radius:1rem; padding:1.5rem; text-align:center; cursor:pointer; transition:all .3s; position:relative; }
 .drop-zone:hover, .drop-zone.dragover { border-color:#6366f1; background:rgba(99,102,241,0.04); }
 .drop-zone.has-file { border-color:#10b981; background:rgba(16,185,129,0.04); }
@@ -341,12 +339,9 @@ require __DIR__ . '/../includes/header.php';
 <script>
 (function(){
     // Skill chips
-    document.querySelectorAll('.skill-chip').forEach(function(chip){
-        chip.addEventListener('click', function(e){
-            e.preventDefault();
-            var cb = chip.querySelector('input[type=checkbox]');
-            cb.checked = !cb.checked;
-            chip.classList.toggle('selected', cb.checked);
+    document.querySelectorAll('.skill-chip input[type="checkbox"]').forEach(function(cb){
+        cb.addEventListener('change', function(){
+            this.closest('.skill-chip').classList.toggle('selected', this.checked);
         });
     });
 

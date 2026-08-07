@@ -21,7 +21,7 @@ require_once __DIR__ . '/upload.php';
 function base_url(string $path = ''): string
 {
     $script = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
-    $root = preg_replace('#/(admin|auth|company|freelancer|chat)$#', '', $script);
+    $root = preg_replace('#/(admin|auth|company|freelancer|chat|api|migrations)$#', '', $script);
     $root = rtrim($root, '/');
 
     if ($path === '') {
@@ -348,6 +348,10 @@ function status_badge(string $status): string
         'active' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
         'suspended' => 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
         'blocked' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+        'expired' => 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300',
+        'closed' => 'bg-gray-300 dark:bg-gray-800 text-gray-900 dark:text-gray-400',
+        'reviewed' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+        'hired' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
     ];
 
     $class = $classes[$status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';

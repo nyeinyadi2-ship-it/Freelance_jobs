@@ -24,7 +24,7 @@ try { $s = $conn->prepare("SELECT p.id,p.amount,p.status,p.paid_at,j.title AS jo
 
 // Recommended jobs
 $recommended = [];
-try { $s = $conn->prepare("SELECT j.id,j.title,j.description,j.budget,j.created_at,c.company_name,c.logo_image FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.status='approved' AND j.category != 'Direct Hire' AND j.id NOT IN (SELECT job_id FROM job_applications WHERE freelancer_id=?) AND j.id NOT IN (SELECT job_id FROM assignments) ORDER BY j.created_at DESC LIMIT 6"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $recommended[] = $row; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT j.id,j.title,j.description,j.budget,j.created_at,c.company_name,c.logo_image FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.status='open' AND j.category != 'Direct Hire' AND j.id NOT IN (SELECT job_id FROM job_applications WHERE freelancer_id=?) AND j.id NOT IN (SELECT job_id FROM assignments) ORDER BY j.created_at DESC LIMIT 6"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $recommended[] = $row; $s->close(); } catch(Exception $e) {}
 
 // Direct hire requests (pending)
 $direct_hire_requests = [];
@@ -55,6 +55,24 @@ try {
         }
     }
     unset($req);
+} catch(Exception $e) {}
+
+// Proposal Projects (Test Assignments)
+$proposal_projects = [];
+try {
+    $s = $conn->prepare("SELECT p.*, j.title AS job_title, c.company_name, c.logo_image 
+        FROM proposal_projects p
+        JOIN jobs j ON p.job_id = j.id
+        JOIN companies c ON p.company_id = c.id
+        WHERE p.freelancer_id = ? 
+        ORDER BY p.created_at DESC");
+    $s->bind_param('i', $fl_freelancer_id);
+    $s->execute();
+    $r = $s->get_result();
+    while ($row = $r->fetch_assoc()) {
+        $proposal_projects[] = $row;
+    }
+    $s->close();
 } catch(Exception $e) {}
 
 // Handle accept/reject direct hire
@@ -89,6 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
                 $s->execute();
 
                 if ($s->affected_rows > 0) {
+                    if ($action === 'accept') {
+                        $upd_job = $conn->prepare("UPDATE jobs j JOIN assignments a ON j.id = a.job_id SET j.status = 'in_progress' WHERE a.id = ? AND j.status = 'open'");
+                        $upd_job->bind_param('i', $assignment_id);
+                        $upd_job->execute();
+                        $upd_job->close();
+                    }
+
                     // Get company user_id for notification
                     $s2 = $conn->prepare("SELECT c.user_id FROM assignments a JOIN jobs j ON a.job_id = j.id JOIN companies c ON j.company_id = c.id WHERE a.id = ?");
                     $s2->bind_param('i', $assignment_id);
@@ -270,7 +295,37 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+
+            <?php if (!empty($proposal_projects)): ?>
+                <div class="mt-8">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold flex items-center gap-2" style="color:var(--color-text-primary)">
+                            <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                            Test Assignments
+                        </h2>
+                    </div>
+                    <div class="space-y-3">
+                        <?php foreach ($proposal_projects as $prop): ?>
+                            <div class="flex items-center gap-3 p-3.5 rounded-xl border" style="border-color:var(--color-border)">
+                                <div class="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center" style="background:var(--color-bg-secondary)">
+                                    <?php if ($prop['logo_image']): ?>
+                                        <img src="<?= e(base_url('uploads/profiles/' . $prop['logo_image'])) ?>" alt="" class="w-full h-full object-cover rounded-xl">
+                                    <?php else: ?>
+                                        <span class="text-sm font-bold text-gray-400"><?= e(strtoupper(substr($prop['company_name'], 0, 1))) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($prop['title']) ?></p>
+                                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e($prop['company_name']) ?> &middot; Ends <?= e(date('M j', strtotime($prop['deadline']))) ?></p>
+                                </div>
+                                <a href="<?= e(base_url('freelancer/view_proposal.php?id=' . $prop['id'])) ?>" class="text-xs font-semibold text-primary-600 hover:text-primary-700">Details &rarr;</a>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
+
         <!-- Ongoing Tasks -->
         <div class="glass rounded-2xl p-6 hover-lift reveal reveal-d1">
             <div class="flex items-center justify-between mb-5">

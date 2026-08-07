@@ -1,19 +1,27 @@
 <?php
 
-function upload_image(array $file, int $max_size = 2 * 1024 * 1024): ?string
+function upload_image(array $file, int $max_size = 10 * 1024 * 1024, ?string &$error = null): ?string
 {
     $allowed_exts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
+        $error = match($file['error']) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File exceeds maximum size.',
+            UPLOAD_ERR_PARTIAL => 'File was only partially uploaded.',
+            UPLOAD_ERR_NO_FILE => 'No file was uploaded.',
+            default => 'Unknown upload error.'
+        };
         return null;
     }
 
     if ($file['size'] > $max_size) {
+        $error = 'File size exceeds maximum allowed limit (10MB).';
         return null;
     }
 
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowed_exts, true)) {
+        $error = 'Invalid file extension. Only JPG, PNG, GIF, and WEBP are allowed.';
         return null;
     }
 
@@ -33,6 +41,7 @@ function upload_image(array $file, int $max_size = 2 * 1024 * 1024): ?string
             $mime = @mime_content_type($tmp);
         }
         if ($mime !== null && $mime !== false && !in_array($mime, $allowed_mimes, true)) {
+            $error = 'Invalid MIME type. File may be corrupted or disguised.';
             return null;
         }
     }
@@ -41,6 +50,7 @@ function upload_image(array $file, int $max_size = 2 * 1024 * 1024): ?string
     $upload_dir = __DIR__ . '/../uploads/images/';
     if (!is_dir($upload_dir)) {
         if (!mkdir($upload_dir, 0755, true)) {
+            $error = 'Could not create upload directory.';
             return null;
         }
     }
@@ -52,23 +62,32 @@ function upload_image(array $file, int $max_size = 2 * 1024 * 1024): ?string
         return $filename;
     }
 
+    $error = 'Failed to move uploaded file to destination.';
     return null;
 }
 
-function upload_attachment(array $file, int $max_size = 10 * 1024 * 1024): ?string
+function upload_attachment(array $file, int $max_size = 10 * 1024 * 1024, ?string &$error = null): ?string
 {
     $allowed_exts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'zip', 'rar'];
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
+        $error = match($file['error']) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'File exceeds maximum size.',
+            UPLOAD_ERR_PARTIAL => 'File was only partially uploaded.',
+            UPLOAD_ERR_NO_FILE => 'No file was uploaded.',
+            default => 'Unknown upload error.'
+        };
         return null;
     }
 
     if ($file['size'] > $max_size) {
+        $error = 'File size exceeds maximum allowed limit (10MB).';
         return null;
     }
 
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowed_exts, true)) {
+        $error = 'Invalid file extension.';
         return null;
     }
 
@@ -96,6 +115,7 @@ function upload_attachment(array $file, int $max_size = 10 * 1024 * 1024): ?stri
             $mime = @mime_content_type($tmp);
         }
         if ($mime !== null && $mime !== false && !in_array($mime, $allowed_mimes, true)) {
+            $error = 'Invalid MIME type. File may be corrupted or disguised.';
             return null;
         }
     }
@@ -103,6 +123,7 @@ function upload_attachment(array $file, int $max_size = 10 * 1024 * 1024): ?stri
     $upload_dir = __DIR__ . '/../uploads/attachments/';
     if (!is_dir($upload_dir)) {
         if (!mkdir($upload_dir, 0755, true)) {
+            $error = 'Could not create upload directory.';
             return null;
         }
     }
@@ -114,6 +135,7 @@ function upload_attachment(array $file, int $max_size = 10 * 1024 * 1024): ?stri
         return $filename;
     }
 
+    $error = 'Failed to move uploaded file to destination.';
     return null;
 }
 

@@ -13,7 +13,7 @@ while ($row = $sr->fetch_assoc()) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     $job_id = (int) ($_POST['job_id'] ?? 0);
     if ($job_id > 0) {
-        $st = $conn->prepare("SELECT id, freelancers_needed, status FROM jobs WHERE id = ? AND status IN ('approved', 'position_filled')");
+        $st = $conn->prepare("SELECT id, freelancers_needed, status FROM jobs WHERE id = ? AND status IN ('open', 'position_filled')");
         $st->bind_param('i', $job_id); $st->execute();
         $job = $st->get_result()->fetch_assoc(); $st->close();
         if (!$job) { set_flash('error', 'Job is not available for application.'); }
@@ -49,7 +49,7 @@ $search = trim($_GET['q'] ?? '');
 $filter_cat = $_GET['category'] ?? '';
 $filter_exp = $_GET['experience'] ?? '';
 
-$where = "j.status IN ('approved', 'position_filled') AND j.category != 'Direct Hire'";
+$where = "j.status IN ('open', 'position_filled') AND j.category != 'Direct Hire'";
 $params = [];
 $types = '';
 

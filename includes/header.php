@@ -1,5 +1,9 @@
 <?php
 $page_title = $page_title ?? 'FreelanceHub';
+require_once __DIR__ . '/job_helpers.php';
+if (isset($conn)) {
+    check_and_update_expired_jobs($conn);
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= e('en') ?>" data-theme>

@@ -33,7 +33,7 @@ $total_companies = 0;
 try {
     $r = $conn->query('SELECT COUNT(*) AS cnt FROM freelancers');
     $total_freelancers = (int) $r->fetch_assoc()['cnt'];
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'approved'");
+    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status IN ('open', 'in_progress')");
     $total_jobs = (int) $r->fetch_assoc()['cnt'];
     $r = $conn->query('SELECT COUNT(*) AS cnt FROM companies');
     $total_companies = (int) $r->fetch_assoc()['cnt'];

@@ -25,7 +25,7 @@ if (!$skill_info) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     $job_id = (int) ($_POST['job_id'] ?? 0);
     if ($job_id > 0) {
-        $st = $conn->prepare("SELECT id, freelancers_needed FROM jobs WHERE id = ? AND status IN ('approved', 'position_filled')");
+        $st = $conn->prepare("SELECT id, freelancers_needed FROM jobs WHERE id = ? AND status IN ('open', 'position_filled')");
         $st->bind_param('i', $job_id); $st->execute();
         $job = $st->get_result()->fetch_assoc(); $st->close();
         if (!$job) { set_flash('error', 'Job is not available for application.'); }
@@ -70,7 +70,7 @@ $sql = "SELECT j.id, j.title, j.description, j.budget, j.created_at, j.category,
         JOIN companies c ON j.company_id = c.id
         JOIN job_skills js ON js.job_id = j.id
         JOIN skills s ON js.skill_id = s.id
-        WHERE j.status IN ('approved', 'position_filled') AND j.category != 'Direct Hire' AND s.skill_name = ?
+        WHERE j.status IN ('open', 'position_filled') AND j.category != 'Direct Hire' AND s.skill_name = ?
         ORDER BY j.created_at DESC";
 
 $params[] = $skill_info['id'];

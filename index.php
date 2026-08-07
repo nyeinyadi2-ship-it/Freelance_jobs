@@ -90,7 +90,7 @@ $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'freelancer'")
 $stats['freelancers'] = (int) $r->fetch_assoc()['cnt'];
 $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'company'");
 $stats['companies'] = (int) $r->fetch_assoc()['cnt'];
-$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'approved' AND category != 'Direct Hire'");
+$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'open' AND category != 'Direct Hire'");
 $stats['jobs'] = (int) $r->fetch_assoc()['cnt'];
 $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'completed'");
 $stats['completed'] = (int) $r->fetch_assoc()['cnt'];
@@ -98,13 +98,13 @@ $stats['completed'] = (int) $r->fetch_assoc()['cnt'];
 // Fetch latest jobs (exclude direct hire)
 $latest_jobs = [];
 $r = $conn->query("
-    SELECT j.id, j.company_id, j.title, j.budget, j.created_at, j.description, j.attachment, j.deadline, j.category,
+    SELECT j.id, j.company_id, j.title, j.budget, j.created_at, j.description, j.attachment, j.deadline, j.category, j.status,
            c.company_name, c.logo_image
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
-    WHERE j.status = 'approved' AND j.category != 'Direct Hire'
+    WHERE j.status = 'open' AND j.category != 'Direct Hire'
     ORDER BY j.created_at DESC
-    LIMIT 3
+    LIMIT 6
 ");
 if ($r) {
     while ($row = $r->fetch_assoc()) {
@@ -1277,10 +1277,25 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                                     <?php endif; ?>
                                 </div>
                                 <div class="absolute top-3 right-3">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/90 text-white backdrop-blur-sm shadow-sm">
-                                        <span class="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
-                                        Open
-                                    </span>
+                                    <?php if ($job['status'] === 'open'): ?>
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/90 text-white backdrop-blur-sm shadow-sm">
+                                            <span class="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span>
+                                            Open
+                                        </span>
+                                    <?php elseif ($job['status'] === 'completed'): ?>
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-500/90 text-white backdrop-blur-sm shadow-sm">
+                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                            Completed
+                                        </span>
+                                    <?php elseif ($job['status'] === 'expired'): ?>
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-500/90 text-white backdrop-blur-sm shadow-sm">
+                                            Expired
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-500/90 text-white backdrop-blur-sm shadow-sm capitalize">
+                                            <?= e($job['status']) ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                             </div>
 
