@@ -61,26 +61,37 @@ function get_conversations(mysqli $conn, int $user_id, ?string $search = null): 
     }
 
     $search_filter = '';
-    $params = [$user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $user_id, $user_id];
-    $types = 'iiiiiiii';
+    $str_user_id = (string) $user_id;
+    $params = [
+        $user_id, $user_id, $str_user_id, // last_message (3)
+        $user_id, $user_id, $str_user_id, // last_message_is_deleted (3)
+        $user_id, $user_id, $str_user_id, // last_message_time (3)
+        $user_id, $str_user_id,           // unread_count (2)
+        $user_id,                         // u.id != ? (1)
+        $user_id,                         // company user_id = ? (1)
+        $user_id                          // freelancer user_id = ? (1)
+    ];
+    $types = 'iisiisiisisiii';
 
     if ($search && trim($search) !== '') {
         $search_term = '%' . trim($search) . '%';
-        $search_filter = "AND (COALESCE(f.full_name, comp.company_name, u.username) LIKE ? OR (SELECT message FROM messages WHERE (sender_id = ? AND receiver_id = u.id) OR (sender_id = u.id AND receiver_id = ?) ORDER BY created_at DESC LIMIT 1) LIKE ?)";
+        $search_filter = "AND (COALESCE(f.full_name, comp.company_name, u.username) LIKE ? OR (SELECT message FROM messages WHERE ((sender_id = ? AND receiver_id = u.id) OR (sender_id = u.id AND receiver_id = ?)) AND (hidden_for IS NULL OR NOT FIND_IN_SET(?, hidden_for)) ORDER BY created_at DESC LIMIT 1) LIKE ?)";
         $params[] = $search_term;
         $params[] = $user_id;
         $params[] = $user_id;
+        $params[] = $str_user_id;
         $params[] = $search_term;
-        $types .= 'siss';
+        $types .= 'siiss';
     }
 
     $stmt = $conn->prepare("
         SELECT u.id AS other_user_id, u.username AS other_username,
                u.profile_image AS other_profile_image, u.last_activity AS other_last_activity, u.role AS other_role,
                COALESCE(f.full_name, comp.company_name) AS other_display_name,
-               (SELECT message FROM messages WHERE (sender_id = ? AND receiver_id = u.id) OR (sender_id = u.id AND receiver_id = ?) ORDER BY created_at DESC LIMIT 1) AS last_message,
-               (SELECT created_at FROM messages WHERE (sender_id = ? AND receiver_id = u.id) OR (sender_id = u.id AND receiver_id = ?) ORDER BY created_at DESC LIMIT 1) AS last_message_time,
-               (SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND sender_id = u.id AND status = 'unread') AS unread_count
+               (SELECT message FROM messages WHERE ((sender_id = ? AND receiver_id = u.id) OR (sender_id = u.id AND receiver_id = ?)) AND (hidden_for IS NULL OR NOT FIND_IN_SET(?, hidden_for)) ORDER BY created_at DESC LIMIT 1) AS last_message,
+               (SELECT is_deleted FROM messages WHERE ((sender_id = ? AND receiver_id = u.id) OR (sender_id = u.id AND receiver_id = ?)) AND (hidden_for IS NULL OR NOT FIND_IN_SET(?, hidden_for)) ORDER BY created_at DESC LIMIT 1) AS last_message_is_deleted,
+               (SELECT created_at FROM messages WHERE ((sender_id = ? AND receiver_id = u.id) OR (sender_id = u.id AND receiver_id = ?)) AND (hidden_for IS NULL OR NOT FIND_IN_SET(?, hidden_for)) ORDER BY created_at DESC LIMIT 1) AS last_message_time,
+               (SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND sender_id = u.id AND status = 'unread' AND (hidden_for IS NULL OR NOT FIND_IN_SET(?, hidden_for))) AS unread_count
         FROM users u
         LEFT JOIN freelancers f ON f.user_id = u.id
         LEFT JOIN companies comp ON comp.user_id = u.id
@@ -103,7 +114,11 @@ function get_conversations(mysqli $conn, int $user_id, ?string $search = null): 
     $result = $stmt->get_result();
     $conversations = [];
     while ($row = $result->fetch_assoc()) {
-        $row['last_message'] = $row['last_message'] ? htmlspecialchars_decode($row['last_message']) : null;
+        if (!empty($row['last_message_is_deleted'])) {
+            $row['last_message'] = 'This message was deleted';
+        } else {
+            $row['last_message'] = $row['last_message'] ? htmlspecialchars_decode($row['last_message']) : null;
+        }
         $row['is_online'] = is_online($row['other_last_activity']);
         $conversations[] = $row;
     }
@@ -135,6 +150,7 @@ function get_admin_conversations(mysqli $conn, ?string $search = null): array
                u.profile_image AS other_profile_image, u.last_activity AS other_last_activity, u.role AS other_role,
                COALESCE(f.full_name, comp.company_name) AS other_display_name,
                (SELECT message FROM messages WHERE (sender_id = u.id OR receiver_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_message,
+               (SELECT is_deleted FROM messages WHERE (sender_id = u.id OR receiver_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_message_is_deleted,
                (SELECT created_at FROM messages WHERE (sender_id = u.id OR receiver_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_message_time,
                (SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND sender_id = u.id AND status = 'unread') AS unread_count
         FROM users u
@@ -149,7 +165,11 @@ function get_admin_conversations(mysqli $conn, ?string $search = null): array
     $result = $stmt->get_result();
     $conversations = [];
     while ($row = $result->fetch_assoc()) {
-        $row['last_message'] = $row['last_message'] ? htmlspecialchars_decode($row['last_message']) : null;
+        if (!empty($row['last_message_is_deleted'])) {
+            $row['last_message'] = 'This message was deleted';
+        } else {
+            $row['last_message'] = $row['last_message'] ? htmlspecialchars_decode($row['last_message']) : null;
+        }
         $row['is_online'] = is_online($row['other_last_activity']);
         $conversations[] = $row;
     }
@@ -162,33 +182,34 @@ function get_messages(mysqli $conn, int $user_id, int $other_user_id, int $offse
     if (!messages_table_exists($conn)) return [];
     $role = $_SESSION['role'] ?? '';
 
-    // Admin can read all messages between any two users
     if ($role === 'admin') {
         $stmt = $conn->prepare("
-            SELECT m.id, m.sender_id, m.receiver_id, m.message, m.message_type, m.message_meta, m.status, m.created_at,
+            SELECT m.id, m.sender_id, m.receiver_id, m.message, m.message_type, m.message_meta, m.status, m.created_at, m.is_edited, m.is_deleted, m.hidden_for,
                    u_sender.username AS sender_username, u_sender.profile_image AS sender_profile_image,
                    u_receiver.username AS receiver_username
             FROM messages m
             JOIN users u_sender ON m.sender_id = u_sender.id
             JOIN users u_receiver ON m.receiver_id = u_receiver.id
-            WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
+            WHERE ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))
             ORDER BY m.created_at DESC
             LIMIT ? OFFSET ?
         ");
         $stmt->bind_param('iiiiii', $user_id, $other_user_id, $other_user_id, $user_id, $limit, $offset);
     } else {
         $stmt = $conn->prepare("
-            SELECT m.id, m.sender_id, m.receiver_id, m.message, m.message_type, m.message_meta, m.status, m.created_at,
+            SELECT m.id, m.sender_id, m.receiver_id, m.message, m.message_type, m.message_meta, m.status, m.created_at, m.is_edited, m.is_deleted, m.hidden_for,
                    u_sender.username AS sender_username, u_sender.profile_image AS sender_profile_image,
                    u_receiver.username AS receiver_username
             FROM messages m
             JOIN users u_sender ON m.sender_id = u_sender.id
             JOIN users u_receiver ON m.receiver_id = u_receiver.id
-            WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
+            WHERE ((m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?))
+              AND (m.hidden_for IS NULL OR NOT FIND_IN_SET(?, m.hidden_for))
             ORDER BY m.created_at DESC
             LIMIT ? OFFSET ?
         ");
-        $stmt->bind_param('iiiiii', $user_id, $other_user_id, $other_user_id, $user_id, $limit, $offset);
+        $str_user_id = (string) $user_id;
+        $stmt->bind_param('iiiisii', $user_id, $other_user_id, $other_user_id, $user_id, $str_user_id, $limit, $offset);
     }
 
     $stmt->execute();
@@ -419,7 +440,12 @@ function get_messages_enhanced(mysqli $conn, int $user_id, int $other_user_id, i
     // Attach attachment data
     if (!empty($msgs) && message_attachments_table_exists($conn)) {
         foreach ($msgs as &$msg) {
-            $msg['attachments'] = get_message_attachments($conn, (int) $msg['id']);
+            if ($msg['is_deleted']) {
+                $msg['message'] = 'This message was deleted';
+                $msg['attachments'] = [];
+            } else {
+                $msg['attachments'] = get_message_attachments($conn, (int) $msg['id']);
+            }
         }
     }
     return $msgs;

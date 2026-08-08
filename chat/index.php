@@ -278,6 +278,27 @@ $unread_total = get_unread_count($conn, $user_id);
             transition: transform 0.2s ease;
         }
         .msg-img-attachment:hover { transform: scale(1.03); }
+
+        /* ===== ACTION MENU ===== */
+        .msg-action-menu {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: var(--color-card, #fff);
+            border-top-left-radius: 20px; border-top-right-radius: 20px;
+            padding: 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+        }
+        .dark .msg-action-menu { background: #1e293b; box-shadow: 0 -4px 20px rgba(0,0,0,0.4); }
+        .msg-action-menu.active { transform: translateY(0); }
+        .msg-action-backdrop {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.3); z-index: 99;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .msg-action-backdrop.active { opacity: 1; pointer-events: auto; }
+        
+        .msg-bubble-sent-interactive { cursor: pointer; }
+        .msg-deleted-text { font-style: italic; opacity: 0.6; }
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-slate-900">
@@ -321,7 +342,7 @@ $unread_total = get_unread_count($conn, $user_id);
                     $time_display = $conv['last_message_time'] ? format_message_time($conv['last_message_time']) : '';
                 ?>
                     <a href="<?= e(base_url('chat/index.php?user_id=' . $conv['other_user_id'])) ?>"
-                       class="conv-item <?= $is_active ? 'active' : '' ?>"
+                       class="conv-item <?= $is_active ? 'active' : '' ?> relative group"
                        data-name="<?= e(strtolower($conv['other_display_name'] ?? $conv['other_username'])) ?>"
                        data-message="<?= e(strtolower($conv['last_message'] ?? '')) ?>">
                         <div class="relative flex-shrink-0">
@@ -332,7 +353,7 @@ $unread_total = get_unread_count($conn, $user_id);
                             <?php endif; ?>
                             <span class="online-dot <?= !empty($conv['is_online']) ? 'online' : 'offline' ?>"></span>
                         </div>
-                        <div class="flex-1 min-w-0">
+                        <div class="flex-1 min-w-0 pr-6">
                             <div class="flex items-center justify-between mb-1">
                                 <div class="flex items-center gap-2 min-w-0">
                                     <span class="font-semibold text-sm truncate" style="color:var(--color-text-primary)"><?= e($conv['other_display_name'] ?? $conv['other_username']) ?></span>
@@ -353,6 +374,10 @@ $unread_total = get_unread_count($conn, $user_id);
                                 <?php endif; ?>
                             </div>
                         </div>
+                        <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-red-500"
+                                onclick="event.preventDefault(); event.stopPropagation(); openListActionMenu(<?= $conv['other_user_id'] ?>, '<?= e(addslashes($conv['other_display_name'] ?? $conv['other_username'])) ?>')" title="Options">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/></svg>
+                        </button>
                     </a>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -388,10 +413,19 @@ $unread_total = get_unread_count($conn, $user_id);
                         <?= !empty($partner['is_online']) ? 'Online now' : 'Offline' ?>
                     </p>
                 </div>
-                <div class="flex items-center gap-1">
+                <div class="flex items-center gap-1 relative">
                     <a href="<?= e(base_url('chat/index.php')) ?>" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" style="color:var(--color-text-muted)" title="Refresh">
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                     </a>
+                    <button type="button" onclick="document.getElementById('convMenuDropdown').classList.toggle('hidden')" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" style="color:var(--color-text-muted)">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/></svg>
+                    </button>
+                    <div id="convMenuDropdown" class="hidden absolute right-0 top-full mt-2 w-48 rounded-xl shadow-lg bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 z-50 overflow-hidden">
+                        <button type="button" onclick="deleteConversation()" class="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            Delete Conversation
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -423,7 +457,11 @@ $unread_total = get_unread_count($conn, $user_id);
                             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
                         </button>
                         <input type="file" id="fileInput" name="attachment" style="display:none" accept="image/*,.pdf,.docx,.zip,.rar,.txt,.csv,.xlsx,.pptx">
-                        <div class="flex-1 min-w-0">
+                        <div class="flex-1 min-w-0 flex flex-col relative">
+                            <div id="editModeIndicator" class="hidden flex items-center justify-between px-2 pb-1">
+                                <span class="text-xs font-medium text-indigo-600 dark:text-indigo-400">Editing message</span>
+                                <button type="button" onclick="cancelEdit()" class="text-xs text-gray-500 hover:text-red-500 transition-colors">Cancel</button>
+                            </div>
                             <textarea id="messageInput" rows="1" placeholder="<?= e('Type a message...') ?>"
                                 class="w-full px-4 py-3 text-sm rounded-2xl resize-none focus:outline-none transition-all"
                                 style="max-height:120px; background:rgba(255,255,255,0.7); border:1px solid rgba(99,102,241,0.08); color:var(--color-text-primary); backdrop-filter:blur(8px);"
@@ -455,6 +493,40 @@ $unread_total = get_unread_count($conn, $user_id);
     </div>
 </div>
 
+<!-- Bottom Action Menu -->
+<div class="msg-action-backdrop" id="msgActionBackdrop" onclick="closeActionMenu()"></div>
+<div class="msg-action-menu md:max-w-md md:mx-auto md:bottom-4 md:rounded-2xl" id="msgActionMenu">
+    <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-5"></div>
+    <div class="flex flex-col gap-2">
+        <button onclick="triggerEdit()" class="flex items-center gap-3 w-full p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-left" style="color:var(--color-text-primary)">
+            <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            <span class="font-medium">Edit Message</span>
+        </button>
+        <button onclick="triggerDelete()" class="flex items-center gap-3 w-full p-4 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-red-600">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <span class="font-medium">Delete Message</span>
+        </button>
+        <button onclick="closeActionMenu()" class="mt-2 p-3 text-center text-sm font-medium w-full text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancel</button>
+    </div>
+</div>
+
+<!-- List Action Menu -->
+<div class="msg-action-backdrop" id="listActionBackdrop" onclick="closeListActionMenu()"></div>
+<div class="msg-action-menu md:max-w-md md:mx-auto md:bottom-4 md:rounded-2xl" id="listActionMenu" style="z-index: 101;">
+    <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-5"></div>
+    <div class="mb-4 text-center px-4">
+        <h3 class="text-base font-semibold truncate" style="color:var(--color-text-primary)">Conversation with <span id="listActionName"></span></h3>
+        <p class="text-xs mt-1" style="color:var(--color-text-muted)">Select an action below</p>
+    </div>
+    <div class="flex flex-col gap-2">
+        <button onclick="triggerListDelete()" class="flex items-center gap-3 w-full p-4 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-red-600">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <span class="font-medium">Delete Conversation</span>
+        </button>
+        <button onclick="closeListActionMenu()" class="mt-2 p-3 text-center text-sm font-medium w-full text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancel</button>
+    </div>
+</div>
+
 <script>
 (function() {
     <?php if ($other_id > 0 && $partner): ?>
@@ -467,6 +539,11 @@ $unread_total = get_unread_count($conn, $user_id);
     var lastMessageIds = '';
     var typingTimeout = null;
     var isTyping = false;
+    
+    // --- EDIT / DELETE STATE ---
+    var editingMessageId = null;
+    var actionMenuTargetId = null;
+    var actionMenuTargetText = '';
 
     function escapeHtml(text) {
         if (!text) return '';
@@ -533,7 +610,11 @@ $unread_total = get_unread_count($conn, $user_id);
             return '<div class="text-center my-4"><span class="inline-block px-4 py-1.5 text-xs rounded-full font-medium" style="background:rgba(99,102,241,0.06);color:var(--color-text-muted);border:1px solid rgba(99,102,241,0.08)">' + escapeHtml(msg.message) + '</span></div>';
         }
 
-        var html = '<div class="mb-4 flex items-end gap-2.5 ' + (isSent ? 'justify-end' : 'justify-start') + '" data-id="' + msg.id + '">';
+        var isDeleted = msg.is_deleted == 1;
+        var isEdited = msg.is_edited == 1;
+        var interactiveAttrs = (isSent && !isDeleted) ? ' onclick="openActionMenu(this, ' + msg.id + ')" oncontextmenu="openActionMenu(this, ' + msg.id + '); return false;" class="mb-4 flex items-end gap-2.5 justify-end msg-bubble-sent-interactive"' : ' class="mb-4 flex items-end gap-2.5 ' + (isSent ? 'justify-end' : 'justify-start') + '"';
+
+        var html = '<div' + interactiveAttrs + ' data-id="' + msg.id + '">';
 
         if (!isSent) {
             html += '<div class="flex-shrink-0 mb-1">';
@@ -550,13 +631,22 @@ $unread_total = get_unread_count($conn, $user_id);
             html += '<p class="text-[11px] mb-1.5 ml-1 font-semibold tracking-wide uppercase" style="color:var(--color-text-muted)">' + escapeHtml(name) + '</p>';
         }
         html += '<div class="msg-bubble ' + (isSent ? 'msg-sent' : 'msg-received') + '">';
-        if (hasAttachments) {
-            html += buildAttachmentHtml(msg);
+        
+        if (isDeleted) {
+            html += '<div class="text-[15px] leading-relaxed msg-deleted-text flex items-center gap-2"><svg class="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 11-12.728 0m12.728 0L5.636 18.364"/></svg>' + escapeHtml(msg.message) + '</div>';
+        } else {
+            if (hasAttachments) {
+                html += buildAttachmentHtml(msg);
+            }
+            if (msg.message) {
+                html += '<div class="text-[15px] leading-relaxed ' + (hasAttachments ? 'mt-2' : '') + ' msg-text-content">' + escapeHtml(msg.message) + '</div>';
+            }
         }
-        if (msg.message) {
-            html += '<div class="text-[15px] leading-relaxed ' + (hasAttachments ? 'mt-2' : '') + '">' + escapeHtml(msg.message) + '</div>';
-        }
+
         html += '<div class="flex items-center gap-1.5 mt-2 ' + (isSent ? 'justify-end' : 'justify-start') + '">';
+        if (isEdited && !isDeleted) {
+            html += '<span class="text-[11px] opacity-60 italic mr-1">(Edited)</span>';
+        }
         html += '<span class="text-[11px] opacity-50">' + time + '</span>';
         if (isSent) {
             html += '<span class="text-[11px]" style="color:' + (msg.status === 'read' ? 'rgba(196,181,253,0.9)' : 'rgba(196,181,253,0.5)') + '">' + (msg.status === 'read' ? '\u2713\u2713' : '\u2713') + '</span>';
@@ -582,7 +672,7 @@ $unread_total = get_unread_count($conn, $user_id);
                 return;
             }
 
-            var newIds = data.messages.map(function(m) { return m.id; }).join(',');
+            var newIds = data.messages.map(function(m) { return m.id + '_' + m.is_deleted + '_' + m.is_edited; }).join(',');
             if (newIds === lastMessageIds) return;
             lastMessageIds = newIds;
 
@@ -695,6 +785,31 @@ $unread_total = get_unread_count($conn, $user_id);
         if (fileInput) fileInput.value = '';
         clearFilePreview();
         input.focus();
+        
+        if (editingMessageId) {
+            fetch('<?= e(base_url('api/chat.php')) ?>', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ action: 'edit_message', message_id: editingMessageId, message: sentMessage, csrf_token: csrfToken })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    loadMessages(true);
+                    cancelEdit();
+                } else {
+                    showInlineError(data.error || 'Failed to edit message');
+                }
+            })
+            .catch(function(err) {
+                showInlineError('Connection error. Please try again.');
+            })
+            .finally(function() {
+                btn.innerHTML = '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>';
+                btn.disabled = false;
+            });
+            return;
+        }
 
         if (sentFile) {
             var formData = new FormData();
@@ -800,7 +915,7 @@ $unread_total = get_unread_count($conn, $user_id);
     }
     window.autoResize = autoResize;
 
-    // === EMOJI PICKER ===
+        // EMOJI PICKER ===
     var emojiBtn = document.getElementById('emojiBtn');
     if (emojiBtn) {
         emojiBtn.addEventListener('click', function(e) {
@@ -861,6 +976,77 @@ $unread_total = get_unread_count($conn, $user_id);
         if (fileInput) fileInput.value = '';
         var btn = document.getElementById('sendBtn');
         btn.disabled = !document.getElementById('messageInput').value.trim();
+    };
+
+    // === EDIT / DELETE LOGIC ===
+    window.openActionMenu = function(el, msgId) {
+        actionMenuTargetId = msgId;
+        var textNode = el.querySelector('.msg-text-content');
+        actionMenuTargetText = textNode ? textNode.textContent : '';
+        document.getElementById('msgActionMenu').classList.add('active');
+        document.getElementById('msgActionBackdrop').classList.add('active');
+    };
+
+    window.closeActionMenu = function() {
+        document.getElementById('msgActionMenu').classList.remove('active');
+        document.getElementById('msgActionBackdrop').classList.remove('active');
+        actionMenuTargetId = null;
+        actionMenuTargetText = '';
+    };
+
+    window.triggerEdit = function() {
+        if (!actionMenuTargetId) return;
+        editingMessageId = actionMenuTargetId;
+        var input = document.getElementById('messageInput');
+        input.value = actionMenuTargetText;
+        document.getElementById('editModeIndicator').classList.remove('hidden');
+        closeActionMenu();
+        autoResize(input);
+        input.focus();
+    };
+
+    window.cancelEdit = function() {
+        editingMessageId = null;
+        document.getElementById('editModeIndicator').classList.add('hidden');
+        var input = document.getElementById('messageInput');
+        input.value = '';
+        autoResize(input);
+    };
+
+    window.triggerDelete = function() {
+        if (!actionMenuTargetId) return;
+        var target = actionMenuTargetId;
+        closeActionMenu();
+        if (!confirm('Are you sure you want to delete this message? It will be deleted for everyone.')) return;
+        
+        fetch('<?= e(base_url('api/chat.php')) ?>', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ action: 'delete_message', message_id: target, csrf_token: csrfToken })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                loadMessages(false);
+            } else {
+                showInlineError(data.error || 'Failed to delete message');
+            }
+        });
+    };
+
+    window.deleteConversation = function() {
+        if (!confirm('Are you sure you want to delete this conversation? It will be cleared for you only.')) return;
+        fetch('<?= e(base_url('api/chat.php')) ?>', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ action: 'delete_conversation', partner_id: otherUserId, csrf_token: csrfToken })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                window.location.href = '<?= e(base_url('chat/index.php')) ?>';
+            }
+        });
     };
 
     // === WEBSOCKET EVENTS ===
@@ -963,6 +1149,47 @@ $unread_total = get_unread_count($conn, $user_id);
             sidebar.classList.toggle('hidden-mobile');
             main.classList.toggle('hidden-mobile');
         }
+    };
+
+    // === LIST ACTION MENU LOGIC ===
+    window.listActionTargetId = null;
+
+    window.openListActionMenu = function(partnerId, partnerName) {
+        window.listActionTargetId = partnerId;
+        var nameEl = document.getElementById('listActionName');
+        if (nameEl) nameEl.textContent = partnerName;
+        document.getElementById('listActionMenu').classList.add('active');
+        document.getElementById('listActionBackdrop').classList.add('active');
+    };
+
+    window.closeListActionMenu = function() {
+        document.getElementById('listActionMenu').classList.remove('active');
+        document.getElementById('listActionBackdrop').classList.remove('active');
+        window.listActionTargetId = null;
+    };
+
+    window.triggerListDelete = function() {
+        if (!window.listActionTargetId) return;
+        var target = window.listActionTargetId;
+        closeListActionMenu();
+        if (!confirm('Delete this entire conversation?')) return;
+        
+        var csrf = '<?= e(csrf_token()) ?>';
+        fetch('<?= e(base_url('api/chat.php')) ?>', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ action: 'delete_conversation', partner_id: target, csrf_token: csrf })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                if (typeof otherUserId !== 'undefined' && target === otherUserId) {
+                    window.location.href = '<?= e(base_url('chat/index.php')) ?>';
+                } else {
+                    window.location.reload();
+                }
+            }
+        });
     };
 })();
 </script>

@@ -3,6 +3,10 @@ $page_title = 'Earnings & Wallet';
 require __DIR__ . '/../includes/freelancer_layout.php';
 require_once __DIR__ . '/../config/escrow.php';
 
+/**
+ * @var mysqli $conn
+ * @var int $fl_freelancer_id
+ */
 $earnings_stats = get_freelancer_earnings_stats($conn, $fl_freelancer_id);
 
 $escrow_active = [];

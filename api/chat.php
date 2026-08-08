@@ -250,6 +250,65 @@ if ($method === 'POST') {
         exit;
     }
 
+    if ($action === 'edit_message') {
+        $msg_id = (int) ($input['message_id'] ?? 0);
+        $new_text = trim($input['message'] ?? '');
+        if ($msg_id <= 0 || $new_text === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid data']);
+            exit;
+        }
+        $stmt = $conn->prepare("UPDATE messages SET message = ?, is_edited = 1 WHERE id = ? AND sender_id = ? AND is_deleted = 0");
+        $stmt->bind_param('sii', $new_text, $msg_id, $user_id);
+        $stmt->execute();
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+        if ($affected > 0) {
+            echo json_encode(['success' => true]);
+        } else {
+            http_response_code(403);
+            echo json_encode(['error' => 'Cannot edit this message']);
+        }
+        exit;
+    }
+
+    if ($action === 'delete_message') {
+        $msg_id = (int) ($input['message_id'] ?? 0);
+        if ($msg_id <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid data']);
+            exit;
+        }
+        $stmt = $conn->prepare("UPDATE messages SET is_deleted = 1 WHERE id = ? AND sender_id = ?");
+        $stmt->bind_param('ii', $msg_id, $user_id);
+        $stmt->execute();
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+        if ($affected > 0) {
+            echo json_encode(['success' => true]);
+        } else {
+            http_response_code(403);
+            echo json_encode(['error' => 'Cannot delete this message']);
+        }
+        exit;
+    }
+
+    if ($action === 'delete_conversation') {
+        $partner_id = (int) ($input['partner_id'] ?? 0);
+        if ($partner_id <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid data']);
+            exit;
+        }
+        $stmt = $conn->prepare("UPDATE messages SET hidden_for = CASE WHEN hidden_for IS NULL OR hidden_for = '' THEN ? ELSE CONCAT(hidden_for, ',', ?) END WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)) AND (hidden_for IS NULL OR NOT FIND_IN_SET(?, hidden_for))");
+        $str_user = (string) $user_id;
+        $stmt->bind_param('ssiiiis', $str_user, $str_user, $user_id, $partner_id, $partner_id, $user_id, $str_user);
+        $stmt->execute();
+        $stmt->close();
+        echo json_encode(['success' => true]);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(['error' => 'Invalid action']);
     exit;

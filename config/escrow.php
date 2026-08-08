@@ -11,6 +11,9 @@ function get_freelancer_earnings_stats(mysqli $conn, int $freelancer_id): array
         'total_released' => 0,
         'total_refunded' => 0,
         'available_balance' => 0,
+        'pending_balance' => 0,
+        'total_earnings' => 0,
+        'total_withdrawn' => 0,
     ];
 
     $stmt = $conn->prepare("
@@ -32,6 +35,7 @@ function get_freelancer_earnings_stats(mysqli $conn, int $freelancer_id): array
         $stats['total_pending'] = (float) $row['total_pending'];
         $stats['total_released'] = (float) $row['total_released'];
         $stats['total_refunded'] = (float) $row['total_refunded'];
+        $stats['total_earnings'] = (float) $row['total_released']; // Alias for earnings.php "Total received"
     }
 
     $stmt2 = $conn->prepare("SELECT COALESCE(available_balance, 0) FROM freelancers WHERE id = ?");
@@ -41,6 +45,23 @@ function get_freelancer_earnings_stats(mysqli $conn, int $freelancer_id): array
     $stmt2->close();
     if ($bal) {
         $stats['available_balance'] = (float) ($bal['available_balance'] ?? 0);
+    }
+    
+    // Get withdrawal stats
+    $stmt3 = $conn->prepare("
+        SELECT 
+            COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) AS pending_balance,
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN amount ELSE 0 END), 0) AS total_withdrawn
+        FROM withdraw_requests 
+        WHERE freelancer_id = ?
+    ");
+    $stmt3->bind_param('i', $freelancer_id);
+    $stmt3->execute();
+    $w = $stmt3->get_result()->fetch_assoc();
+    $stmt3->close();
+    if ($w) {
+        $stats['pending_balance'] = (float) $w['pending_balance'];
+        $stats['total_withdrawn'] = (float) $w['total_withdrawn'];
     }
 
     return $stats;
