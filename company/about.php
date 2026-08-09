@@ -121,7 +121,7 @@ require __DIR__ . '/../includes/header.php';
                 </svg>
             </div>
             <h3 class="font-semibold mb-2" style="color:var(--color-text-primary)">Verified Freelancers</h3>
-            <p class="text-sm" style="color:var(--color-text-muted)">Browse profiles with ratings, reviews, portfolios, and skill verification. Make informed hiring decisions with confidence.</p>
+            <p class="text-sm" style="color:var(--color-text-muted)">Browse profiles with ratings, reviews, and skill verification. Make informed hiring decisions with confidence.</p>
         </div>
         <div class="feature-card card">
             <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style="background:rgba(217,119,6,0.1);">

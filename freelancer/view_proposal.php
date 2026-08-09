@@ -97,7 +97,7 @@ require __DIR__ . '/../includes/header.php';
                             <textarea name="comment" rows="3" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600" placeholder="Any comments for the company?"></textarea>
                         </div>
 
-                        <button type="submit" class="w-full btn-gradient py-3 rounded-xl font-bold shadow-lg text-white text-center inline-block">Submit Assignment</button>
+                        <button type="submit" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 py-3 rounded-xl font-bold shadow-lg text-white text-center inline-block transition-all">Submit Assignment</button>
                     </form>
                 </div>
             <?php elseif ($submission): ?>

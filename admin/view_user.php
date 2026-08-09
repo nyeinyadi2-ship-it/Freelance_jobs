@@ -336,12 +336,7 @@ require __DIR__ . '/includes/admin_header.php';
                         <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= $profile_extra['assignments_count'] ?? 0 ?></p>
                     </div>
                 </div>
-                <?php if ($profile['portfolio_url']): ?>
-                    <div class="mt-4">
-                        <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e('Portfolio URL') ?></p>
-                        <a href="<?= e($profile['portfolio_url']) ?>" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors" style="background:rgba(99,102,241,0.1);color:#4f46e5">&#128193; View Portfolio</a>
-                    </div>
-                <?php endif; ?>
+
                 <?php if ($profile['bio']): ?>
                     <div class="mt-4">
                         <p class="text-xs font-medium mb-1" style="color:var(--color-text-muted)"><?= e('Bio') ?></p>

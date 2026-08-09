@@ -40,11 +40,12 @@ if (!$job) {
 // Handle file upload
 $attachment_path = null;
 if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
-    $upload_result = handle_file_upload($_FILES['attachment'], 'attachments');
-    if ($upload_result['success']) {
-        $attachment_path = $upload_result['path'];
+    $error_msg = null;
+    $uploaded_filename = upload_attachment($_FILES['attachment'], 10485760, $error_msg);
+    if ($uploaded_filename !== null) {
+        $attachment_path = $uploaded_filename;
     } else {
-        set_flash('error', 'Failed to upload attachment: ' . $upload_result['error']);
+        set_flash('error', 'Failed to upload attachment: ' . $error_msg);
         redirect("company/view_applications.php?id=$job_id");
     }
 }
@@ -56,6 +57,7 @@ $stmt = $conn->prepare("
 $stmt->bind_param('iiisssss', $job_id, $company_id, $freelancer_id, $title, $description, $instructions, $attachment_path, $deadline);
 
 if ($stmt->execute()) {
+    $proposal_id = $conn->insert_id;
     // Notify freelancer
     $stmt2 = $conn->prepare("SELECT user_id FROM freelancers WHERE id = ?");
     $stmt2->bind_param('i', $freelancer_id);
@@ -64,7 +66,7 @@ if ($stmt->execute()) {
     $stmt2->close();
 
     if ($fl_user) {
-        create_notification($conn, (int)$fl_user['user_id'], 'system', "You have received a Test Assignment for '{$job['title']}'.", 'freelancer/dashboard.php');
+        create_notification($conn, (int)$fl_user['user_id'], 'system', "You have received a Test Assignment for '{$job['title']}'.", 'freelancer/view_proposal.php?id=' . $proposal_id);
     }
 
     set_flash('success', 'Test Assignment sent successfully.');

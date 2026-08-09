@@ -36,11 +36,12 @@ if (!$proposal) {
 // Handle file upload
 $file_path = null;
 if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
-    $upload_result = handle_file_upload($_FILES['file'], 'submissions');
-    if ($upload_result['success']) {
-        $file_path = $upload_result['path'];
+    $upload_err = null;
+    $uploaded_filename = upload_attachment($_FILES['file'], 10 * 1024 * 1024, $upload_err);
+    if ($uploaded_filename !== null) {
+        $file_path = 'uploads/attachments/' . $uploaded_filename;
     } else {
-        set_flash('error', 'Failed to upload file: ' . $upload_result['error']);
+        set_flash('error', 'Failed to upload file: ' . $upload_err);
         redirect("freelancer/view_proposal.php?id=$proposal_id");
     }
 }
@@ -69,7 +70,7 @@ if ($stmt->execute()) {
 
     if ($company_user) {
         $fl_name = $user['username'];
-        create_notification($conn, (int)$company_user['user_id'], 'system', "Freelancer submitted their work for '{$proposal['title']}'.", 'company/dashboard.php');
+        create_notification($conn, (int)$company_user['user_id'], 'system', "Freelancer submitted their work for '{$proposal['title']}'.", 'company/review_proposal.php?id=' . $proposal_id);
     }
 
     set_flash('success', 'Your test assignment has been submitted successfully.');

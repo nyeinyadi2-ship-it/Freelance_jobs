@@ -444,18 +444,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                         </button>
                     </form>
 
-                    <div class="mt-4 pt-4 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
-                        <p class="text-xs" style="color:var(--color-text-muted)">Or submit without attachments</p>
-                        <form method="POST" style="display:inline" onsubmit="return confirm('Submit this milestone for review without a link or file?')">
-                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                            <input type="hidden" name="ms_action" value="quick_submit">
-                            <input type="hidden" name="milestone_id" value="<?= (int) $milestone['id'] ?>">
-                            <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 15px rgba(16,185,129,0.3)">
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                                Submit Milestone
-                            </button>
-                        </form>
-                    </div>
+
                 </div>
 
             <?php elseif ($milestone['status'] === 'revision_requested'): ?>
@@ -513,18 +502,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                         </button>
                     </form>
 
-                    <div class="mt-4 pt-4 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
-                        <p class="text-xs" style="color:var(--color-text-muted)">Or resubmit without attachments</p>
-                        <form method="POST" style="display:inline" onsubmit="return confirm('Resubmit this milestone for review without a link or file?')">
-                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                            <input type="hidden" name="ms_action" value="quick_submit">
-                            <input type="hidden" name="milestone_id" value="<?= (int) $milestone['id'] ?>">
-                            <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 15px rgba(16,185,129,0.3)">
-                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                                Submit Milestone
-                            </button>
-                        </form>
-                    </div>
+
                 </div>
 
             <?php elseif ($milestone['status'] === 'submitted'): ?>

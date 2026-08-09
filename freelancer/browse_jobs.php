@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         else {
             // Check position limit
             $needed = max(1, (int) ($job['freelancers_needed'] ?? 1));
-            $st = $conn->prepare('SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != \'completed\'');
+            $st = $conn->prepare('SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?');
             $st->bind_param('i', $job_id); $st->execute();
             $filled = (int) $st->get_result()->fetch_assoc()['cnt']; $st->close();
             if ($filled >= $needed) {
@@ -77,7 +77,7 @@ $types .= 'i';
 $sql = "SELECT j.id,j.title,j.description,j.budget,j.created_at,j.category,j.experience_level,j.gender_requirement,j.deadline,j.duration,j.freelancers_needed,j.visibility,j.attachment,j.status,
         c.company_name,c.logo_image,
         (SELECT ja.status FROM job_applications ja WHERE ja.job_id=j.id AND ja.freelancer_id=?) AS my_status,
-        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id AND a.status != 'completed') AS assigned_count
+        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id) AS assigned_count
         FROM jobs j JOIN companies c ON j.company_id=c.id
         WHERE {$where}
         ORDER BY j.created_at DESC";

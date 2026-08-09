@@ -24,7 +24,7 @@ $fallback_url = ($viewer_role === 'company') ? 'company/index.php' : (($viewer_r
 if ($fid <= 0) { redirect($fallback_url); }
 
 // Fetch freelancer data
-$st = $conn->prepare("SELECT f.id, f.full_name, f.title, f.location, f.bio, f.experience_years, f.hourly_rate, f.portfolio_url, f.phone, u.id AS user_id, u.profile_image, u.username, u.email, u.created_at, u.is_online, u.last_seen
+$st = $conn->prepare("SELECT f.id, f.full_name, f.title, f.location, f.bio, f.experience_years, f.hourly_rate, f.phone, u.id AS user_id, u.profile_image, u.username, u.email, u.created_at, u.is_online, u.last_seen
     FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
 $st->bind_param('i', $fid);
 $st->execute();
@@ -42,29 +42,7 @@ $sr = $r->get_result();
 while ($row = $sr->fetch_assoc()) $fl_skills[] = $row['skill_name'];
 $r->close();
 
-// Portfolio items with images and skills
-$portfolio_items = [];
-$st = $conn->prepare("SELECT * FROM portfolio_items WHERE freelancer_id = ? ORDER BY sort_order ASC, id DESC");
-$st->bind_param('i', $fid);
-$st->execute();
-$rr = $st->get_result();
-while ($row = $rr->fetch_assoc()) { $portfolio_items[] = $row; }
-$st->close();
-foreach ($portfolio_items as &$item) {
-    $item['skills'] = [];
-    $item['images'] = [];
-    $ps = $conn->prepare("SELECT s.skill_name FROM portfolio_skills ps JOIN skills s ON ps.skill_id = s.id WHERE ps.portfolio_item_id = ?");
-    $ps->bind_param('i', $item['id']); $ps->execute();
-    $sr = $ps->get_result();
-    while ($row = $sr->fetch_assoc()) $item['skills'][] = $row['skill_name'];
-    $ps->close();
-    $pi = $conn->prepare("SELECT * FROM portfolio_images WHERE portfolio_item_id = ? ORDER BY sort_order ASC");
-    $pi->bind_param('i', $item['id']); $pi->execute();
-    $ir = $pi->get_result();
-    while ($row = $ir->fetch_assoc()) $item['images'][] = $row;
-    $pi->close();
-}
-unset($item);
+
 
 // Completed projects
 $completed_projects = [];
@@ -441,20 +419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             color:#a5b4fc;border-color:rgba(99,102,241,0.2);
         }
 
-        /* ===== PORTFOLIO ===== */
-        .portfolio-card{
-            border-radius:16px;overflow:hidden;
-            transition:all .35s cubic-bezier(.4,0,.2,1);
-        }
-        .portfolio-card:hover{
-            transform:translateY(-6px) scale(1.01);
-            box-shadow:0 20px 50px rgba(0,0,0,0.12);
-        }
-        .portfolio-img{
-            width:100%;height:200px;object-fit:cover;
-            transition:transform .5s cubic-bezier(.4,0,.2,1);
-        }
-        .portfolio-card:hover .portfolio-img{transform:scale(1.08);}
+
 
         /* ===== BUTTONS ===== */
         .btn-glow{
@@ -669,24 +634,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
                         Send Message
                     </a>
-                <?php elseif (!$is_own_freelancer && !$is_company): ?>
-                    <!-- Logged out or other freelancer -->
-                    <a href="<?= e(base_url('freelancer/view_portfolio.php?id=' . $fid)) ?>" class="btn-glass inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
-                        View Portfolio
-                    </a>
-                <?php endif; ?>
-                <!-- Always show View Portfolio for company/freelancer viewers -->
-                <?php if ($is_company): ?>
-                    <a href="<?= e(base_url('freelancer/view_portfolio.php?id=' . $fid)) ?>" class="btn-glass inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
-                        View Portfolio
-                    </a>
                 <?php elseif ($is_own_freelancer): ?>
-                    <a href="<?= e(base_url('freelancer/portfolio.php')) ?>" class="btn-glow inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
-                        Manage Portfolio
-                    </a>
                     <a href="<?= e(base_url('freelancer/profile.php')) ?>" class="btn-glass inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold text-white">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z"/></svg>
                         Edit Profile
@@ -778,64 +726,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </div>
     <?php endif; ?>
 
-    <!-- ===== PORTFOLIO GALLERY ===== -->
-    <?php if (!empty($portfolio_items)): ?>
-    <div class="section-card p-6 sm:p-8 mb-6 reveal">
-        <div class="section-header">
-            <div class="section-icon bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-lg shadow-violet-500/20">
-                <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
-            </div>
-            <h2 class="text-lg font-bold text-slate-900 dark:text-white">Portfolio</h2>
-            <span class="text-xs font-semibold text-slate-400 ml-auto"><?= count($portfolio_items) ?> project<?= count($portfolio_items) !== 1 ? 's' : '' ?></span>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <?php foreach ($portfolio_items as $item):
-                $cover = $item['cover_image'] ? base_url('uploads/images/' . $item['cover_image']) : null;
-            ?>
-            <div class="portfolio-card glass cursor-pointer group" onclick="<?= $cover ? "openModal(this.querySelector('img')?.src)" : '' ?>">
-                <?php if ($cover): ?>
-                    <div class="overflow-hidden">
-                        <img src="<?= e($cover) ?>" alt="" class="portfolio-img">
-                    </div>
-                <?php else: ?>
-                    <div class="portfolio-img flex items-center justify-center" style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08))">
-                        <svg class="w-12 h-12 text-indigo-300 dark:text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z"/></svg>
-                    </div>
-                <?php endif; ?>
-                <div class="p-5">
-                    <h3 class="text-sm font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"><?= e($item['title']) ?></h3>
-                    <?php if ($item['description']): ?>
-                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5 line-clamp-2 leading-relaxed"><?= e(mb_strimwidth($item['description'], 0, 100, '...')) ?></p>
-                    <?php endif; ?>
-                    <?php if (!empty($item['skills'])): ?>
-                        <div class="flex flex-wrap gap-1.5 mt-3">
-                            <?php foreach (array_slice($item['skills'], 0, 3) as $sk): ?>
-                                <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"><?= e($sk) ?></span>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                    <div class="flex gap-3 mt-3">
-                        <?php if ($item['project_url']): ?>
-                            <a href="<?= e($item['project_url']) ?>" target="_blank" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition-colors" onclick="event.stopPropagation()">Live Demo &rarr;</a>
-                        <?php endif; ?>
-                        <?php if ($item['github_url']): ?>
-                            <a href="<?= e($item['github_url']) ?>" target="_blank" class="text-xs font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors" onclick="event.stopPropagation()">Source &rarr;</a>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-            <?php endforeach; ?>
-        </div>
-        <?php if (count($portfolio_items) > 4): ?>
-            <div class="mt-5 text-center">
-                <a href="<?= e(base_url('freelancer/view_portfolio.php?id=' . $fid)) ?>" class="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition-colors">
-                    View all <?= count($portfolio_items) ?> projects
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
-                </a>
-            </div>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
+
 
     <!-- ===== COMPLETED PROJECTS / WORK EXPERIENCE ===== -->
     <?php if (!empty($completed_projects)): ?>
@@ -1059,8 +950,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 </div>
 
 <!-- ===== HIRE MODAL ===== -->
-<div id="hireModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-    <div class="relative w-full max-w-lg max-h-[90dvh] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onclick="event.stopPropagation()">
+<div id="hireModal" class="hidden fixed inset-0 z-[105] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div class="relative z-[110] pointer-events-auto w-full max-w-lg max-h-[90dvh] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <!-- Header -->
         <div class="shrink-0 p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div class="flex items-center justify-between">

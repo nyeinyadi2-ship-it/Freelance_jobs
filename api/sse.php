@@ -50,12 +50,9 @@ while (true) {
     $stmt = $conn->prepare("
         SELECT COUNT(*) as total 
         FROM notifications n
-        WHERE n.user_id = ?
-        AND n.id NOT IN (
-            SELECT nr.notification_id FROM notification_reads nr WHERE nr.user_id = ?
-        )
+        WHERE n.user_id = ? AND n.is_read = 0
     ");
-    $stmt->bind_param('ii', $userId, $userId);
+    $stmt->bind_param('i', $userId);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();

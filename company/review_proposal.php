@@ -13,9 +13,10 @@ if (!$company_id || $proposal_id <= 0) {
 }
 
 $stmt = $conn->prepare("
-    SELECT p.*, f.full_name, f.profile_image, j.title AS job_title, j.id AS job_id, ja.id AS application_id
+    SELECT p.*, f.full_name, u.profile_image, j.title AS job_title, j.id AS job_id, ja.id AS application_id
     FROM proposal_projects p
     JOIN freelancers f ON p.freelancer_id = f.id
+    JOIN users u ON f.user_id = u.id
     JOIN jobs j ON p.job_id = j.id
     JOIN job_applications ja ON ja.job_id = p.job_id AND ja.freelancer_id = p.freelancer_id
     WHERE p.id = ? AND p.company_id = ?

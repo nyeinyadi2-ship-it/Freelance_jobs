@@ -1,6 +1,14 @@
 <?php
 require 'config/db.php';
-$r = $conn->query("SELECT id, company_id, title, status, created_at FROM jobs ORDER BY id DESC LIMIT 5");
-while($row = $r->fetch_assoc()) {
-    print_r($row);
+$tables = ['companies', 'freelancers', 'escrow', 'withdraw_requests'];
+foreach ($tables as $t) {
+    echo strtoupper($t) . ":\n";
+    try {
+        $res = $conn->query("SHOW COLUMNS FROM $t");
+        if ($res) {
+            foreach($res->fetch_all(MYSQLI_ASSOC) as $row) {
+                echo "  " . $row['Field'] . " (" . $row['Type'] . ")\n";
+            }
+        } else { echo "  (Table not found)\n"; }
+    } catch(Exception $e) { echo "  (Table not found)\n"; }
 }

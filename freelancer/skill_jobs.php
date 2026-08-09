@@ -65,7 +65,7 @@ $sql = "SELECT j.id, j.title, j.description, j.budget, j.created_at, j.category,
         j.gender_requirement, j.deadline, j.duration, j.freelancers_needed, j.visibility, j.attachment, j.status,
         c.company_name, c.logo_image,
         (SELECT ja.status FROM job_applications ja WHERE ja.job_id = j.id AND ja.freelancer_id = ?) AS my_status,
-        (SELECT COUNT(*) FROM assignments a WHERE a.job_id = j.id AND a.status != 'completed') AS assigned_count
+        (SELECT COUNT(*) FROM assignments a WHERE a.job_id = j.id) AS assigned_count
         FROM jobs j
         JOIN companies c ON j.company_id = c.id
         JOIN job_skills js ON js.job_id = j.id

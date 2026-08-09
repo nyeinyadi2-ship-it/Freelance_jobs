@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 // Delete from junction tables first (MyISAM doesn't cascade)
                 $conn->query("DELETE FROM freelancer_skills WHERE skill_id = $id");
                 $conn->query("DELETE FROM job_skills WHERE skill_id = $id");
-                $conn->query("DELETE FROM portfolio_skills WHERE skill_id = $id");
+
                 $conn->query("DELETE FROM skills WHERE id = $id");
                 set_flash('success', "Skill \"{$row['skill_name']}\" deleted.");
             } else {
@@ -292,7 +292,7 @@ require __DIR__ . '/includes/admin_header.php';
                     <svg class="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                 </div>
                 <h3 class="text-lg font-semibold mb-2" style="color:var(--color-text-primary)">Delete Skill</h3>
-                <p class="text-sm mb-6" style="color:var(--color-text-muted)">Are you sure you want to delete "<span id="deleteSkillName"></span>"? This will remove it from all freelancers, jobs, and portfolios.</p>
+                <p class="text-sm mb-6" style="color:var(--color-text-muted)">Are you sure you want to delete "<span id="deleteSkillName"></span>"? This will remove it from all freelancers and jobs.</p>
                 <form method="POST" class="flex justify-center gap-3">
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="do" value="delete">

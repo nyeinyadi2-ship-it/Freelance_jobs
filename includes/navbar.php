@@ -55,13 +55,15 @@ if ($is_logged_in) {
             ['label' => 'Dashboard', 'href' => base_url('company/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
             ['label' => 'Post Job', 'href' => base_url('company/post_job.php'), 'icon' => 'plus', 'page' => 'post_job'],
             ['label' => 'My Jobs', 'href' => base_url('company/manage_jobs.php'), 'icon' => 'briefcase', 'page' => 'manage_jobs'],
+            ['label' => 'Wallet', 'href' => base_url('company/wallet.php'), 'icon' => 'credit-card', 'page' => 'wallet'],
         ];
     } elseif ($role === 'freelancer') {
         $role_links = [
             ['label' => 'Dashboard', 'href' => base_url('freelancer/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
             ['label' => 'Browse Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'icon' => 'search', 'page' => 'browse_jobs'],
             ['label' => 'My Tasks', 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
-            ['label' => 'Portfolio', 'href' => base_url('freelancer/portfolio.php'), 'icon' => 'briefcase', 'page' => 'portfolio'],
+            ['label' => 'Test Assignments', 'href' => base_url('freelancer/test_assignments.php'), 'icon' => 'document-text', 'page' => 'test_assignments'],
+            ['label' => 'Wallet', 'href' => base_url('freelancer/wallet.php'), 'icon' => 'credit-card', 'page' => 'wallet'],
         ];
     }
 }
@@ -573,6 +575,9 @@ if ($is_logged_in) {
                                         <?php elseif ($rl['icon'] === 'clipboard'): ?><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                             </svg>
+                                        <?php elseif ($rl['icon'] === 'credit-card'): ?><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                            </svg>
                                             <?php endif; ?><?= e($rl['label']) ?>
                                     </a>
                                 <?php endforeach; ?>
@@ -675,6 +680,9 @@ if ($is_logged_in) {
                         </svg>
                     <?php elseif ($link['icon'] === 'clipboard'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                    <?php elseif ($link['icon'] === 'credit-card'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                         </svg>
                         <?php endif; ?><?= e($link['label']) ?>
                 </a>

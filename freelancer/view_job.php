@@ -10,7 +10,7 @@ if ($job_id <= 0) {
 
 // Handle Apply
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'apply' && verify_csrf()) {
-    $st = $conn->prepare("SELECT id, company_id FROM jobs WHERE id = ? AND status IN ('approved', 'position_filled')");
+    $st = $conn->prepare("SELECT id, company_id FROM jobs WHERE id = ? AND status IN ('open', 'position_filled')");
     $st->bind_param('i', $job_id); $st->execute();
     $job_check = $st->get_result()->fetch_assoc(); $st->close();
 
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $job_meta = $st->get_result()->fetch_assoc(); $st->close();
         $needed = (int) ($job_meta['freelancers_needed'] ?? 1);
 
-        $st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != 'completed'");
+        $st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?");
         $st->bind_param('i', $job_id); $st->execute();
         $filled = (int) $st->get_result()->fetch_assoc()['cnt']; $st->close();
 
@@ -61,7 +61,7 @@ $stmt = $conn->prepare("
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
     JOIN users u ON c.user_id = u.id
-    WHERE j.id = ? AND j.status IN ('approved', 'completed', 'position_filled')
+    WHERE j.id = ? AND j.status IN ('open', 'completed', 'position_filled')
 ");
 $stmt->bind_param('i', $job_id);
 $stmt->execute();
@@ -112,7 +112,7 @@ $st->close();
 $is_assigned = false;
 $positions_filled = 0;
 $freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
-$st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != 'completed'");
+$st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?");
 $st->bind_param('i', $job_id);
 $st->execute();
 $positions_filled = (int) $st->get_result()->fetch_assoc()['cnt'];
@@ -134,7 +134,7 @@ $st = $conn->prepare("
            c.company_name, c.logo_image
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
-    WHERE j.category = ? AND j.id != ? AND j.status = 'approved'
+    WHERE j.category = ? AND j.id != ? AND j.status = 'open'
     ORDER BY j.created_at DESC
     LIMIT 4
 ");

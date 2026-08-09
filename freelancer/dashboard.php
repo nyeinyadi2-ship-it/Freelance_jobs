@@ -254,7 +254,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                 ['id'=>'ongoing','label'=>'Ongoing','icon'=>'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10','badge'=>$fl_stats['active'],'bc'=>'blue'],
                 ['id'=>'completed','label'=>'Completed','icon'=>'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'],
                 ['id'=>'earnings','label'=>'Earnings','icon'=>'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1'],
-                ['id'=>'portfolio','label'=>'Portfolio','icon'=>'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10'],
+
                 ['id'=>'skills','label'=>'Skills','icon'=>'M13 10V3L4 14h7v7l9-11h-7z'],
                 ['id'=>'messages','label'=>'Messages','icon'=>'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z','badge'=>$fl_chat_unread,'bc'=>'green'],
                 ['id'=>'notifications','label'=>'Notifications','icon'=>'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9','badge'=>$fl_notif_count,'bc'=>'red'],
@@ -571,24 +571,6 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
     <?php endif; ?>
 </div>
 
-<!-- PORTFOLIO -->
-<div class="dash-section" id="tab-portfolio">
-    <h2 class="text-xl font-bold mb-5" style="color:var(--color-text-primary)">My Portfolio</h2>
-    <?php $portfolio_items = []; $all_projects = array_merge($ongoing_tasks, $completed_list); foreach ($all_projects as $pj) $portfolio_items[] = ['title'=>$pj['title'],'company'=>$pj['company_name'],'description'=>mb_strimwidth($pj['description'] ?? 'No description.', 0, 120, '...'),'budget'=>$pj['budget'],'completed'=>($pj['status'] ?? '')==='completed','image'=>$pj['logo_image'] ?? '']; ?>
-    <?php if (empty($portfolio_items)): ?>
-        <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)"><svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg><p>Your portfolio is empty. Complete projects to build it up!</p></div>
-    <?php else: ?>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <?php foreach ($portfolio_items as $item): ?>
-                <div class="glass rounded-2xl overflow-hidden hover-lift">
-                    <?php if ($item['image']): ?><img src="<?= e(base_url('uploads/images/' . $item['image'])) ?>" alt="" class="w-full h-40 object-cover"><?php else: ?><div class="w-full h-40 flex items-center justify-center" style="background:rgba(99,102,241,0.05)"><svg class="w-12 h-12" style="color:var(--color-text-placeholder)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div><?php endif; ?>
-                    <div class="p-4"><h3 class="font-semibold truncate" style="color:var(--color-text-primary)"><?= e($item['title']) ?></h3><p class="text-xs" style="color:var(--color-text-muted)"><?= e($item['company']) ?></p><div class="flex items-center justify-between mt-3 pt-3 border-t text-xs" style="border-color:var(--color-border)"><span class="font-bold text-primary-600">$<?= number_format((float) $item['budget'], 0) ?></span><?php if ($item['completed']): ?><span class="flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Completed</span><?php else: ?><span class="flex items-center gap-1 text-amber-500 font-medium">In Progress</span><?php endif; ?></div></div>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    <?php endif; ?>
-</div>
-
 <!-- SKILLS -->
 <div class="dash-section" id="tab-skills">
     <h2 class="text-xl font-bold mb-5" style="color:var(--color-text-primary)">Skills & Certificates</h2>
@@ -635,7 +617,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
 <div class="dash-section" id="tab-settings">
     <h2 class="text-xl font-bold mb-5" style="color:var(--color-text-primary)">Account Settings</h2>
     <div class="max-w-2xl space-y-4">
-        <div class="glass rounded-2xl p-6 hover-lift"><h3 class="font-bold mb-2" style="color:var(--color-text-primary)">Profile</h3><p class="text-sm mb-4" style="color:var(--color-text-muted)">Manage your freelancer profile, skills, and portfolio.</p><a href="<?= e(base_url('freelancer/profile.php')) ?>" class="btn-grad inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl text-white">Edit Profile</a></div>
+        <div class="glass rounded-2xl p-6 hover-lift"><h3 class="font-bold mb-2" style="color:var(--color-text-primary)">Profile</h3><p class="text-sm mb-4" style="color:var(--color-text-muted)">Manage your freelancer profile and skills.</p><a href="<?= e(base_url('freelancer/profile.php')) ?>" class="btn-grad inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl text-white">Edit Profile</a></div>
         <div class="glass rounded-2xl p-6 hover-lift"><h3 class="font-bold mb-2" style="color:var(--color-text-primary)">Password</h3><p class="text-sm mb-4" style="color:var(--color-text-muted)">Update your password to keep your account secure.</p><button class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)" onclick="alert('Password change feature coming soon.')">Change Password</button></div>
     </div>
 </div>

@@ -88,14 +88,13 @@ $latest_jobs = [];
 try {
     $stmt = $conn->prepare("
         SELECT j.id, j.title, j.budget, j.status, j.created_at, j.description,
-               j.category, j.experience_level,
+               j.category, j.experience_level, j.attachment,
                c.company_name, c.logo_image,
                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id) AS app_count
         FROM jobs j
         JOIN companies c ON j.company_id = c.id
         WHERE j.company_id = ?
         ORDER BY j.created_at DESC
-        LIMIT 6
     ");
     $stmt->bind_param('i', $company_id);
     $stmt->execute();
@@ -627,7 +626,7 @@ require __DIR__ . '/../includes/header.php';
 </style>
 
 <!-- ════════════════════════════════════ HERO ════════════════════════════════════ -->
-<section class="mh-hero-premium mx-4 md:mx-0 mb-16 fade-in" style="padding: 3.5rem 0 5.5rem;">
+<section class="mh-hero-premium mx-4 md:mx-0 mb-16 fade-in" style="padding: 3.5rem 0 3.5rem;">
     <!-- Background Effects -->
     <div class="mh-hero-grid"></div>
     <div class="mh-hero-glow-1"></div>
@@ -745,39 +744,7 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </section>
 
-<!-- ════════════════════════════════════ STATS CARDS ════════════════════════════════════ -->
-<div class="max-w-6xl mx-auto fade-in" style="margin-top:-48px;position:relative;z-index:10;">
-    <div class="mh-stats-grid">
-        <div class="mh-stat-card">
-            <div class="mh-stat-icon" style="background:rgba(99,102,241,0.1);">
-                <svg fill="none" viewBox="0 0 24 24" stroke="#6366f1" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            </div>
-            <div class="mh-stat-number"><?= number_format($total_jobs) ?>+</div>
-            <div class="mh-stat-label">Active Jobs</div>
-        </div>
-        <div class="mh-stat-card">
-            <div class="mh-stat-icon" style="background:rgba(52,211,153,0.1);">
-                <svg fill="none" viewBox="0 0 24 24" stroke="#34d399" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-            </div>
-            <div class="mh-stat-number"><?= number_format($freelancers_hired) ?>+</div>
-            <div class="mh-stat-label">Freelancers Hired</div>
-        </div>
-        <div class="mh-stat-card">
-            <div class="mh-stat-icon" style="background:rgba(245,158,11,0.1);">
-                <svg fill="none" viewBox="0 0 24 24" stroke="#f59e0b" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-            </div>
-            <div class="mh-stat-number"><?= number_format($total_applications) ?></div>
-            <div class="mh-stat-label">Total Applications</div>
-        </div>
-        <div class="mh-stat-card">
-            <div class="mh-stat-icon" style="background:rgba(168,85,247,0.1);">
-                <svg fill="none" viewBox="0 0 24 24" stroke="#a855f7" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            </div>
-            <div class="mh-stat-number"><?= $success_rate ?>%</div>
-            <div class="mh-stat-label">Success Rate</div>
-        </div>
-    </div>
-</div>
+
 
 <!-- ════════════════════════════════════ FEATURED FREELANCERS ════════════════════════════════════ -->
 <section class="mb-16 fade-in">
@@ -874,10 +841,13 @@ require __DIR__ . '/../includes/header.php';
             ];
             ?>
             <?php foreach ($latest_jobs as $idx => $job): ?>
-                <div class="mh-job-card">
+                <div class="mh-job-card job-card-item" style="<?= $idx >= 3 ? 'display: none;' : '' ?>">
                     <div class="mh-job-hero" style="background:<?= $hero_gradients[$idx % count($hero_gradients)] ?>">
-                        <?php if (!empty($job['logo_image'])): ?>
-                            <img src="<?= e(base_url('uploads/images/' . $job['logo_image'])) ?>" alt="<?= e($job['title']) ?>" onerror="this.style.display='none';this.parentElement.style.background='<?= $hero_gradients[$idx % count($hero_gradients)] ?>'">
+                        <?php if (!empty($job['attachment'])): ?>
+                            <?php $ext = strtolower(pathinfo($job['attachment'], PATHINFO_EXTENSION)); ?>
+                            <?php if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])): ?>
+                                <img src="<?= e(base_url('uploads/attachments/' . $job['attachment'])) ?>" alt="<?= e($job['title']) ?>" onerror="this.style.display='none';this.parentElement.style.background='<?= $hero_gradients[$idx % count($hero_gradients)] ?>'">
+                            <?php endif; ?>
                         <?php endif; ?>
                         <span class="mh-job-badge-cat"><?= e($job['category'] ?? 'General') ?></span>
                         <span class="mh-job-badge-status">Open</span>
@@ -921,6 +891,22 @@ require __DIR__ . '/../includes/header.php';
                 </div>
             <?php endforeach; ?>
         </div>
+        
+        <?php if (count($latest_jobs) > 3): ?>
+            <div class="text-center mt-8">
+                <button type="button" id="viewAllJobsBtn" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white transition-all shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transform hover:-translate-y-1" style="background:linear-gradient(135deg, #4f46e5, #7c3aed);">
+                    View All
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+            </div>
+            <script>
+                document.getElementById('viewAllJobsBtn').addEventListener('click', function() {
+                    const cards = document.querySelectorAll('.job-card-item');
+                    cards.forEach(card => card.style.display = 'flex');
+                    this.style.display = 'none';
+                });
+            </script>
+        <?php endif; ?>
     <?php endif; ?>
 </section>
 
@@ -939,7 +925,7 @@ require __DIR__ . '/../includes/header.php';
         <div class="mh-card mh-step">
             <div class="mh-step-num">2</div>
             <h3 class="font-bold text-lg mb-2" style="color:var(--color-text-primary)">Review Proposals</h3>
-            <p class="text-sm leading-relaxed" style="color:var(--color-text-muted)">Receive proposals from qualified freelancers. Compare portfolios, ratings, and rates to find your perfect match.</p>
+            <p class="text-sm leading-relaxed" style="color:var(--color-text-muted)">Receive proposals from qualified freelancers. Compare profiles, ratings, and rates to find your perfect match.</p>
         </div>
         <div class="mh-card mh-step">
             <div class="mh-step-num">3</div>
