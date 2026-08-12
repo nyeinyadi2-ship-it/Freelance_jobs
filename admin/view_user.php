@@ -180,6 +180,13 @@ require __DIR__ . '/includes/admin_header.php';
     </div>
 </div>
 
+<div class="mb-4">
+    <button type="button" onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        Back
+    </button>
+</div>
+
 <!-- User Header Card -->
 <div class="card mb-6">
     <div class="flex flex-wrap items-start gap-6">
@@ -277,7 +284,7 @@ require __DIR__ . '/includes/admin_header.php';
                             <div class="flex flex-wrap justify-between items-center gap-2 py-2" style="border-bottom:1px solid var(--color-border)">
                                 <div>
                                     <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e($job['title']) ?></p>
-                                    <p class="text-xs" style="color:var(--color-text-muted)">$<?= e(number_format((float) $job['budget'], 2)) ?> &middot; <?= e($job['created_at']) ?></p>
+                                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e(number_format((float) $job['budget'], 2)) ?> MMK &middot; <?= e($job['created_at']) ?></p>
                                 </div>
                                 <?= status_badge($job['status']) ?>
                             </div>
@@ -323,8 +330,8 @@ require __DIR__ . '/includes/admin_header.php';
                     <?php endif; ?>
                     <?php if ($profile['hourly_rate']): ?>
                         <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Hourly Rate ($)') ?></p>
-                            <p class="text-sm" style="color:var(--color-text-primary)">$<?= e(number_format((float) $profile['hourly_rate'], 2)) ?></p>
+                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Hourly Rate (MMK)') ?></p>
+                            <p class="text-sm" style="color:var(--color-text-primary)"><?= e(number_format((float) $profile['hourly_rate'], 2)) ?> MMK</p>
                         </div>
                     <?php endif; ?>
                     <div>
@@ -364,7 +371,7 @@ require __DIR__ . '/includes/admin_header.php';
                             <div class="flex flex-wrap justify-between items-center gap-2 py-2" style="border-bottom:1px solid var(--color-border)">
                                 <div>
                                     <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p>
-                                    <p class="text-xs" style="color:var(--color-text-muted)">$<?= e(number_format((float) $app['budget'], 2)) ?> &middot; <?= e($app['applied_at']) ?></p>
+                                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e(number_format((float) $app['budget'], 2)) ?> MMK &middot; <?= e($app['applied_at']) ?></p>
                                 </div>
                                 <?= status_badge($app['status']) ?>
                             </div>

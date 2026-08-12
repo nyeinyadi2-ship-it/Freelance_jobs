@@ -58,7 +58,7 @@ DROP TABLE IF EXISTS `companies`;
 CREATE TABLE `companies` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int DEFAULT NULL,
-  `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `phone` varchar(11) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `company_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `website` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `location` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -143,7 +143,7 @@ DROP TABLE IF EXISTS `freelancers`;
 CREATE TABLE `freelancers` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int DEFAULT NULL,
-  `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `phone` varchar(11) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `full_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `title` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `location` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,

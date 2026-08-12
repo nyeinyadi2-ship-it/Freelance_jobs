@@ -104,7 +104,7 @@ $r = $conn->query("
     JOIN companies c ON j.company_id = c.id
     WHERE j.status = 'open' AND j.category != 'Direct Hire'
     ORDER BY j.created_at DESC
-    LIMIT 6
+    LIMIT 3
 ");
 if ($r) {
     while ($row = $r->fetch_assoc()) {
@@ -1311,7 +1311,9 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                                     <?php endif; ?>
                                     <div>
                                         <p class="font-semibold text-sm text-gray-900 dark:text-white"><?= e($job['company_name'] ?? 'Company') ?></p>
-                                        <p class="text-xs text-gray-400 dark:text-gray-500">Posted recently</p>
+                                        <p class="text-xs text-gray-400 dark:text-gray-500">
+                                            Posted: <?= date('M j, Y', strtotime($job['created_at'])) ?> | Deadline: <?= $job['deadline'] ? date('M j, Y', strtotime($job['deadline'])) : 'No Deadline' ?>
+                                        </p>
                                     </div>
                                 </div>
 
@@ -1336,7 +1338,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
                                             </svg>
                                         </div>
-                                        <span class="text-base font-bold text-gray-900 dark:text-white">$<?= e(number_format((float) $job['budget'], 0)) ?></span>
+                                        <span class="text-base font-bold text-gray-900 dark:text-white"><?= e(number_format((float) $job['budget'], 0)) ?> MMK</span>
                                     </div>
                                     <?php if (!empty($job['deadline'])): ?>
                                         <span class="inline-flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
@@ -1451,7 +1453,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                         <div class="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700/50">
                             <div>
                                 <p class="text-[11px] text-gray-400 dark:text-gray-500">Hourly Rate</p>
-                                <p class="text-lg font-bold text-primary-600 dark:text-primary-400">$<?= e(number_format((float) ($fl['hourly_rate'] ?? 0), 0)) ?></p>
+                                <p class="text-lg font-bold text-primary-600 dark:text-primary-400"><?= e(number_format((float) ($fl['hourly_rate'] ?? 0), 0)) ?> MMK</p>
                             </div>
                             <a href="<?= e(base_url('company/view_freelancer.php?id=' . $fl['id'])) ?>" class="btn-gradient px-4 py-2 rounded-xl text-xs font-semibold text-white shadow-md shadow-primary-500/20">
                                 View Profile
@@ -1602,7 +1604,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                         <?php
                         $testimonials = [
                             ['name' => 'Sarah Chen', 'role' => 'Startup Founder', 'text' => 'HireWork helped us find an amazing developer in just 2 days. The platform is intuitive and the payment system gives us total peace of mind.', 'color' => 'from-blue-400 to-indigo-500'],
-                            ['name' => 'David Park', 'role' => 'Full-Stack Developer', 'text' => "I've earned over $15,000 through this platform. The job matching is great and I love the built-in messaging feature for client communication.", 'color' => 'from-purple-400 to-accent-500'],
+                            ['name' => 'David Park', 'role' => 'Full-Stack Developer', 'text' => "I've earned over 15,000 MMK through this platform. The job matching is great and I love the built-in messaging feature for client communication.", 'color' => 'from-purple-400 to-accent-500'],
                             ['name' => 'Emily Rodriguez', 'role' => 'Marketing Agency', 'text' => "We've hired 12 freelancers through HireWork. The quality of talent is outstanding and the admin team keeps everything running smoothly.", 'color' => 'from-emerald-400 to-teal-500'],
                         ];
                         foreach ($testimonials as $i => $t):

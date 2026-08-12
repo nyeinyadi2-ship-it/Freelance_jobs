@@ -21,7 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
         $experience_years = (int) ($_POST['experience_years'] ?? 0);
         $hourly_rate = (float) ($_POST['hourly_rate'] ?? 0);
         $selected_skills = $_POST['skills'] ?? [];
+        $payment_method = trim($_POST['payment_method'] ?? '');
+        $payment_account_name = trim($_POST['payment_account_name'] ?? '');
+        $payment_account_number = trim($_POST['payment_account_number'] ?? '');
+        $payment_bank_name = trim($_POST['payment_bank_name'] ?? '');
         if ($full_name === '') $error = 'Full name is required.';
+        elseif ($phone !== '' && !preg_match('/^09[0-9]{9}$/', $phone)) $error = 'Invalid phone number format. Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx).';
         elseif ($hourly_rate < 0) $error = 'Hourly rate must be 0 or greater.';
         else {
             $old_img = $fl_profile['profile_image'];
@@ -37,8 +42,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                     $st->bind_param('si', $new_img, $fl_uid); $st->execute(); $st->close();
                     $ey = $experience_years > 0 ? $experience_years : null;
                     $hr = $hourly_rate > 0 ? $hourly_rate : null;
-                    $st = $conn->prepare("UPDATE freelancers SET full_name=?,title=?,phone=?,location=?,bio=?,experience_years=?,hourly_rate=? WHERE id=?");
-                    $st->bind_param('sssssidi', $full_name, $title, $phone, $location, $bio, $ey, $hr, $fl_freelancer_id);
+                    $st = $conn->prepare("UPDATE freelancers SET full_name=?,title=?,phone=?,location=?,bio=?,experience_years=?,hourly_rate=?,payment_method=?,payment_account_name=?,payment_account_number=?,payment_bank_name=? WHERE id=?");
+                    $st->bind_param('sssssidssssi', $full_name, $title, $phone, $location, $bio, $ey, $hr, $payment_method, $payment_account_name, $payment_account_number, $payment_bank_name, $fl_freelancer_id);
                     $st->execute(); $st->close();
                     $st = $conn->prepare("DELETE FROM freelancer_skills WHERE freelancer_id=?");
                     $st->bind_param('i', $fl_freelancer_id); $st->execute(); $st->close();
@@ -54,6 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                     $fl_profile['full_name']=$full_name; $fl_profile['title']=$title; $fl_profile['phone']=$phone;
                     $fl_profile['location']=$location; $fl_profile['bio']=$bio;
                     $fl_profile['experience_years']=$ey; $fl_profile['hourly_rate']=$hr; $fl_profile['profile_image']=$new_img;
+                    $fl_profile['payment_method']=$payment_method; $fl_profile['payment_account_name']=$payment_account_name;
+                    $fl_profile['payment_account_number']=$payment_account_number; $fl_profile['payment_bank_name']=$payment_bank_name;
                     $fl_profile_skills = array_map('intval', $selected_skills);
                 } catch (Exception $e) { $conn->rollback(); $error = $e->getMessage(); }
             }
@@ -101,6 +108,12 @@ $r->close();
 
 <!-- Profile Header -->
 <div class="glass rounded-2xl p-6 mb-6 hover-lift reveal">
+    <div class="mb-4">
+        <button onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-slate-800 dark:hover:bg-slate-700">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            Back
+        </button>
+    </div>
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div class="flex items-center gap-4">
             <?php if ($profileImgUrl): ?><img src="<?= e($profileImgUrl) ?>" alt="" class="w-16 h-16 rounded-2xl object-cover border-2" style="border-color:var(--color-border)"><?php else: ?><div class="w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl" style="background:linear-gradient(135deg,#6366f1,#a855f7);color:white"><?= strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['username'] ?? 'U', 0, 1)) ?></div><?php endif; ?>
@@ -118,7 +131,7 @@ $r->close();
         </div>
         <div class="flex gap-2">
 
-            <?php if ($is_edit): ?><a href="<?= e(base_url('freelancer/profile.php')) ?>" class="px-5 py-2.5 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)">Cancel</a><?php else: ?><a href="<?= e(base_url('freelancer/profile.php?edit=1')) ?>" class="btn-grad px-5 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Edit Profile</a><?php endif; ?>
+            <?php if ($is_edit): ?><a href="javascript:history.back()" class="px-5 py-2.5 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)">Back</a><?php else: ?><a href="<?= e(base_url('freelancer/profile.php?edit=1')) ?>" class="btn-grad px-5 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Edit Profile</a><?php endif; ?>
         </div>
     </div>
 </div>
@@ -132,10 +145,10 @@ $r->close();
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Full Name *</label><input type="text" name="full_name" required class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['full_name']) ?>"></div>
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Professional Title</label><input type="text" name="title" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="e.g. Full Stack Developer" value="<?= e($fl_profile['title'] ?? '') ?>"></div>
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Email</label><input type="email" class="w-full px-4 py-2.5 rounded-xl text-sm opacity-60 cursor-not-allowed" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['email']) ?>" readonly><p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Email cannot be changed.</p></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Phone</label><input type="text" name="phone" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['phone'] ?? '') ?>"></div>
+                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Phone</label><input type="tel" name="phone" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="09xxxxxxxxx" pattern="^09[0-9]{9}$" maxlength="11" title="Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx)" oninvalid="this.setCustomValidity('Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx)')" oninput="this.setCustomValidity('')" value="<?= e($fl_profile['phone'] ?? '') ?>"></div>
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Location</label><input type="text" name="location" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['location'] ?? '') ?>"></div>
                 <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Experience (Years)</label><input type="number" name="experience_years" min="0" max="100" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['experience_years'] ?? '') ?>"></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Hourly Rate ($)</label><input type="number" name="hourly_rate" min="0" step="0.50" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['hourly_rate'] ?? '') ?>"></div>
+                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Hourly Rate (MMK)</label><input type="number" name="hourly_rate" min="0" step="0.50" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['hourly_rate'] ?? '') ?>"></div>
 
             </div>
             <div class="mt-4"><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Bio</label><textarea name="bio" rows="4" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="Tell clients about yourself..."><?= e($fl_profile['bio'] ?? '') ?></textarea></div>
@@ -153,6 +166,41 @@ $r->close();
             <div class="flex items-center gap-4">
                 <?php if ($fl_profile['profile_image']): ?><img src="<?= e(profile_image_url($fl_profile['profile_image'])) ?>" class="w-16 h-16 rounded-2xl object-cover border" style="border-color:var(--color-border)" id="profilePreview"><?php else: ?><div class="w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-xl" style="background:linear-gradient(135deg,#6366f1,#a855f7);color:white" id="profilePreviewPlaceholder"><?= strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['username'] ?? 'U', 0, 1)) ?></div><?php endif; ?>
                 <div><input type="file" name="profile_image" accept="image/jpeg,image/png,image/gif,image/webp" class="text-sm" onchange="previewImage(this, 'profilePreview')"><p class="text-xs mt-1" style="color:var(--color-text-placeholder)">JPG, PNG, GIF, WebP. Max 2MB.</p></div>
+            </div>
+        </div>
+        <div class="glass rounded-2xl p-6 reveal reveal-d3">
+            <h2 class="text-lg font-bold mb-5" style="color:var(--color-text-primary)">Payment Settings</h2>
+            <div class="mb-5">
+                <label class="block text-sm font-medium mb-3" style="color:var(--color-text-secondary)">Preferred Payment Method</label>
+                <div class="grid sm:grid-cols-3 gap-4">
+                    <label class="flex items-center gap-3 p-4 rounded-xl cursor-pointer border hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" style="border-color:var(--color-border);background:var(--color-bg)">
+                        <input type="radio" name="payment_method" value="kpay" <?= $fl_profile['payment_method'] === 'kpay' ? 'checked' : '' ?> class="w-4 h-4 text-primary-600 focus:ring-primary-500" onchange="togglePaymentFields()">
+                        <span class="text-sm font-semibold" style="color:var(--color-text-primary)">KPay</span>
+                    </label>
+                    <label class="flex items-center gap-3 p-4 rounded-xl cursor-pointer border hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" style="border-color:var(--color-border);background:var(--color-bg)">
+                        <input type="radio" name="payment_method" value="wavepay" <?= $fl_profile['payment_method'] === 'wavepay' ? 'checked' : '' ?> class="w-4 h-4 text-primary-600 focus:ring-primary-500" onchange="togglePaymentFields()">
+                        <span class="text-sm font-semibold" style="color:var(--color-text-primary)">WavePay</span>
+                    </label>
+                    <label class="flex items-center gap-3 p-4 rounded-xl cursor-pointer border hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" style="border-color:var(--color-border);background:var(--color-bg)">
+                        <input type="radio" name="payment_method" value="bank_transfer" <?= $fl_profile['payment_method'] === 'bank_transfer' ? 'checked' : '' ?> class="w-4 h-4 text-primary-600 focus:ring-primary-500" onchange="togglePaymentFields()">
+                        <span class="text-sm font-semibold" style="color:var(--color-text-primary)">Bank Transfer</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div id="payment-fields-wrapper" class="grid md:grid-cols-2 gap-4 <?= empty($fl_profile['payment_method']) ? 'hidden' : '' ?>">
+                <div id="bank-name-field" class="<?= $fl_profile['payment_method'] === 'bank_transfer' ? '' : 'hidden' ?>">
+                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Bank Name</label>
+                    <input type="text" name="payment_bank_name" id="payment_bank_name_input" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="e.g. KBZ Bank" value="<?= e($fl_profile['payment_bank_name'] ?? '') ?>">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Account Name</label>
+                    <input type="text" name="payment_account_name" id="payment_account_name_input" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['payment_account_name'] ?? '') ?>">
+                </div>
+                <div>
+                    <label id="payment-number-label" class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= $fl_profile['payment_method'] === 'bank_transfer' ? 'Account Number' : 'Phone Number' ?></label>
+                    <input type="text" name="payment_account_number" id="payment_account_number_input" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['payment_account_number'] ?? '') ?>">
+                </div>
             </div>
         </div>
         <div class="flex justify-end gap-3">
@@ -176,11 +224,32 @@ $r->close();
                 <?php if ($fl_profile['phone']): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Phone</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['phone']) ?></dd></div><?php endif; ?>
                 <?php if ($fl_profile['location']): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Location</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['location']) ?></dd></div><?php endif; ?>
                 <?php if ($fl_profile['experience_years'] !== null): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Experience</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= (int) $fl_profile['experience_years'] ?> year<?= (int) $fl_profile['experience_years'] !== 1 ? 's' : '' ?></dd></div><?php endif; ?>
-                <?php if ($fl_profile['hourly_rate'] !== null): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Hourly Rate</dt><dd class="font-semibold text-emerald-600">$<?= number_format((float) $fl_profile['hourly_rate'], 2) ?> / hr</dd></div><?php endif; ?>
+                <?php if ($fl_profile['hourly_rate'] !== null): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Hourly Rate</dt><dd class="font-semibold text-emerald-600"><?= number_format((float) $fl_profile['hourly_rate'], 2) ?> MMK / hr</dd></div><?php endif; ?>
 
                 <div class="flex justify-between"><dt style="color:var(--color-text-muted)">Joined</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= date('F j, Y', strtotime($fl_profile['created_at'])) ?></dd></div>
             </dl>
         </div>
+
+        <?php if (!empty($fl_profile['payment_method'])): ?>
+        <div class="glass rounded-2xl p-6 hover-lift reveal reveal-d2 md:col-span-2">
+            <h2 class="text-lg font-bold mb-4" style="color:var(--color-text-primary)">Payment Settings</h2>
+            <div class="flex items-center gap-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border" style="border-color:var(--color-border)">
+                <div class="w-12 h-12 rounded-xl flex items-center justify-center bg-white dark:bg-slate-700 shadow-sm flex-shrink-0">
+                    <svg class="w-6 h-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+                </div>
+                <div class="flex-1">
+                    <h3 class="font-bold capitalize" style="color:var(--color-text-primary)"><?= e(str_replace('_', ' ', $fl_profile['payment_method'])) ?></h3>
+                    <p class="text-sm mt-1" style="color:var(--color-text-secondary)">
+                        <?= e($fl_profile['payment_account_name']) ?> &bull; 
+                        <?= e($fl_profile['payment_account_number']) ?>
+                        <?php if ($fl_profile['payment_method'] === 'bank_transfer' && !empty($fl_profile['payment_bank_name'])): ?>
+                            &bull; <?= e($fl_profile['payment_bank_name']) ?>
+                        <?php endif; ?>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 
 
@@ -244,6 +313,31 @@ function previewImage(input, imgId) {
         };
         reader.readAsDataURL(input.files[0]);
     }
+}
+
+function togglePaymentFields() {
+    var method = document.querySelector('input[name="payment_method"]:checked');
+    if (!method) return;
+    
+    document.getElementById('payment-fields-wrapper').classList.remove('hidden');
+    var isBank = method.value === 'bank_transfer';
+    
+    document.getElementById('bank-name-field').classList.toggle('hidden', !isBank);
+    document.getElementById('payment-number-label').textContent = isBank ? 'Account Number' : 'Phone Number';
+    
+    // Add required attributes dynamically
+    if (isBank) {
+        document.getElementById('payment_bank_name_input').setAttribute('required', 'required');
+    } else {
+        document.getElementById('payment_bank_name_input').removeAttribute('required');
+    }
+    document.getElementById('payment_account_name_input').setAttribute('required', 'required');
+    document.getElementById('payment_account_number_input').setAttribute('required', 'required');
+}
+
+// Initial toggle if editing
+if (document.querySelector('input[name="payment_method"]')) {
+    togglePaymentFields();
 }
 </script>
 

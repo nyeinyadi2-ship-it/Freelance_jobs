@@ -1,7 +1,16 @@
 <?php
-require 'config/db.php';
-$res = $conn->query("SHOW TABLES");
-while($r = $res->fetch_array()) { echo $r[0] . "\n"; }
-echo "\n--- COLUMNS IN FREELANCERS ---\n";
-$res2 = $conn->query("SHOW COLUMNS FROM freelancers");
-while($r = $res2->fetch_assoc()) { echo $r['Field'] . "\n"; }
+require_once __DIR__ . '/config/db.php';
+
+$sql = "
+    ALTER TABLE freelancers
+    ADD COLUMN payment_method VARCHAR(50) DEFAULT NULL,
+    ADD COLUMN payment_account_name VARCHAR(100) DEFAULT NULL,
+    ADD COLUMN payment_account_number VARCHAR(50) DEFAULT NULL,
+    ADD COLUMN payment_bank_name VARCHAR(100) DEFAULT NULL
+";
+
+if ($conn->query($sql)) {
+    echo "Columns added successfully.\n";
+} else {
+    echo "Error adding columns: " . $conn->error . "\n";
+}

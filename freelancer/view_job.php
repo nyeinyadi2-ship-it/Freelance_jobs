@@ -319,10 +319,10 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
     <!-- Back Button -->
-    <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="inline-flex items-center gap-2 text-sm font-medium mb-6 px-4 py-2.5 rounded-xl transition-all hover:bg-gray-100 dark:hover:bg-gray-800 animate-slide-right" style="color:var(--color-text-secondary)">
+    <button onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700 mb-6">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-        Back to Browse Jobs
-    </a>
+        Back
+    </button>
 
     <!-- Hero Section -->
     <div class="view-hero mb-8 animate-fade-up">

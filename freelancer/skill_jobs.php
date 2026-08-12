@@ -166,7 +166,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <p class="text-sm flex items-center gap-2 mb-2" style="color:var(--color-text-muted)">
                             <?= e($job['company_name']) ?>
                             <span class="w-1 h-1 rounded-full bg-gray-300"></span>
-                            Budget: <span class="font-bold" style="color:#6366f1">$<?= number_format((float) $job['budget'], 2) ?></span>
+                            Budget: <span class="font-bold" style="color:#6366f1"><?= number_format((float) $job['budget'], 2) ?> MMK</span>
                             <span class="w-1 h-1 rounded-full bg-gray-300"></span>
                             <?= e(str_replace('_', ' ', ucfirst($job['experience_level']))) ?>
                         </p>

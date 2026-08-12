@@ -474,7 +474,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <h3 class="job-card-title"><?= e($job['title']) ?></h3>
 
                     <!-- Budget -->
-                    <div class="job-card-budget">$<?= number_format((float) $job['budget'], 2) ?></div>
+                    <div class="job-card-budget"><?= number_format((float) $job['budget'], 2) ?> MMK</div>
 
                     <!-- Description -->
                     <p class="job-card-desc"><?= e(mb_strimwidth($job['description'] ?? '', 0, 150, '...')) ?></p>

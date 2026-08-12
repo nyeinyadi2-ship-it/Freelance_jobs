@@ -47,7 +47,12 @@ require __DIR__ . '/../includes/header.php';
 <div class="max-w-4xl mx-auto py-8">
     <div class="mb-6 flex items-center justify-between">
         <div>
-            <a href="<?= e(base_url('company/view_applications.php?id=' . $proposal['job_id'])) ?>" class="text-indigo-600 hover:underline text-sm font-medium mb-2 inline-block">&larr; Back to Applications</a>
+            <div class="mb-4">
+                <button type="button" onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Back
+                </button>
+            </div>
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white"><?= e($proposal['title']) ?></h1>
             <p class="text-gray-500 mt-1">Freelancer: <?= e($proposal['full_name']) ?></p>
         </div>

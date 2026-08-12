@@ -198,7 +198,7 @@ require __DIR__ . '/includes/admin_header.php';
                         </div>
                         <div class="flex-1 min-w-0">
                             <p class="text-sm font-medium truncate" style="color:var(--color-text-primary)"><?= e($job['title']) ?></p>
-                            <p class="text-xs" style="color:var(--color-text-muted)"><?= e($job['company_name']) ?> · $<?= e(number_format((float) $job['budget'], 0)) ?></p>
+                            <p class="text-xs" style="color:var(--color-text-muted)"><?= e($job['company_name']) ?> · <?= e(number_format((float) $job['budget'], 0)) ?> MMK</p>
                         </div>
                         <?= status_badge($job['status']) ?>
                     </div>

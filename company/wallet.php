@@ -69,11 +69,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // Fetch current balance
-$stmt = $conn->prepare("SELECT demo_funds FROM users WHERE id = ?");
+$stmt = $conn->prepare("SELECT available_balance FROM users WHERE id = ?");
 $stmt->bind_param('i', $user['user_id']);
 $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
-$demo_funds = (float) ($row['demo_funds'] ?? 0);
+$available_balance = (float) ($row['available_balance'] ?? 0);
 $stmt->close();
 
 // Fetch transaction history
@@ -99,8 +99,8 @@ require_once __DIR__ . '/../includes/header.php';
     <!-- Left Column: Balance & Actions -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 lg:col-span-1 h-fit">
         <h2 class="text-lg font-semibold mb-1">Available Demo Funds</h2>
-        <div class="text-4xl font-bold text-indigo-600 dark:text-indigo-400 mb-6">
-            $<?= number_format($demo_funds, 2) ?>
+        <div class="text-3xl font-bold mt-2 text-indigo-600 dark:text-indigo-400 mb-6">
+            <?= number_format($available_balance, 2) ?> MMK
         </div>
         
         <h3 class="text-md font-semibold mb-3 border-t pt-4 dark:border-gray-700">Add Funds</h3>
@@ -133,17 +133,21 @@ require_once __DIR__ . '/../includes/header.php';
                         </tr>
                     </thead>
                     <tbody class="divide-y dark:divide-gray-700">
-                        <?php foreach ($transactions as $t): ?>
+                        <?php foreach ($transactions as $t): 
+                            $is_credit = in_array($t['type'], ['deposit', 'refund']);
+                            $sign = $is_credit ? '+' : '-';
+                            $color = $is_credit ? 'text-emerald-800 dark:text-emerald-300' : 'text-red-800 dark:text-red-300';
+                            $bg = $is_credit ? 'bg-emerald-100 dark:bg-emerald-500/20' : 'bg-red-100 dark:bg-red-500/20';
+                        ?>
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                 <td class="py-3 px-4"><?= date('M j, Y H:i', strtotime($t['created_at'])) ?></td>
                                 <td class="py-3 px-4 capitalize">
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
-                                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
-                                        Deposit
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium <?= $bg ?> <?= $color ?>">
+                                        <?= e(ucwords(str_replace('_', ' ', $t['type']))) ?>
                                     </span>
                                 </td>
                                 <td class="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">
-                                    +$<?= number_format($t['amount'], 2) ?>
+                                    <?= $sign ?><?= number_format($t['amount'], 2) ?> MMK
                                 </td>
                                 <td class="py-3 px-4">
                                     <?php 
@@ -247,16 +251,16 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="bg-slate-50 dark:bg-slate-800 rounded-lg p-5 border border-slate-200 dark:border-slate-700">
                     <div class="flex justify-between items-center mb-2">
                         <span class="text-sm text-slate-500 dark:text-slate-400">Payment Amount</span>
-                        <span class="font-semibold text-slate-800 dark:text-slate-200" id="summary-amount">$0.00</span>
+                        <span class="font-semibold text-slate-800 dark:text-slate-200" id="summary-amount">0.00 MMK</span>
                     </div>
                     <div class="flex justify-between items-center mb-2">
                         <span class="text-sm text-slate-500 dark:text-slate-400">Fee</span>
-                        <span class="font-semibold text-slate-800 dark:text-slate-200">$0.00</span>
+                        <span class="font-semibold text-slate-800 dark:text-slate-200">0.00 MMK</span>
                     </div>
                     <hr class="my-3 border-slate-200 dark:border-slate-600">
                     <div class="flex justify-between items-center">
                         <span class="text-base font-bold text-slate-800 dark:text-white">Total Amount</span>
-                        <span class="text-lg font-bold text-indigo-600 dark:text-indigo-400" id="summary-total">$0.00</span>
+                        <span class="text-lg font-bold text-indigo-600 dark:text-indigo-400" id="summary-total">0.00 MMK</span>
                     </div>
                 </div>
 
@@ -296,10 +300,10 @@ require_once __DIR__ . '/../includes/header.php';
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Amount ($) <span class="text-red-500">*</span></label>
+                            <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Amount (MMK) <span class="text-red-500">*</span></label>
                             <div class="relative">
                                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <span class="text-slate-500 sm:text-sm">$</span>
+                                    <span class="text-slate-500 sm:text-sm">MMK</span>
                                 </div>
                                 <input type="number" id="amount_input" name="amount" step="1" min="10" placeholder="100.00" required
                                        class="w-full pl-8 pr-4 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
@@ -355,7 +359,7 @@ require_once __DIR__ . '/../includes/header.php';
     // Amount mirror logic
     document.getElementById('amount_input').addEventListener('input', function() {
         const val = parseFloat(this.value) || 0;
-        const formatted = '$' + val.toFixed(2);
+        const formatted = val.toFixed(2) + ' MMK';
         document.getElementById('summary-amount').textContent = formatted;
         document.getElementById('summary-total').textContent = formatted;
     });

@@ -6,8 +6,8 @@ require_once __DIR__ . '/../config/auth.php';
 require_role('freelancer');
 $user = current_user();
 
-// Get freelancer id
-$stmt = $conn->prepare("SELECT id FROM freelancers WHERE user_id = ?");
+// Get freelancer id and payment info
+$stmt = $conn->prepare("SELECT id, payment_method, payment_account_name, payment_account_number, payment_bank_name FROM freelancers WHERE user_id = ?");
 $stmt->bind_param('i', $user['user_id']);
 $stmt->execute();
 $fl = $stmt->get_result()->fetch_assoc();
@@ -21,13 +21,17 @@ $freelancer_id = (int) $fl['id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'withdraw') {
     $amount = (float) ($_POST['amount'] ?? 0);
-    $method = trim($_POST['payment_method'] ?? '');
-    $details = trim($_POST['payment_details'] ?? '');
+    $method = $fl['payment_method'] ?? '';
+    
+    $details = ($fl['payment_account_name'] ?? '') . ' | ' . ($fl['payment_account_number'] ?? '');
+    if ($method === 'bank_transfer') {
+        $details .= ' | ' . ($fl['payment_bank_name'] ?? '');
+    }
 
     if ($amount <= 0) {
         set_flash('error', 'Withdrawal amount must be greater than zero.');
-    } elseif (empty($method) || empty($details)) {
-        set_flash('error', 'Payment method and details are required.');
+    } elseif (empty($method)) {
+        set_flash('error', 'Please configure your payment method in your Profile first.');
     } else {
         $conn->begin_transaction();
         try {
@@ -49,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stmt->close();
 
             $conn->commit();
-            set_flash('success', "Withdrawal request for $" . number_format($amount, 2) . " submitted successfully.");
+            set_flash('success', "Withdrawal request for " . number_format($amount, 2) . " MMK" submitted successfully.");
         } catch (Exception $e) {
             $conn->rollback();
             if (strpos($e->getMessage(), 'Insufficient') !== false) {
@@ -93,7 +97,7 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 p-6 lg:col-span-1 h-fit">
         <h2 class="text-lg font-semibold mb-1">Available Balance</h2>
         <div class="text-4xl font-bold text-green-600 dark:text-green-400 mb-6">
-            $<?= number_format($available_balance, 2) ?>
+            <?= number_format($available_balance, 2) ?> MMK
         </div>
 
         <h3 class="text-md font-semibold mb-3 border-t pt-4 dark:border-gray-700">Request Withdrawal</h3>
@@ -101,31 +105,38 @@ require_once __DIR__ . '/../includes/header.php';
             <input type="hidden" name="action" value="withdraw">
             
             <div>
-                <label class="block text-sm font-medium mb-1">Amount ($)</label>
+                <label class="block text-sm font-medium mb-1">Amount (MMK)</label>
                 <input type="number" name="amount" step="0.01" min="10" max="<?= $available_balance ?>" placeholder="0.00" required
                        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-900 dark:border-gray-600">
             </div>
 
-            <div>
-                <label class="block text-sm font-medium mb-1">Payment Method</label>
-                <select name="payment_method" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-900 dark:border-gray-600">
-                    <option value="">Select a method</option>
-                    <option value="paypal">PayPal</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                </select>
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium mb-1">Payment Details</label>
-                <textarea name="payment_details" required placeholder="PayPal Email or Bank Account Info" rows="3"
-                          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 dark:bg-gray-900 dark:border-gray-600"></textarea>
-            </div>
-
-            <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition" <?= $available_balance < 10 ? 'disabled' : '' ?>>
-                Withdraw Funds
-            </button>
+            <?php if (empty($fl['payment_method'])): ?>
+                <div class="p-4 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-lg text-sm">
+                    You haven't configured a payment method yet. 
+                    <a href="profile.php?edit=1" class="font-bold underline text-indigo-600 dark:text-indigo-400">Configure it here</a>.
+                </div>
+                <button type="button" class="w-full py-2 bg-gray-400 text-white rounded-lg font-medium cursor-not-allowed" disabled>
+                    Withdraw Funds
+                </button>
+            <?php else: ?>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Saved Payment Method</label>
+                    <div class="w-full px-3 py-2 border rounded-lg bg-gray-100 dark:bg-gray-800 dark:border-gray-600 text-sm">
+                        <strong><?= e(ucwords(str_replace('_', ' ', $fl['payment_method']))) ?></strong><br>
+                        <?= e($fl['payment_account_name']) ?> &bull; <?= e($fl['payment_account_number']) ?>
+                        <?php if ($fl['payment_method'] === 'bank_transfer'): ?>
+                            <br><?= e($fl['payment_bank_name']) ?>
+                        <?php endif; ?>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Change this in your <a href="profile.php?edit=1" class="text-indigo-500 hover:underline">Profile Settings</a>.</p>
+                </div>
+                
+                <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition" <?= $available_balance < 10 ? 'disabled' : '' ?>>
+                    Withdraw Funds
+                </button>
+            <?php endif; ?>
             <?php if ($available_balance < 10): ?>
-                <p class="text-xs text-red-500 mt-1">Minimum withdrawal amount is $10.00.</p>
+                <p class="text-xs text-red-500 mt-1">Minimum withdrawal amount is 10.00 MMK.</p>
             <?php endif; ?>
         </form>
     </div>
@@ -153,7 +164,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                 <td class="py-3 px-4"><?= date('M j, Y H:i', strtotime($w['created_at'])) ?></td>
                                 <td class="py-3 px-4 font-semibold text-gray-900 dark:text-gray-100">
-                                    $<?= number_format($w['amount'], 2) ?>
+                                    <?= number_format($w['amount'], 2) ?> MMK
                                 </td>
                                 <td class="py-3 px-4 capitalize"><?= e(str_replace('_', ' ', $w['payment_method'])) ?></td>
                                 <td class="py-3 px-4">

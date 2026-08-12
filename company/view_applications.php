@@ -189,50 +189,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $stmt->close();
 
         if ($assignment) {
-            $conn->begin_transaction();
-            try {
-                $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE id = ?");
-                $stmt->bind_param('i', $assignment_id);
-                $stmt->execute();
-                $stmt->close();
-
-                // Only mark job as completed when ALL required positions are filled and completed
-                $stmt = $conn->prepare("SELECT j.freelancers_needed, SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS done FROM jobs j LEFT JOIN assignments a ON j.id = a.job_id WHERE j.id = ? GROUP BY j.id");
-                $stmt->bind_param('i', $job_id);
-                $stmt->execute();
-                $progress = $stmt->get_result()->fetch_assoc();
-                $stmt->close();
-
-                if ($progress && (int)$progress['done'] >= (int)$progress['freelancers_needed']) {
-                    $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
-                    $stmt->bind_param('i', $job_id);
+            $amount = (float) $assignment['budget'];
+            
+            $stmt = $conn->prepare("SELECT available_balance FROM users WHERE id = ?");
+            $stmt->bind_param('i', $user['user_id']);
+            $stmt->execute();
+            $comp_bal = $stmt->get_result()->fetch_assoc()['available_balance'] ?? 0;
+            $stmt->close();
+            
+            if ($comp_bal < $amount) {
+                set_flash('error', 'Insufficient balance to release payment. Please deposit funds first.');
+            } else {
+                $conn->begin_transaction();
+                try {
+                    $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE id = ?");
+                    $stmt->bind_param('i', $assignment_id);
                     $stmt->execute();
                     $stmt->close();
-                }
 
-                $amount = (float) $assignment['budget'];
-                $paid_status = 'paid';
-                $stmt = $conn->prepare("INSERT INTO payments (assignment_id, amount, status, paid_at) VALUES (?, ?, ?, NOW())");
-                $stmt->bind_param('ids', $assignment_id, $amount, $paid_status);
-                $stmt->execute();
-                $stmt->close();
+                    $stmt = $conn->prepare("UPDATE submissions SET status = 'approved' WHERE assignment_id = ? AND status = 'pending'");
+                    $stmt->bind_param('i', $assignment_id);
+                    $stmt->execute();
+                    $stmt->close();
 
-                $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.id = ?");
-                $stmt->bind_param('i', $assignment_id);
-                $stmt->execute();
-                $fl_user = $stmt->get_result()->fetch_assoc();
-                $stmt->close();
+                    // Only mark job as completed when ALL required positions are filled and completed
+                    $stmt = $conn->prepare("SELECT j.freelancers_needed, SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS done FROM jobs j LEFT JOIN assignments a ON j.id = a.job_id WHERE j.id = ? GROUP BY j.id");
+                    $stmt->bind_param('i', $job_id);
+                    $stmt->execute();
+                    $progress = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
 
-                if ($fl_user) {
+                    if ($progress && (int)$progress['done'] >= (int)$progress['freelancers_needed']) {
+                        $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
+                        $stmt->bind_param('i', $job_id);
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+
+                    $paid_status = 'paid';
+                    $stmt = $conn->prepare("INSERT INTO payments (assignment_id, amount, status, paid_at) VALUES (?, ?, ?, NOW())");
+                    $stmt->bind_param('ids', $assignment_id, $amount, $paid_status);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.id = ?");
+                    $stmt->bind_param('i', $assignment_id);
+                    $stmt->execute();
+                    $fl_user = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+
+                    if (!$fl_user) {
+                        throw new Exception("Freelancer not found.");
+                    }
+
+                    // Deduct from company
+                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
+                    $stmt->bind_param('did', $amount, $user['user_id'], $amount);
+                    $stmt->execute();
+                    if ($stmt->affected_rows === 0) {
+                        throw new Exception("Insufficient balance during deduction.");
+                    }
+                    $stmt->close();
+
+                    // Add to freelancer
+                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance + ? WHERE id = ?");
+                    $stmt->bind_param('di', $amount, $fl_user['id']);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // Insert wallet transactions
+                    $tx_id = uniqid('tx_dh_');
+                    $type_c = 'payment_release';
+                    $stmt = $conn->prepare("INSERT INTO wallet_transactions (user_id, amount, type, payment_method, transaction_id, status) VALUES (?, ?, ?, 'wallet', ?, 'completed')");
+                    $stmt->bind_param('idss', $user['user_id'], $amount, $type_c, $tx_id);
+                    $stmt->execute();
+                    
+                    $type_f = 'payment_received';
+                    $stmt->bind_param('idss', $fl_user['id'], $amount, $type_f, $tx_id);
+                    $stmt->execute();
+                    $stmt->close();
+
                     create_notification($conn, (int) $fl_user['id'], 'work_approved', "Your work for \"{$job['title']}\" has been approved.", 'freelancer/my_tasks.php');
                     create_notification($conn, (int) $fl_user['id'], 'payment_released', "Payment of \${$amount} for \"{$job['title']}\" has been released.", 'freelancer/my_tasks.php');
-                }
 
-                $conn->commit();
-                set_flash('success', 'Work approved and payment processed.');
-            } catch (Exception $e) {
-                $conn->rollback();
-                set_flash('error', 'Could not process payment.');
+                    $conn->commit();
+                    set_flash('success', 'Work approved and payment processed successfully.');
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    set_flash('error', $e->getMessage() ?: 'Could not process payment.');
+                }
             }
         } else {
             set_flash('error', 'Assignment not found or not ready for payment.');
@@ -252,8 +297,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $stmt->close();
 
         if ($assignment) {
-            $stmt = $conn->prepare("UPDATE assignments SET status = 'assigned', submission_link = NULL WHERE id = ?");
+            $revision_notes = trim($_POST['revision_notes'] ?? '');
+            
+            $stmt = $conn->prepare("UPDATE assignments SET status = 'working', submission_link = NULL WHERE id = ?");
             $stmt->bind_param('i', $assignment_id);
+            $stmt->execute();
+            $stmt->close();
+
+            $stmt = $conn->prepare("UPDATE submissions SET status = 'revision_requested', revision_notes = ? WHERE assignment_id = ? AND status = 'pending'");
+            $stmt->bind_param('si', $revision_notes, $assignment_id);
             $stmt->execute();
             $stmt->close();
 
@@ -398,16 +450,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             if ($ms) {
                 $conn->begin_transaction();
                 try {
-                    // Check and deduct demo funds
-                    $stmt = $conn->prepare("UPDATE users SET demo_funds = demo_funds - ? WHERE id = ? AND demo_funds >= ?");
+                    // Check and deduct available balance
+                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
                     $stmt->bind_param('did', $ms['amount'], $user['user_id'], $ms['amount']);
                     $stmt->execute();
                     $affected = $stmt->affected_rows;
                     $stmt->close();
 
                     if ($affected === 0) {
-                        throw new Exception("Insufficient demo funds to fund this milestone.");
+                        throw new Exception("Insufficient balance to fund this milestone.");
                     }
+
+                    // Insert wallet transaction for funding escrow
+                    $tx_id = uniqid('tx_escrow_');
+                    $type_c = 'escrow_fund';
+                    $stmt = $conn->prepare("INSERT INTO wallet_transactions (user_id, amount, type, payment_method, transaction_id, status) VALUES (?, ?, ?, 'wallet', ?, 'completed')");
+                    $stmt->bind_param('idss', $user['user_id'], $ms['amount'], $type_c, $tx_id);
+                    $stmt->execute();
+                    $stmt->close();
 
                     $stmt = $conn->prepare("UPDATE milestones SET status = 'funded' WHERE id = ?");
                     $stmt->bind_param('i', $milestone_id);
@@ -468,6 +528,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     if ($fl_user_id > 0) {
                         $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance + ? WHERE id = ?");
                         $stmt->bind_param('di', $ms['amount'], $fl_user_id);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        $tx_id = uniqid('tx_release_');
+                        $type_f = 'payment_received';
+                        $stmt = $conn->prepare("INSERT INTO wallet_transactions (user_id, amount, type, payment_method, transaction_id, status) VALUES (?, ?, ?, 'wallet', ?, 'completed')");
+                        $stmt->bind_param('idss', $fl_user_id, $ms['amount'], $type_f, $tx_id);
                         $stmt->execute();
                         $stmt->close();
                     }
@@ -692,7 +759,14 @@ $stmt = $conn->prepare("
 $stmt->bind_param('i', $job_id);
 $stmt->execute();
 $ar = $stmt->get_result();
-while ($row = $ar->fetch_assoc()) { $assignments[] = $row; }
+while ($row = $ar->fetch_assoc()) { 
+    $sub_stmt = $conn->prepare("SELECT file_path, notes, status AS sub_status, created_at AS submitted_at FROM submissions WHERE assignment_id = ? ORDER BY version DESC LIMIT 1");
+    $sub_stmt->bind_param('i', $row['id']);
+    $sub_stmt->execute();
+    $row['submission'] = $sub_stmt->get_result()->fetch_assoc();
+    $sub_stmt->close();
+    $assignments[] = $row; 
+}
 $stmt->close();
 $assignment = $assignments[0] ?? null; // Keep for backward compatibility
 
@@ -753,9 +827,14 @@ require __DIR__ . '/../includes/header.php';
     <!-- LEFT SIDEBAR -->
     <div class="w-full lg:w-2/3 space-y-6">
         <div class="card">
-            <a href="<?= e(base_url('company/manage_jobs.php')) ?>" class="text-indigo-600 hover:underline text-sm font-medium">&larr; <?= 'Back to jobs' ?></a>
+            <div class="mb-4">
+                <button onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Back
+                </button>
+            </div>
             <h1 class="text-2xl font-extrabold mt-3 text-gray-900 dark:text-white"><?= e($job['title']) ?></h1>
-            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400 font-medium"><?= 'Budget' ?>: $<?= e(number_format((float) $job['budget'], 2)) ?> &middot; <?= status_badge($job['status']) ?> &middot; Positions: <?= $positions_filled ?>/<?= $freelancers_needed ?> filled</p>
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400 font-medium"><?= 'Budget' ?>: <?= e(number_format((float) $job['budget'], 2)) ?> MMK &middot; <?= status_badge($job['status']) ?> &middot; Positions: <?= $positions_filled ?>/<?= $freelancers_needed ?> filled</p>
         </div>
 
         <?php if (!empty($assignments)): ?>
@@ -765,7 +844,7 @@ require __DIR__ . '/../includes/header.php';
         <div class="mt-4">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-bold" style="color:var(--color-text-primary)">Project Milestones</h3>
-                <span class="text-xs font-semibold" style="color:var(--color-text-muted)"><?= $approved_count ?>/<?= $total_milestones ?> completed &middot; $<?= number_format($total_milestone_amount, 2) ?> total</span>
+                <span class="text-xs font-semibold" style="color:var(--color-text-muted)"><?= $approved_count ?>/<?= $total_milestones ?> completed &middot; <?= number_format($total_milestone_amount, 2) ?> MMK total</span>
             </div>
 
             <!-- Progress bar -->
@@ -797,7 +876,7 @@ require __DIR__ . '/../includes/header.php';
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="text-sm font-bold" style="color:#f59e0b">$<?= number_format((float) $ms['amount'], 2) ?></span>
+                            <span class="text-sm font-bold" style="color:#f59e0b"><?= number_format((float) $ms['amount'], 2) ?> MMK</span>
                             <?php
                             $ms_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Submitted','approved'=>'Approved','revision_requested'=>'Revision'];
                             $ms_colors = ['draft'=>'#6b7280','funded'=>'#f59e0b','in_progress'=>'#6366f1','submitted'=>'#8b5cf6','approved'=>'#10b981','revision_requested'=>'#ef4444'];
@@ -929,9 +1008,9 @@ require __DIR__ . '/../includes/header.php';
                                         <input type="hidden" name="job_id" value="<?= $job_id ?>">
                                         <input type="hidden" name="ms_action" value="approve">
                                         <input type="hidden" name="milestone_id" value="<?= (int) $ms['id'] ?>">
-                                        <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 2px 8px rgba(16,185,129,0.3)" onclick="return confirm('Approve this milestone and release $<?= number_format((float) $ms['amount'], 2) ?> payment?')">
+                                        <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 2px 8px rgba(16,185,129,0.3)" onclick="return confirm('Approve this milestone and release <?= number_format((float) $ms['amount'], 2) ?> MMK payment?')">
                                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                            Approve & Pay $<?= number_format((float) $ms['amount'], 2) ?>
+                                            Approve & Pay <?= number_format((float) $ms['amount'], 2) ?> MMK
                                         </button>
                                     </form>
                                     <form method="POST">
@@ -957,7 +1036,7 @@ require __DIR__ . '/../includes/header.php';
                                 <input type="hidden" name="job_id" value="<?= $job_id ?>">
                                 <input type="hidden" name="ms_action" value="fund">
                                 <input type="hidden" name="milestone_id" value="<?= (int) $ms['id'] ?>">
-                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#f59e0b,#d97706);box-shadow:0 2px 8px rgba(245,158,11,0.3)" onclick="return confirm('Fund this milestone with $<?= number_format((float) $ms['amount'], 2) ?> via Escrow?')">
+                                <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#f59e0b,#d97706);box-shadow:0 2px 8px rgba(245,158,11,0.3)" onclick="return confirm('Fund this milestone with <?= number_format((float) $ms['amount'], 2) ?> MMK MMK via Escrow?')">
                                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
                                     Fund Escrow
                                 </button>
@@ -1011,7 +1090,7 @@ require __DIR__ . '/../includes/header.php';
                         <input type="text" name="ms_title" required maxlength="200" placeholder="e.g. Design Phase" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
                     </div>
                     <div>
-                        <label class="text-xs font-medium" style="color:var(--color-text-secondary)">Amount ($) <span class="text-red-500">*</span></label>
+                        <label class="text-xs font-medium" style="color:var(--color-text-secondary)">Amount (MMK) <span class="text-red-500">*</span></label>
                         <input type="number" name="ms_amount" step="0.01" min="0.01" required placeholder="0.00" class="w-full px-3 py-2 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
                     </div>
                 </div>
@@ -1030,7 +1109,7 @@ require __DIR__ . '/../includes/header.php';
                             <option value="">Select a freelancer</option>
                             <?php foreach ($accepted_freelancers as $af): ?>
                                 <?php $rem = max(0, $job['budget'] - $af['current_milestone_total']); ?>
-                                <option value="<?= (int) $af['freelancer_id'] ?>" data-remaining="<?= (float) $rem ?>"><?= e($af['full_name']) ?> (Remaining Budget: $<?= number_format($rem, 2) ?>)</option>
+                                <option value="<?= (int) $af['freelancer_id'] ?>" data-remaining="<?= (float) $rem ?>"><?= e($af['full_name']) ?> (Remaining Budget: <?= number_format($rem, 2) ?> MMK)</option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -1221,9 +1300,48 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="space-y-3 mb-4">
                 <?php if (!empty($assignments)): ?>
                     <?php foreach ($assignments as $asgn): ?>
-                    <div class="flex justify-between items-center gap-2 p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
-                        <p class="text-sm font-bold text-gray-900 dark:text-white break-words"><?= e($asgn['full_name']) ?></p>
-                        <div class="flex-shrink-0"><?= status_badge($asgn['status']) ?></div>
+                    <div class="flex flex-col gap-3 p-4 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                        <div class="flex justify-between items-center gap-2">
+                            <p class="text-sm font-bold text-gray-900 dark:text-white break-words"><?= e($asgn['full_name']) ?></p>
+                            <div class="flex-shrink-0"><?= status_badge($asgn['status']) ?></div>
+                        </div>
+                        <?php if (empty($milestones) && in_array($asgn['status'], ['submitted', 'completed']) && !empty($asgn['submission'])): ?>
+                            <div class="mt-2 p-3 rounded-lg border" style="background:var(--color-card);border-color:var(--color-border)">
+                                <h4 class="text-xs font-bold uppercase tracking-wider mb-2" style="color:var(--color-text-muted)">Submission Details</h4>
+                                <?php if ($asgn['submission']['notes']): ?>
+                                    <p class="text-sm mb-2" style="color:var(--color-text-primary)"><?= nl2br(e($asgn['submission']['notes'])) ?></p>
+                                <?php endif; ?>
+                                <?php if ($asgn['submission']['file_path']): ?>
+                                    <a href="<?= e(base_url('uploads/attachments/' . $asgn['submission']['file_path'])) ?>" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 transition-colors">
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                        Download File
+                                    </a>
+                                <?php endif; ?>
+                                
+                                <?php if ($asgn['status'] === 'submitted' && $asgn['submission']['sub_status'] === 'pending'): ?>
+                                    <div class="mt-3 flex gap-2">
+                                        <form method="POST" class="flex-1">
+                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                            <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                            <input type="hidden" name="action" value="complete_payment">
+                                            <input type="hidden" name="assignment_id" value="<?= (int) $asgn['id'] ?>">
+                                            <button type="submit" class="w-full inline-flex justify-center items-center gap-1 px-3 py-2 rounded shadow-sm text-xs font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669)" onclick="return confirm('Approve work and process payment?')">
+                                                Approve & Pay
+                                            </button>
+                                        </form>
+                                        <form method="POST" class="flex-1">
+                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                            <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                            <input type="hidden" name="action" value="request_revision">
+                                            <input type="hidden" name="assignment_id" value="<?= (int) $asgn['id'] ?>">
+                                            <button type="submit" class="w-full inline-flex justify-center items-center gap-1 px-3 py-2 rounded text-xs font-bold transition-all" style="border:1px solid var(--color-border);color:var(--color-text-secondary)" onclick="return confirm('Request revision?')">
+                                                Revision
+                                            </button>
+                                        </form>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                 <?php else: ?>
@@ -1244,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="space-y-3">
                 <div class="flex justify-between items-center">
                     <span class="text-sm text-gray-500 dark:text-gray-400">Budget</span>
-                    <span class="text-sm font-semibold text-gray-900 dark:text-white">$<?= number_format((float) $job['budget'], 2) ?></span>
+                    <span class="text-sm font-semibold text-gray-900 dark:text-white"><?= number_format((float) $job['budget'], 2) ?> MMK</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span class="text-sm text-gray-500 dark:text-gray-400">Deadline</span>

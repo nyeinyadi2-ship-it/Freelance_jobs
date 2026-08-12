@@ -195,6 +195,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
         }
+    } elseif ($ms_action === 'submit_fixed_task') {
+        $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
+        $st = $conn->prepare("SELECT id, job_id, status FROM assignments WHERE id = ? AND freelancer_id = ? AND status IN ('assigned', 'working')");
+        $st->bind_param('ii', $assignment_id, $fl_freelancer_id);
+        $st->execute();
+        $assignment = $st->get_result()->fetch_assoc();
+        $st->close();
+
+        if ($assignment) {
+            $submission_note = trim($_POST['submission_note'] ?? '');
+            $submission_file = null;
+
+            if (!empty($_FILES['submission_file']['name'])) {
+                $submission_file = upload_attachment($_FILES['submission_file']);
+                if ($submission_file === null) {
+                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 10MB.');
+                    redirect('freelancer/my_tasks.php');
+                }
+            }
+
+            if ($submission_note === '' && $submission_file === null) {
+                set_flash('error', 'Please provide a submission note or upload a file.');
+                redirect('freelancer/my_tasks.php');
+            }
+
+            $conn->begin_transaction();
+            try {
+                // Update assignment status
+                $st = $conn->prepare("UPDATE assignments SET status = 'submitted' WHERE id = ?");
+                $st->bind_param('i', $assignment_id);
+                $st->execute();
+                $st->close();
+
+                // Update job status
+                $st = $conn->prepare("UPDATE jobs SET status = 'submitted' WHERE id = ?");
+                $st->bind_param('i', $assignment['job_id']);
+                $st->execute();
+                $st->close();
+
+                // Insert into submissions
+                $file_for_db = $submission_file ?? null;
+                $st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, file_path, notes, status) VALUES (?, ?, ?, ?, 'pending')");
+                $st->bind_param('iiss', $assignment_id, $fl_freelancer_id, $file_for_db, $submission_note);
+                $st->execute();
+                $st->close();
+
+                $conn->commit();
+
+                // Notify company
+                try {
+                    $ns = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.id=?");
+                    $ns->bind_param('i', $assignment['job_id']);
+                    $ns->execute();
+                    $ni = $ns->get_result()->fetch_assoc();
+                    $ns->close();
+                    if ($ni) {
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for " . $ni['title'], 'company/view_applications.php?id=' . $assignment['job_id']);
+                    }
+                } catch (Exception $ne) {
+                    error_log("Notification failed: " . $ne->getMessage());
+                }
+
+                set_flash('success', 'Work submitted for review!');
+            } catch (Exception $e) {
+                $conn->rollback();
+                if ($submission_file !== null) {
+                    delete_attachment($submission_file);
+                }
+                set_flash('error', 'Failed to submit work.');
+            }
+        } else {
+            set_flash('error', 'Task not found or already submitted.');
+        }
     }
     redirect('freelancer/my_tasks.php');
 }
@@ -311,7 +384,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <?php endif; ?>
 
                 <div class="flex items-center gap-4 text-sm mb-4">
-                    <span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600">$<?= number_format((float) $task['budget'], 2) ?></strong></span>
+                    <span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span>
                     <span style="color:var(--color-text-placeholder)">Assigned <?= date('M j, Y', strtotime($task['assigned_at'])) ?></span>
                 </div>
 
@@ -343,7 +416,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-2">
-                                        <span class="text-sm font-bold" style="color:#f59e0b">$<?= number_format((float) $ms['amount'], 2) ?></span>
+                                        <span class="text-sm font-bold" style="color:#f59e0b"><?= number_format((float) $ms['amount'], 2) ?> MMK</span>
                                         <span class="ms-status <?= $status_class ?>"><?= $status_labels[$ms['status']] ?? $ms['status'] ?></span>
                                         <svg class="w-4 h-4 flex-shrink-0" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
                                     </div>
@@ -412,6 +485,48 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         </div>
                         <?php endforeach; ?>
                     </div>
+                </div>
+                <?php else: ?>
+                <div class="pt-4 border-t" style="border-color:var(--color-border)">
+                    <h3 class="text-sm font-bold mb-4" style="color:var(--color-text-primary)">Assignment Delivery</h3>
+                    
+                    <?php if ($task['assignment_status'] === 'working' || $task['assignment_status'] === 'assigned'): ?>
+                        <div class="p-5 rounded-xl border" style="background:var(--color-bg);border-color:var(--color-border)">
+                            <h4 class="text-sm font-semibold mb-2" style="color:var(--color-text-primary)">Submit Your Work</h4>
+                            <p class="text-xs mb-4" style="color:var(--color-text-secondary)">Please provide your completed work or a link to the project files. Add a note explaining what you have done.</p>
+                            
+                            <form method="POST" enctype="multipart/form-data" onsubmit="return confirm('Submit this work for review?')">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="ms_action" value="submit_fixed_task">
+                                <input type="hidden" name="assignment_id" value="<?= (int) $task['assignment_id'] ?>">
+                                
+                                <div class="mb-4">
+                                    <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Submission Note / Message</label>
+                                    <textarea name="submission_note" rows="3" required class="w-full px-3 py-2 rounded-lg text-sm border focus:ring-2 focus:ring-primary-500" style="background:var(--color-card);border-color:var(--color-border);color:var(--color-text-primary)" placeholder="I have completed the requested work..."></textarea>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Attachment (Optional)</label>
+                                    <input type="file" name="submission_file" class="w-full text-sm">
+                                </div>
+                                
+                                <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-lg" style="background:linear-gradient(135deg,#10b981,#059669)">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                    Submit Work
+                                </button>
+                            </form>
+                        </div>
+                    <?php elseif ($task['assignment_status'] === 'submitted'): ?>
+                        <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(139,92,246,0.05);border-color:rgba(139,92,246,0.2)">
+                            <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
+                            <span class="text-sm font-semibold text-purple-600">Work submitted successfully. Awaiting company review.</span>
+                        </div>
+                    <?php elseif ($task['assignment_status'] === 'completed'): ?>
+                        <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(16,185,129,0.05);border-color:rgba(16,185,129,0.2)">
+                            <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                            <span class="text-sm font-semibold text-emerald-600">Project completed and payment processed.</span>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
             </div>

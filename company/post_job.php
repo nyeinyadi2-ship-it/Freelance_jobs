@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ((float) $old['budget'] <= 0) {
             $error = 'Budget must be greater than zero. Please enter a positive amount.';
         } elseif ((float) $old['budget'] < 1) {
-            $error = 'Budget must be at least $1.00.';
+            $error = 'Budget must be at least 1.00 MMK.';
         } elseif ($old['description'] === '') {
             $error = 'Job description is required. Please describe your project.';
         } elseif ($old['requirements'] === '') {
@@ -214,6 +214,12 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 
 <div class="max-w-7xl mx-auto" style="padding-bottom:3rem">
     <!-- Page Header -->
+    <div class="mb-4">
+        <button onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            Back
+        </button>
+    </div>
     <div class="mb-8">
         <div class="flex items-center gap-3 mb-2">
             <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.12))">
@@ -288,7 +294,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div>
-                                    <label class="form-label">Budget ($) <span class="req">*</span></label>
+                                    <label class="form-label">Budget (MMK) <span class="req">*</span></label>
                                     <input type="number" name="budget" step="0.01" min="0.01" required placeholder="0.00" class="form-input" value="<?= e($old['budget']) ?>" oninput="clearFieldError(this); updateMilestoneTotal(); updatePreview()">
                                     <div class="field-error" id="err-budget">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
@@ -535,7 +541,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                         <!-- Category & Budget -->
                         <div class="preview-section" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
                             <span class="preview-tag" id="pvCategory">Category</span>
-                            <span class="preview-budget" id="pvBudget">$0</span>
+                            <span class="preview-budget" id="pvBudget">0 MMK</span>
                         </div>
 
                         <!-- Meta -->
@@ -781,7 +787,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' +
             '<div class="sm:col-span-2"><label class="form-label">Title <span class="req">*</span></label>' +
             '<input type="text" name="ms_title[]" required placeholder="e.g. Design Mockups" class="form-input" oninput="updatePreview()"></div>' +
-            '<div><label class="form-label">Amount ($) <span class="req">*</span></label>' +
+            '<div><label class="form-label">Amount (MMK) <span class="req">*</span></label>' +
             '<input type="number" name="ms_amount[]" step="0.01" min="0.01" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()"></div>' +
             '<div><label class="form-label">Description</label>' +
             '<input type="text" name="ms_desc[]" placeholder="Brief description" class="form-input"></div>' +
@@ -806,7 +812,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         document.querySelectorAll('.milestone-amount').forEach(function(input) {
             total += parseFloat(input.value) || 0;
         });
-        document.getElementById('milestoneTotal').textContent = '$' + total.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('milestoneTotal').textContent = total.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' MMK';
 
         // Update warning message
         var budget = parseFloat(document.querySelector('[name="budget"]').value) || 0;
@@ -848,7 +854,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         catEl.style.opacity = cat ? '1' : '0.5';
 
         var budget = parseFloat(g('budget'));
-        document.getElementById('pvBudget').textContent = budget > 0 ? '$' + budget.toLocaleString('en') : '$0';
+        document.getElementById('pvBudget').textContent = budget > 0 ? budget.toLocaleString('en') + ' MMK' : '0 MMK';
 
         document.getElementById('pvExperience').querySelector('span:last-child').textContent = g('experience_level') || 'Intermediate';
 
@@ -893,7 +899,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         var g = function(n){ var el=f.querySelector('[name="'+n+'"]'); return el?el.value:''; };
         document.getElementById('reviewTitle').textContent = g('title') || '-';
         document.getElementById('reviewCategory').textContent = g('category') || '-';
-        document.getElementById('reviewBudget').textContent = g('budget') ? '$'+parseFloat(g('budget')).toLocaleString('en',{minimumFractionDigits:2}) : '-';
+        document.getElementById('reviewBudget').textContent = g('budget') ? parseFloat(g('budget')).toLocaleString('en',{minimumFractionDigits:2}) + ' MMK' : '-';
         document.getElementById('reviewExp').textContent = g('experience_level');
         document.getElementById('reviewGender').textContent = g('gender_requirement');
         document.getElementById('reviewDeadline').textContent = g('deadline') ? new Date(g('deadline')).toLocaleString() : 'Not set';

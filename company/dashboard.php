@@ -426,7 +426,7 @@ require __DIR__ . '/../includes/header.php';
             <div class="flex items-center justify-between p-3 rounded-lg hover-lift" style="background:var(--color-bg);border:1px solid var(--color-border)">
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-medium truncate" style="color:var(--color-text-primary)"><?= e($job['title']) ?></p>
-                <p class="text-xs" style="color:var(--color-text-muted)">$<?= e(number_format((float) $job['budget'], 2)) ?> &middot; <?= (int) $job['app_count'] ?> applications</p>
+                <p class="text-xs" style="color:var(--color-text-muted)"><?= e(number_format((float) $job['budget'], 2)) ?> MMK &middot; <?= (int) $job['app_count'] ?> applications</p>
               </div>
               <?= status_badge($job['status']) ?>
             </div>
@@ -489,7 +489,7 @@ require __DIR__ . '/../includes/header.php';
           <h3 class="font-semibold mb-1 truncate" style="color:var(--color-text-primary)"><?= e($job['title']) ?></h3>
           <p class="text-sm mb-3 line-clamp-2 flex-1" style="color:var(--color-text-muted)"><?= e(substr($job['description'] ?? '', 0, 120)) ?><?= strlen($job['description'] ?? '') > 120 ? '...' : '' ?></p>
           <div class="flex items-center justify-between pt-3 border-t" style="border-color:var(--color-border)">
-            <span class="text-sm font-bold text-indigo-600">$<?= e(number_format((float) $job['budget'], 2)) ?></span>
+            <span class="text-sm font-bold text-indigo-600"><?= e(number_format((float) $job['budget'], 2)) ?> MMK</span>
             <span class="text-xs" style="color:var(--color-text-placeholder)"><?= (int) $job['app_count'] ?> app<?= $job['app_count'] !== 1 ? 's' : '' ?></span>
           </div>
           <div class="flex gap-2 mt-3">
@@ -567,7 +567,7 @@ require __DIR__ . '/../includes/header.php';
             <?= status_badge($h['status']) ?>
           </div>
           <div class="flex items-center justify-between text-sm pt-3 border-t" style="border-color:var(--color-border)">
-            <span style="color:var(--color-text-muted)">Budget: <strong class="text-indigo-600">$<?= e(number_format((float) $h['budget'], 2)) ?></strong></span>
+            <span style="color:var(--color-text-muted)">Budget: <strong class="text-indigo-600"><?= e(number_format((float) $h['budget'], 2)) ?> MMK</strong></span>
             <span style="color:var(--color-text-placeholder)"><?= date('M j', strtotime($h['assigned_at'])) ?></span>
           </div>
           <?php if ($h['submission_link']): ?>
@@ -657,7 +657,7 @@ require __DIR__ . '/../includes/header.php';
             <tr class="border-b" style="border-color:var(--color-border)">
               <td class="py-3 pr-4 font-medium"><?= e($p['job_title']) ?></td>
               <td class="py-3 pr-4"><?= e($p['full_name']) ?></td>
-              <td class="py-3 pr-4 font-semibold text-indigo-600">$<?= e(number_format((float) $p['amount'], 2)) ?></td>
+              <td class="py-3 pr-4 font-semibold text-indigo-600"><?= e(number_format((float) $p['amount'], 2)) ?> MMK</td>
               <td class="py-3 pr-4"><?= status_badge($p['status']) ?></td>
               <td class="py-3" style="color:var(--color-text-placeholder)"><?= e($p['paid_at'] ?? '—') ?></td>
             </tr>

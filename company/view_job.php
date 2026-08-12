@@ -126,6 +126,12 @@ require __DIR__ . '/../includes/header.php';
     <!-- Hero -->
     <div class="vj-hero">
         <div class="relative z-10">
+            <div class="mb-4">
+                <button onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+                    Back
+                </button>
+            </div>
             <div class="flex items-center gap-3 mb-4">
                 <?php if (!empty($job['logo_image'])): ?>
                     <img src="<?= e(base_url('uploads/images/' . $job['logo_image'])) ?>" alt="" style="width:48px;height:48px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,0.2)">
@@ -171,7 +177,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="grid sm:grid-cols-4 gap-4 mb-6">
         <div class="vj-section" style="text-align:center;margin-bottom:0">
             <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Budget</p>
-            <p style="font-size:1.5rem;font-weight:800;color:#2563eb">$<?= e(number_format((float) $job['budget'], 2)) ?></p>
+            <p style="font-size:1.5rem;font-weight:800;color:#2563eb"><?= e(number_format((float) $job['budget'], 2)) ?> MMK</p>
         </div>
         <div class="vj-section" style="text-align:center;margin-bottom:0">
             <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Positions</p>
@@ -226,7 +232,7 @@ require __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </div>
                         <div class="text-right flex-shrink-0">
-                            <p class="preview-ms-amount">$<?= number_format((float) $ms['amount'], 2) ?></p>
+                            <p class="preview-ms-amount"><?= number_format((float) $ms['amount'], 2) ?> MMK</p>
                             <p style="font-size:0.65rem;color:var(--color-text-muted);text-transform:capitalize"><?= e(ucfirst(str_replace('_', ' ', $ms['status']))) ?></p>
                         </div>
                     </div>

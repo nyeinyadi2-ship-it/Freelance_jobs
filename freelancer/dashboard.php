@@ -192,7 +192,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <p class="text-sm sm:text-base flex flex-wrap items-center gap-1.5 mt-1.5 text-white/80">
                         <span class="inline-flex items-center gap-1"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> <?= e($fl_profile['title'] ?? 'Freelancer') ?></span>
                         <?php if ($fl_profile['location']): ?><span class="w-1 h-1 rounded-full bg-white/40"></span><span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg> <?= e($fl_profile['location']) ?></span><?php endif; ?>
-                        <?php if ($fl_profile['hourly_rate'] !== null): ?><span class="w-1 h-1 rounded-full bg-white/40"></span><span class="font-semibold">$<?= number_format((float) $fl_profile['hourly_rate'], 0) ?>/hr</span><?php endif; ?>
+                        <?php if ($fl_profile['hourly_rate'] !== null): ?><span class="w-1 h-1 rounded-full bg-white/40"></span><span class="font-semibold"><?= number_format((float) $fl_profile['hourly_rate'], 0) ?> MMK/hr</span><?php endif; ?>
                     </p>
                     <div class="flex items-center gap-3 mt-2.5">
                         <span class="inline-flex items-center gap-1.5 text-xs bg-emerald-400/20 px-3 py-1 rounded-lg font-medium"><span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>Available for work</span>
@@ -225,7 +225,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
         </div>
         <div class="stat-card p-5 text-white reveal reveal-d4" style="background:var(--gp)">
             <div class="flex items-center justify-between mb-3"><span class="text-sm font-medium opacity-90">Earnings</span><div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg></div></div>
-            <p class="text-3xl font-extrabold">$<?= number_format($fl_stats['earnings'], 0) ?></p><p class="text-xs mt-1 opacity-70">Total lifetime</p>
+            <p class="text-3xl font-extrabold"><?= number_format($fl_stats['earnings'], 0) ?> MMK</p><p class="text-xs mt-1 opacity-70">Total lifetime</p>
         </div>
     </div>
 </div>
@@ -289,7 +289,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <?php foreach (array_slice($recent_apps, 0, 5) as $app): ?>
                         <div class="flex items-center gap-3 p-3.5 rounded-xl transition-all hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border:1px solid var(--color-border)">
                             <?php if ($app['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $app['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php else: ?><div class="w-10 h-10 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-sm" style="background:rgba(99,102,241,0.1)"><?= strtoupper(mb_substr($app['company_name'], 0, 1)) ?></div><?php endif; ?>
-                            <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($app['company_name']) ?> &middot; $<?= number_format((float) $app['budget'], 0) ?></p></div>
+                            <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($app['company_name']) ?> &middot; <?= number_format((float) $app['budget'], 0) ?> MMK</p></div>
                             <div class="text-right flex-shrink-0"><p class="text-xs mb-1" style="color:var(--color-text-placeholder)"><?= date('M j', strtotime($app['applied_at'])) ?></p><?= status_badge($app['status']) ?></div>
                         </div>
                     <?php endforeach; ?>
@@ -340,7 +340,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                         <div class="p-4 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
                             <div class="flex items-center gap-3 mb-2.5">
                                 <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-8 h-8 rounded-lg object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
-                                <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?> &middot; $<?= number_format((float) $task['budget'], 0) ?></p></div>
+                                <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?> &middot; <?= number_format((float) $task['budget'], 0) ?> MMK</p></div>
                                 <?= status_badge($task['status']) ?>
                             </div>
                             <div class="w-full h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"><div class="progress-bar h-full" style="width:<?= $task['status']==='submitted'?'75':'25' ?>%"></div></div>
@@ -364,7 +364,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <div class="flex items-center gap-2 mb-2"><?php if ($job['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $job['logo_image'])) ?>" alt="" class="w-7 h-7 rounded-lg object-contain border" style="border-color:var(--color-border)"><?php endif; ?><span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e($job['company_name']) ?></span></div>
                     <p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($job['title']) ?></p>
                     <p class="text-xs mt-1 line-clamp-2" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($job['description'] ?? '', 0, 100, '...')) ?></p>
-                    <div class="flex items-center justify-between mt-3 pt-3 border-t" style="border-color:var(--color-border)"><span class="text-sm font-bold text-primary-600">$<?= number_format((float) $job['budget'], 0) ?></span><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-xs font-medium text-primary-600 hover:text-primary-700">Apply &rarr;</a></div>
+                    <div class="flex items-center justify-between mt-3 pt-3 border-t" style="border-color:var(--color-border)"><span class="text-sm font-bold text-primary-600"><?= number_format((float) $job['budget'], 0) ?> MMK</span><a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="text-xs font-medium text-primary-600 hover:text-primary-700">Apply &rarr;</a></div>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -383,7 +383,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                 <div class="glass rounded-2xl p-5 hover-lift">
                     <div class="flex items-center gap-4">
                         <?php if ($app['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $app['logo_image'])) ?>" alt="" class="w-12 h-12 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php else: ?><div class="w-12 h-12 rounded-xl flex items-center justify-center text-indigo-600 font-bold border" style="background:rgba(99,102,241,0.1);border-color:var(--color-border)"><?= strtoupper(mb_substr($app['company_name'], 0, 1)) ?></div><?php endif; ?>
-                        <div class="flex-1 min-w-0"><p class="font-semibold" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p><p class="text-sm" style="color:var(--color-text-muted)"><?= e($app['company_name']) ?> &middot; $<?= number_format((float) $app['budget'], 2) ?></p><p class="text-xs" style="color:var(--color-text-placeholder)">Applied <?= date('M j, Y', strtotime($app['applied_at'])) ?></p></div>
+                        <div class="flex-1 min-w-0"><p class="font-semibold" style="color:var(--color-text-primary)"><?= e($app['title']) ?></p><p class="text-sm" style="color:var(--color-text-muted)"><?= e($app['company_name']) ?> &middot; <?= number_format((float) $app['budget'], 2) ?> MMK</p><p class="text-xs" style="color:var(--color-text-placeholder)">Applied <?= date('M j, Y', strtotime($app['applied_at'])) ?></p></div>
                         <?= status_badge($app['status']) ?>
                     </div>
                 </div>
@@ -433,7 +433,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <div class="flex flex-wrap items-center gap-4 text-sm mb-5">
                         <span class="inline-flex items-center gap-1.5" style="color:var(--color-text-muted)">
                             <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
-                            Budget: <strong class="text-emerald-600 dark:text-emerald-400">$<?= number_format((float) $req['budget'], 2) ?></strong>
+                            Budget: <strong class="text-emerald-600 dark:text-emerald-400"><?= number_format((float) $req['budget'], 2) ?> MMK</strong>
                         </span>
                         <?php if ($req['deadline']): ?>
                             <span class="inline-flex items-center gap-1.5" style="color:var(--color-text-muted)">
@@ -462,7 +462,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                                 <?php foreach ($req['milestones'] as $ms): ?>
                                     <div class="flex items-center justify-between text-xs">
                                         <span class="text-gray-600 dark:text-gray-300"><?= e($ms['title']) ?></span>
-                                        <span class="font-semibold text-indigo-700 dark:text-indigo-300">$<?= number_format((float) $ms['amount'], 2) ?></span>
+                                        <span class="font-semibold text-indigo-700 dark:text-indigo-300"><?= number_format((float) $ms['amount'], 2) ?> MMK</span>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -519,7 +519,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                         <?= status_badge($task['status']) ?>
                     </div>
                     <p class="text-sm mb-4 leading-relaxed" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($task['description'] ?? '', 0, 200, '...')) ?></p>
-                    <div class="flex items-center gap-4 text-sm mb-4"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600">$<?= number_format((float) $task['budget'], 2) ?></strong></span><span style="color:var(--color-text-placeholder)">Assigned <?= date('M j', strtotime($task['assigned_at'])) ?></span></div>
+                    <div class="flex items-center gap-4 text-sm mb-4"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span><span style="color:var(--color-text-placeholder)">Assigned <?= date('M j', strtotime($task['assigned_at'])) ?></span></div>
                     <div class="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden mb-4"><div class="progress-bar h-full" style="width:<?= $task['status']==='submitted'?'75':'25' ?>%"></div></div>
                     <?php if ($task['status'] === 'assigned'): ?>
                         <a href="<?= e(base_url('freelancer/my_tasks.php')) ?>" class="btn-grad inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl text-white">Submit Work</a>
@@ -546,7 +546,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                         <div class="flex-1 min-w-0"><p class="font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p></div>
                         <?= status_badge('completed') ?>
                     </div>
-                    <div class="flex items-center justify-between text-sm pt-3 border-t" style="border-color:var(--color-border)"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600">$<?= number_format((float) $task['budget'], 2) ?></strong></span><?php if ($task['paid_at']): ?><span class="flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Paid <?= date('M j', strtotime($task['paid_at'])) ?></span><?php endif; ?></div>
+                    <div class="flex items-center justify-between text-sm pt-3 border-t" style="border-color:var(--color-border)"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span><?php if ($task['paid_at']): ?><span class="flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Paid <?= date('M j', strtotime($task['paid_at'])) ?></span><?php endif; ?></div>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -557,7 +557,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
 <div class="dash-section" id="tab-earnings">
     <div class="glass rounded-2xl p-6 mb-6 relative overflow-hidden text-white" style="background:var(--gp)">
         <div class="absolute top-0 right-0 w-40 h-40 opacity-10"><svg class="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
-        <p class="text-sm opacity-80 font-medium">Total Earnings</p><p class="text-4xl font-extrabold mt-1">$<?= number_format($fl_stats['earnings'], 2) ?></p><p class="text-xs opacity-60 mt-1"><?= count($earnings) ?> completed payment<?= count($earnings) !== 1 ? 's' : '' ?></p>
+        <p class="text-sm opacity-80 font-medium">Total Earnings</p><p class="text-4xl font-extrabold mt-1"><?= number_format($fl_stats['earnings'], 2) ?> MMK</p><p class="text-xs opacity-60 mt-1"><?= count($earnings) ?> completed payment<?= count($earnings) !== 1 ? 's' : '' ?></p>
     </div>
     <?php if (empty($earnings)): ?>
         <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)"><p>No earnings recorded yet.</p></div>
@@ -565,7 +565,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
         <div class="glass rounded-2xl overflow-x-auto">
             <table class="w-full text-sm">
                 <thead><tr class="border-b text-left" style="border-color:var(--color-border);color:var(--color-text-muted)"><th class="p-4">Job</th><th class="p-4">Company</th><th class="p-4">Amount</th><th class="p-4">Status</th><th class="p-4">Date</th></tr></thead>
-                <tbody><?php foreach ($earnings as $e): ?><tr class="border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border-color:var(--color-border)"><td class="p-4 font-medium" style="color:var(--color-text-primary)"><?= e($e['job_title']) ?></td><td class="p-4" style="color:var(--color-text-muted)"><?= e($e['company_name']) ?></td><td class="p-4 font-bold text-emerald-600">$<?= number_format((float) $e['amount'], 2) ?></td><td class="p-4"><?= status_badge($e['status']) ?></td><td class="p-4" style="color:var(--color-text-placeholder)"><?= e($e['paid_at'] ?? '—') ?></td></tr><?php endforeach; ?></tbody>
+                <tbody><?php foreach ($earnings as $e): ?><tr class="border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border-color:var(--color-border)"><td class="p-4 font-medium" style="color:var(--color-text-primary)"><?= e($e['job_title']) ?></td><td class="p-4" style="color:var(--color-text-muted)"><?= e($e['company_name']) ?></td><td class="p-4 font-bold text-emerald-600"><?= number_format((float) $e['amount'], 2) ?> MMK</td><td class="p-4"><?= status_badge($e['status']) ?></td><td class="p-4" style="color:var(--color-text-placeholder)"><?= e($e['paid_at'] ?? '—') ?></td></tr><?php endforeach; ?></tbody>
             </table>
         </div>
     <?php endif; ?>

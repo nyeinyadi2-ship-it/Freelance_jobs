@@ -122,6 +122,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $company_name    = trim($_POST['company_name'] ?? '');
                         $website         = trim($_POST['website'] ?? '');
                         $phone           = trim($_POST['phone'] ?? '');
+
+                        if ($phone !== '' && !preg_match('/^09[0-9]{9}$/', $phone)) {
+                            throw new Exception('Invalid phone number format. Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx).');
+                        }
                         $location        = trim($_POST['location'] ?? '');
                         $description     = trim($_POST['description'] ?? '');
                         $established_raw = (int) ($_POST['established_year'] ?? 0);
@@ -634,7 +638,7 @@ require __DIR__ . '/../includes/header.php';
                 <div class="grid-2">
                   <div>
                     <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Phone Number') ?></label>
-                    <input type="tel" name="phone" class="auth-input" placeholder="+1 234 567 8900" value="<?= e($_POST['phone'] ?? '') ?>">
+                    <input type="tel" name="phone" class="auth-input" placeholder="09xxxxxxxxx" value="<?= e($_POST['phone'] ?? '') ?>" pattern="^09[0-9]{9}$" maxlength="11" title="Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx)" oninvalid="this.setCustomValidity('Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx)')" oninput="this.setCustomValidity('')">
                   </div>
                   <div>
                     <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Website') ?></label>

@@ -744,8 +744,8 @@ html.dark .ff-post-cta {
                             <input type="range" id="ff-rate-max" min="0" max="200" value="<?= $max_rate !== null ? e((string) $max_rate) : '200' ?>" oninput="ffUpdateRange()">
                         </div>
                         <div class="ff-rng-labels">
-                            <span id="ff-rate-min-label">$<?= $min_rate !== null ? e((string) $min_rate) : '0' ?></span>
-                            <span id="ff-rate-max-label">$<?= $max_rate !== null ? e((string) $max_rate) : '200' ?>+</span>
+                            <span id="ff-rate-min-label"><?= $min_rate !== null ? e((string) $min_rate) : '0' ?> MMK</span>
+                            <span id="ff-rate-max-label"><?= $max_rate !== null ? e((string) $max_rate) : '200' ?> MMK+</span>
                         </div>
                         <input type="hidden" name="min_rate" id="ff-rate-min-hidden" value="<?= $min_rate !== null ? e((string) $min_rate) : '' ?>">
                         <input type="hidden" name="max_rate" id="ff-rate-max-hidden" value="<?= $max_rate !== null ? e((string) $max_rate) : '' ?>">
@@ -910,7 +910,7 @@ html.dark .ff-post-cta {
                             </div>
                             <?php if ($fl['hourly_rate']): ?>
                                 <div class="ff-fl-meta-item rate">
-                                    $<?= e(number_format((float) $fl['hourly_rate'], 0)) ?> <span>/hr</span>
+                                    <?= e(number_format((float) $fl['hourly_rate'], 0)) ?> MMK <span>/hr</span>
                                 </div>
                             <?php endif; ?>
                             <div class="ff-fl-meta-item" style="color:var(--ff-green);font-weight:500;font-size:0.75rem;">
@@ -937,8 +937,8 @@ function ffUpdateRange() {
     var fill = document.getElementById('ff-rate-fill');
     fill.style.left = pct1 + '%';
     fill.style.width = (pct2 - pct1) + '%';
-    document.getElementById('ff-rate-min-label').textContent = '$' + min;
-    document.getElementById('ff-rate-max-label').textContent = '$' + max + '+';
+    document.getElementById('ff-rate-min-label').textContent = min + ' MMK';
+    document.getElementById('ff-rate-max-label').textContent = max + '+' + ' MMK';
     document.getElementById('ff-rate-min-hidden').value = min > 0 ? min : '';
     document.getElementById('ff-rate-max-hidden').value = max < 200 ? max : '';
 }

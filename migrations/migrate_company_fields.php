@@ -35,7 +35,7 @@ if (!column_exists($conn, 'companies', 'company_size')) {
 
 // Also add phone to companies if missing (it exists in schema but let's be safe)
 if (!column_exists($conn, 'companies', 'phone')) {
-    $conn->query("ALTER TABLE companies ADD COLUMN phone VARCHAR(20) DEFAULT NULL AFTER user_id");
+    $conn->query("ALTER TABLE companies ADD COLUMN phone VARCHAR(11) DEFAULT NULL AFTER user_id");
     $messages[] = ['type' => 'success', 'text' => '✅ Added column: companies.phone'];
 } else {
     $messages[] = ['type' => 'info', 'text' => 'ℹ️ Column already exists: companies.phone'];

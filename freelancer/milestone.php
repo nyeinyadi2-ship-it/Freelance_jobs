@@ -279,10 +279,12 @@ $draft_enabled = ($milestone['status'] === 'draft');
 
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-12">
     <!-- Back link -->
-    <a href="<?= e(base_url('freelancer/my_tasks.php')) ?>" class="inline-flex items-center gap-1.5 text-sm font-medium mb-4 transition-colors" style="color:var(--color-text-muted)">
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-        Back to My Tasks
-    </a>
+    <div class="mb-4">
+        <button type="button" onclick="history.back()" class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors dark:text-gray-300 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            Back
+        </button>
+    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Main Content -->
@@ -373,7 +375,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                         </div>
                         <div>
                             <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Ready to Start</h2>
-                            <p class="text-xs" style="color:var(--color-text-muted)">Escrow is active — $<?= number_format((float) $milestone['amount'], 2) ?> held</p>
+                            <p class="text-xs" style="color:var(--color-text-muted)">Escrow is active — <?= number_format((float) $milestone['amount'], 2) ?> MMK held</p>
                         </div>
                     </div>
                     <p class="text-sm mb-4" style="color:var(--color-text-secondary)">This milestone has been funded via Escrow. Click below to begin working.</p>
@@ -554,7 +556,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                             <?php endif; ?>
                         </div>
                     </div>
-                    <p class="text-sm text-emerald-600">Payment of $<?= number_format((float) $milestone['amount'], 2) ?> has been released from Escrow.</p>
+                    <p class="text-sm text-emerald-600">Payment of <?= number_format((float) $milestone['amount'], 2) ?> MMK has been released from Escrow.</p>
                 </div>
             <?php endif; ?>
         </div>
@@ -567,7 +569,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                 <div class="space-y-3">
                     <div class="flex justify-between text-sm">
                         <span style="color:var(--color-text-muted)">Amount</span>
-                        <span class="font-bold text-lg" style="color:#f59e0b">$<?= number_format((float) $milestone['amount'], 2) ?></span>
+                        <span class="font-bold text-lg" style="color:#f59e0b"><?= number_format((float) $milestone['amount'], 2) ?> MMK</span>
                     </div>
                     <div class="h-px" style="background:var(--color-border)"></div>
                     <div class="flex justify-between text-sm">

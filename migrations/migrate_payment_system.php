@@ -1,0 +1,50 @@
+<?php
+require_once __DIR__ . '/../config/db.php';
+
+try {
+    $conn->begin_transaction();
+
+    // 1. Add reserved_balance to users
+    $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS reserved_balance DECIMAL(10,2) DEFAULT '0.00'");
+
+    // 2. Update assignments status enum
+    $conn->query("ALTER TABLE assignments MODIFY COLUMN status ENUM('assigned','working','submitted','completed','rejected', 'pending','accepted','revision_requested','approved','payment_pending','paid','cancelled') DEFAULT 'assigned'");
+
+    // 3. Update milestones status enum
+    $conn->query("ALTER TABLE milestones MODIFY COLUMN status ENUM('draft','funded','in_progress','submitted','approved','revision_requested', 'working','payment_pending','paid','completed') DEFAULT 'draft'");
+
+    // 4. Update jobs status enum
+    $conn->query("ALTER TABLE jobs MODIFY COLUMN status ENUM('pending','open','in_progress','submitted','completed','position_filled','expired','closed','approved','rejected', 'payment_pending','paid','cancelled') DEFAULT 'pending'");
+
+    // 5. Payments table updates
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS company_id INT DEFAULT NULL");
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS freelancer_id INT DEFAULT NULL");
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS milestone_id INT DEFAULT NULL");
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'MMK'");
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT NULL");
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(100) DEFAULT NULL");
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+    $conn->query("ALTER TABLE payments MODIFY COLUMN status ENUM('pending','paid', 'failed') DEFAULT 'pending'");
+
+    // 6. Create freelancer_payment_settings
+    $conn->query("CREATE TABLE IF NOT EXISTS freelancer_payment_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        freelancer_id INT NOT NULL,
+        method ENUM('kpay', 'wavepay', 'bank_transfer') NOT NULL,
+        account_name VARCHAR(100) NOT NULL,
+        account_number VARCHAR(100) NOT NULL,
+        bank_name VARCHAR(100) DEFAULT NULL,
+        is_default TINYINT(1) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_freelancer_method (freelancer_id, method)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+    $conn->commit();
+    echo "Migration completed successfully.\n";
+} catch (Exception $e) {
+    $conn->rollback();
+    echo "Migration failed: " . $e->getMessage() . "\n";
+}

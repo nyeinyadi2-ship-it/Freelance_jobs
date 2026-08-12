@@ -88,22 +88,22 @@ function withdraw_status_badge(string $status): string
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Available Balance</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($earnings_stats['available_balance'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['available_balance'], 2) ?> MMK</p>
                     <p class="text-[10px] text-white/40 mt-1">Ready to withdraw</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Pending Balance</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($earnings_stats['pending_balance'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['pending_balance'], 2) ?> MMK</p>
                     <p class="text-[10px] text-white/40 mt-1">In withdrawal review</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Lifetime Earnings</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($earnings_stats['total_earnings'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['total_earnings'], 2) ?> MMK</p>
                     <p class="text-[10px] text-white/40 mt-1">Total received</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Total Withdrawn</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($earnings_stats['total_withdrawn'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['total_withdrawn'], 2) ?> MMK</p>
                     <p class="text-[10px] text-white/40 mt-1">Paid out</p>
                 </div>
             </div>
@@ -176,7 +176,7 @@ function withdraw_status_badge(string $status): string
                             <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm" style="color:var(--color-text-secondary)">
                                 <span class="flex items-center gap-1.5">
                                     <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    <span class="font-bold text-indigo-600 text-lg">$<?= number_format((float) $ep['amount'], 2) ?></span>
+                                    <span class="font-bold text-indigo-600 text-lg"><?= number_format((float) $ep['amount'], 2) ?> MMK</span>
                                 </span>
                                 <span class="flex items-center gap-1.5">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -243,7 +243,7 @@ function withdraw_status_badge(string $status): string
                         </div>
                     </div>
                     <div class="flex items-center justify-between mb-3">
-                        <span class="text-xl font-extrabold <?= $cp['escrow_status'] === 'released' ? 'text-emerald-600' : 'text-red-500' ?>">$<?= number_format((float) $cp['amount'], 2) ?></span>
+                        <span class="text-xl font-extrabold <?= $cp['escrow_status'] === 'released' ? 'text-emerald-600' : 'text-red-500' ?>"><?= number_format((float) $cp['amount'], 2) ?> MMK</span>
                         <?= escrow_status_badge($cp['escrow_status']) ?>
                     </div>
                     <div class="flex items-center justify-between pt-3 border-t" style="border-color:var(--color-border)">
@@ -293,7 +293,7 @@ function withdraw_status_badge(string $status): string
                 <tbody>
                     <?php foreach ($withdrawals as $w): ?>
                         <tr class="border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border-color:var(--color-border)">
-                            <td class="p-4 font-bold text-primary-600">$<?= number_format((float) $w['amount'], 2) ?></td>
+                            <td class="p-4 font-bold text-primary-600"><?= number_format((float) $w['amount'], 2) ?> MMK</td>
                             <td class="p-4" style="color:var(--color-text-secondary)">
                                 <span class="flex items-center gap-1.5">
                                     <?php if ($w['payment_method'] === 'Bank Transfer'): ?>
@@ -333,7 +333,7 @@ function withdraw_status_badge(string $status): string
                 </div>
                 <div>
                     <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Request Withdrawal</h2>
-                    <p class="text-xs" style="color:var(--color-text-muted)">Available: <span class="font-bold text-emerald-600">$<?= number_format($earnings_stats['available_balance'], 2) ?></span></p>
+                    <p class="text-xs" style="color:var(--color-text-muted)">Available: <span class="font-bold text-emerald-600"><?= number_format($earnings_stats['available_balance'], 2) ?> MMK</span></p>
                 </div>
             </div>
 
@@ -341,41 +341,38 @@ function withdraw_status_badge(string $status): string
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
 
                 <div class="mb-4">
-                    <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">Amount ($)</label>
+                    <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">Amount (MMK)</label>
                     <input type="number" name="amount" step="0.01" min="1" max="<?= number_format($earnings_stats['available_balance'], 2, '.', '') ?>" required
                            class="w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                            style="background:var(--color-bg);border-color:var(--color-border);color:var(--color-text-primary)"
                            placeholder="0.00">
-                    <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Minimum: $1.00 &middot; Maximum: $<?= number_format($earnings_stats['available_balance'], 2) ?></p>
+                    <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Minimum: 1.00 MMK &middot; Maximum: <?= number_format($earnings_stats['available_balance'], 2) ?> MMK</p>
                 </div>
 
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">Payment Method</label>
-                    <select name="payment_method" required
-                            class="w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                            style="background:var(--color-bg);border-color:var(--color-border);color:var(--color-text-primary)">
-                        <option value="">Select method...</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
-                        <option value="PayPal">PayPal</option>
-                        <option value="Mobile Money">Mobile Money</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-
-                <div class="mb-6">
-                    <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">Payment Details</label>
-                    <textarea name="payment_details" rows="3" required
-                              class="w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none"
-                              style="background:var(--color-bg);border-color:var(--color-border);color:var(--color-text-primary)"
-                              placeholder="Enter account number, email, or other payment details..."></textarea>
-                    <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Provide the details needed to process your payment.</p>
-                </div>
+                <?php if (empty($fl_profile['payment_method'])): ?>
+                    <div class="mb-6 p-4 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-xl text-sm border border-yellow-200 dark:border-yellow-800/40">
+                        You haven't configured a payment method yet.<br>
+                        <a href="profile.php?edit=1" class="font-bold underline text-indigo-600 dark:text-indigo-400 mt-2 inline-block">Configure Payment Settings</a>
+                    </div>
+                <?php else: ?>
+                    <div class="mb-6">
+                        <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">Saved Payment Method</label>
+                        <div class="w-full px-4 py-3 rounded-xl border text-sm font-medium bg-gray-50 dark:bg-gray-800/50" style="border-color:var(--color-border);color:var(--color-text-secondary)">
+                            <strong class="text-gray-900 dark:text-gray-100"><?= e(ucwords(str_replace('_', ' ', $fl_profile['payment_method']))) ?></strong><br>
+                            <?= e($fl_profile['payment_account_name']) ?> &bull; <?= e($fl_profile['payment_account_number']) ?>
+                            <?php if ($fl_profile['payment_method'] === 'bank_transfer' && !empty($fl_profile['payment_bank_name'])): ?>
+                                <br><?= e($fl_profile['payment_bank_name']) ?>
+                            <?php endif; ?>
+                        </div>
+                        <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Change this in your <a href="profile.php?edit=1" class="text-indigo-500 hover:underline">Profile Settings</a>.</p>
+                    </div>
+                <?php endif; ?>
 
                 <div id="withdraw-error" class="hidden mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-sm text-red-600 dark:text-red-400"></div>
                 <div id="withdraw-success" class="hidden mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 text-sm text-emerald-600 dark:text-emerald-400"></div>
 
-                <button type="submit" id="withdraw-submit-btn"
-                        class="w-full btn-grad inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/25">
+                <button type="submit" id="withdraw-submit-btn" <?= empty($fl_profile['payment_method']) ? 'disabled' : '' ?>
+                        class="w-full <?= empty($fl_profile['payment_method']) ? 'bg-gray-400 cursor-not-allowed' : 'btn-grad hover:-translate-y-0.5' ?> inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/25 transition-all">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
                     Submit Withdrawal Request
                 </button>
@@ -463,15 +460,13 @@ function submitWithdrawal(e) {
     var data = {
         action: 'request_withdrawal',
         csrf_token: form.csrf_token.value,
-        amount: parseFloat(form.amount.value),
-        payment_method: form.payment_method.value,
-        payment_details: form.payment_details.value
+        amount: parseFloat(form.amount.value)
     };
 
     btn.disabled = true;
     btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Processing...';
 
-    fetch('<?= e(base_url('api/escrow.php')) ?>', {
+    fetch('<?= e(base_url('api/withdraw.php')) ?>', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify(data)
@@ -505,7 +500,7 @@ function openInvoiceModal(data) {
     document.getElementById('inv-number').textContent = invNum;
     document.getElementById('inv-company').textContent = data.company_name;
     document.getElementById('inv-date').textContent = dateStr;
-    document.getElementById('inv-amount').textContent = '$' + parseFloat(data.amount).toFixed(2);
+    document.getElementById('inv-amount').textContent = parseFloat(data.amount).toFixed(2) + ' MMK';
     var statusEl = document.getElementById('inv-status');
     if (data.escrow_status === 'released') {
         statusEl.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Paid</span>';

@@ -5,16 +5,12 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 
 $payments = [];
 $stmt = $conn->prepare("
-    SELECT p.*, c.company_name, f.full_name AS freelancer_name, a.job_id, j.title AS job_title
-    FROM payments p
-    JOIN companies c ON p.company_id = c.id
-    JOIN freelancers f ON p.freelancer_id = f.id
-    JOIN assignments a ON p.assignment_id = a.id
-    JOIN jobs j ON a.job_id = j.id
-    WHERE p.freelancer_id = ?
-    ORDER BY p.created_at DESC
+    SELECT id, amount, type, payment_method, transaction_id, status, created_at
+    FROM wallet_transactions
+    WHERE user_id = ?
+    ORDER BY created_at DESC
 ");
-$stmt->bind_param('i', $fl_freelancer_id);
+$stmt->bind_param('i', $user['user_id']);
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
@@ -43,19 +39,19 @@ $stats = get_freelancer_earnings_stats($conn, $fl_freelancer_id);
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Available Balance</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($stats['available_balance'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($stats['available_balance'], 2) ?> MMK</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Pending Balance</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($stats['pending_balance'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($stats['pending_balance'], 2) ?> MMK</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Lifetime Earnings</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($stats['total_earnings'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($stats['total_earnings'], 2) ?> MMK</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Total Withdrawn</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold">$<?= number_format($stats['total_withdrawn'], 2) ?></p>
+                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($stats['total_withdrawn'], 2) ?> MMK</p>
                 </div>
             </div>
         </div>
@@ -73,9 +69,8 @@ $stats = get_freelancer_earnings_stats($conn, $fl_freelancer_id);
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b text-left" style="border-color:var(--color-border);color:var(--color-text-muted)">
-                        <th class="p-4 font-semibold">Payment ID</th>
-                        <th class="p-4 font-semibold">Project</th>
-                        <th class="p-4 font-semibold">Client</th>
+                        <th class="p-4 font-semibold">Transaction ID</th>
+                        <th class="p-4 font-semibold">Type</th>
                         <th class="p-4 font-semibold">Amount</th>
                         <th class="p-4 font-semibold">Method</th>
                         <th class="p-4 font-semibold">Date</th>
@@ -83,27 +78,27 @@ $stats = get_freelancer_earnings_stats($conn, $fl_freelancer_id);
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($payments as $p): ?>
+                    <?php foreach ($payments as $p): 
+                        $is_credit = in_array($p['type'], ['deposit', 'payment_received', 'refund']);
+                        $amount_class = $is_credit ? 'text-emerald-600' : 'text-red-500';
+                        $amount_sign = $is_credit ? '+' : '-';
+                    ?>
                         <tr class="border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border-color:var(--color-border)">
-                            <td class="p-4 font-mono text-xs" style="color:var(--color-text-muted)">#<?= $p['id'] ?></td>
-                            <td class="p-4 font-medium" style="color:var(--color-text-primary)"><?= e($p['job_title'] ?? '—') ?></td>
-                            <td class="p-4" style="color:var(--color-text-secondary)"><?= e($p['company_name'] ?? '—') ?></td>
-                            <td class="p-4 font-bold text-emerald-600">$<?= number_format((float) $p['amount'], 2) ?></td>
+                            <td class="p-4 font-mono text-xs" style="color:var(--color-text-muted)"><?= e($p['transaction_id'] ?? '#'.$p['id']) ?></td>
+                            <td class="p-4 font-medium" style="color:var(--color-text-primary)"><?= e(ucwords(str_replace('_', ' ', $p['type']))) ?></td>
+                            <td class="p-4 font-bold <?= $amount_class ?>"><?= $amount_sign ?><?= number_format((float) $p['amount'], 2) ?> MMK</td>
                             <td class="p-4" style="color:var(--color-text-muted)"><?= e(ucwords(str_replace('_', ' ', $p['payment_method'] ?? '—'))) ?></td>
-                            <td class="p-4" style="color:var(--color-text-placeholder)"><?= date('M j, Y', strtotime($p['funded_at'] ?? $p['created_at'])) ?></td>
+                            <td class="p-4" style="color:var(--color-text-placeholder)"><?= date('M j, Y', strtotime($p['created_at'])) ?></td>
                             <td class="p-4"><?php
-                                $s = $p['escrow_status'] ?? $p['status'] ?? 'pending';
+                                $s = $p['status'] ?? 'pending';
                                 $colors = [
-                                    'funded' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
-                                    'in_progress' => 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300',
-                                    'submitted' => 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
-                                    'revision_requested' => 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
-                                    'approved' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
-                                    'released' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
-                                    'refunded' => 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+                                    'pending' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+                                    'completed' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+                                    'rejected' => 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+                                    'failed' => 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
                                 ];
                                 $c = $colors[$s] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
-                                echo "<span class=\"inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full {$c}\">" . e(ucwords(str_replace('_', ' ', $s))) . "</span>";
+                                echo "<span class=\"inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full {$c}\">" . e(ucwords($s)) . "</span>";
                             ?></td>
                         </tr>
                     <?php endforeach; ?>

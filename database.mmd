@@ -1,0 +1,321 @@
+erDiagram
+
+    USERS {
+        INT id PK
+        VARCHAR username
+        VARCHAR email
+        VARCHAR password
+        VARCHAR profile_image
+        ENUM role
+        TIMESTAMP created_at
+        TIMESTAMP last_activity
+        BOOLEAN is_online
+        TIMESTAMP last_seen
+        ENUM account_status
+        DECIMAL available_balance
+        DECIMAL demo_funds
+    }
+
+    COMPANIES {
+        INT id PK
+        INT user_id FK
+        VARCHAR phone
+        VARCHAR company_name
+        VARCHAR website
+        VARCHAR location
+        INT established_year
+        VARCHAR company_size
+        VARCHAR industry
+        TEXT description
+        VARCHAR logo_image
+    }
+
+    FREELANCERS {
+        INT id PK
+        INT user_id FK
+        VARCHAR phone
+        VARCHAR full_name
+        VARCHAR title
+        VARCHAR location
+        TEXT bio
+        INT experience_years
+        DECIMAL hourly_rate
+    }
+
+    JOBS {
+        INT id PK
+        INT company_id FK
+        VARCHAR title
+        VARCHAR category
+        ENUM experience_level
+        ENUM gender_requirement
+        DATETIME deadline
+        VARCHAR duration
+        INT freelancers_needed
+        ENUM visibility
+        VARCHAR attachment
+        TEXT description
+        TEXT requirements
+        DECIMAL budget
+        ENUM status
+        TIMESTAMP created_at
+    }
+
+    SKILLS {
+        INT id PK
+        VARCHAR skill_name
+    }
+
+    JOB_SKILLS {
+        INT job_id PK, FK
+        INT skill_id PK, FK
+    }
+
+    FREELANCER_SKILLS {
+        INT freelancer_id PK, FK
+        INT skill_id PK, FK
+    }
+
+    JOB_APPLICATIONS {
+        INT id PK
+        INT job_id FK
+        INT freelancer_id FK
+        ENUM status
+        TIMESTAMP applied_at
+    }
+
+    ASSIGNMENTS {
+        INT id PK
+        INT job_id FK
+        INT freelancer_id FK
+        ENUM assignment_type
+        ENUM status
+        ENUM freelancer_response
+        VARCHAR project_title
+        TEXT project_description
+        DECIMAL budget
+        DATE deadline
+        ENUM payment_type
+        TEXT notes
+        VARCHAR attachment
+        VARCHAR submission_link
+        TIMESTAMP assigned_at
+    }
+
+    MILESTONES {
+        INT id PK
+        INT job_id FK
+        INT freelancer_id FK
+        VARCHAR title
+        TEXT description
+        DECIMAL amount
+        ENUM status
+        VARCHAR submission_link
+        VARCHAR submission_file
+        TIMESTAMP submitted_at
+        TIMESTAMP approved_at
+        INT sort_order
+        TIMESTAMP created_at
+        TEXT submission_note
+        DATE deadline
+    }
+
+    ESCROW {
+        INT id PK
+        INT milestone_id FK
+        DECIMAL amount
+        ENUM status
+        TIMESTAMP funded_at
+        TIMESTAMP released_at
+    }
+
+    PAYMENTS {
+        INT id PK
+        INT assignment_id FK
+        DECIMAL amount
+        ENUM status
+        TIMESTAMP paid_at
+    }
+
+    SUBMISSIONS {
+        INT id PK
+        INT assignment_id FK
+        INT freelancer_id FK
+        VARCHAR file_path
+        VARCHAR project_url
+        TEXT notes
+        INT version
+        ENUM status
+        TEXT revision_notes
+        TIMESTAMP created_at
+    }
+
+    REVIEWS {
+        INT id PK
+        INT assignment_id FK
+        INT freelancer_id FK
+        INT company_user_id FK
+        TINYINT rating
+        TEXT comment
+        TIMESTAMP created_at
+    }
+
+    PROPOSAL_PROJECTS {
+        INT id PK
+        INT job_id FK
+        INT company_id FK
+        INT freelancer_id FK
+        VARCHAR title
+        TEXT description
+        TEXT instructions
+        VARCHAR attachment
+        DATETIME deadline
+        ENUM status
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    PROPOSAL_PROJECT_SUBMISSIONS {
+        INT id PK
+        INT proposal_project_id FK
+        INT freelancer_id FK
+        VARCHAR file
+        VARCHAR github_link
+        TEXT comment
+        TIMESTAMP submitted_at
+    }
+
+    MESSAGES {
+        INT id PK
+        INT sender_id FK
+        INT receiver_id FK
+        TEXT message
+        ENUM message_type
+        JSON message_meta
+        ENUM status
+        TIMESTAMP created_at
+        BOOLEAN is_edited
+        BOOLEAN is_deleted
+        VARCHAR hidden_for
+    }
+
+    MESSAGE_ATTACHMENTS {
+        INT id PK
+        INT message_id FK
+        VARCHAR file_name
+        VARCHAR file_path
+        VARCHAR file_type
+        INT file_size
+        TIMESTAMP created_at
+    }
+
+    CONVERSATIONS {
+        INT id PK
+        INT user_one_id FK
+        INT user_two_id FK
+        INT last_message_id FK
+        TIMESTAMP last_activity
+        TIMESTAMP created_at
+    }
+
+    NOTIFICATIONS {
+        INT id PK
+        INT user_id FK
+        INT from_user_id FK
+        VARCHAR type
+        VARCHAR message
+        VARCHAR link
+        BOOLEAN is_read
+        TIMESTAMP created_at
+    }
+
+    WALLET_TRANSACTIONS {
+        INT id PK
+        INT user_id FK
+        DECIMAL amount
+        VARCHAR type
+        VARCHAR payment_method
+        VARCHAR transaction_id
+        VARCHAR proof_image
+        ENUM status
+        TEXT rejection_reason
+        TIMESTAMP created_at
+    }
+
+    WITHDRAW_REQUESTS {
+        INT id PK
+        INT freelancer_id FK
+        DECIMAL amount
+        ENUM status
+        VARCHAR payment_method
+        TEXT payment_details
+        TEXT admin_notes
+        TIMESTAMP created_at
+        TIMESTAMP processed_at
+    }
+
+
+    %% USER PROFILES
+    USERS ||--o| COMPANIES : "has"
+    USERS ||--o| FREELANCERS : "has"
+
+    %% JOB SYSTEM
+    COMPANIES ||--o{ JOBS : "posts"
+    JOBS ||--o{ JOB_APPLICATIONS : "receives"
+    FREELANCERS ||--o{ JOB_APPLICATIONS : "submits"
+
+    %% JOB SKILLS
+    JOBS ||--o{ JOB_SKILLS : "requires"
+    SKILLS ||--o{ JOB_SKILLS : "used by"
+
+    %% FREELANCER SKILLS
+    FREELANCERS ||--o{ FREELANCER_SKILLS : "has"
+    SKILLS ||--o{ FREELANCER_SKILLS : "assigned to"
+
+    %% ASSIGNMENTS
+    JOBS ||--o{ ASSIGNMENTS : "creates"
+    FREELANCERS ||--o{ ASSIGNMENTS : "works on"
+
+    %% MILESTONE & ESCROW
+    JOBS ||--o{ MILESTONES : "has"
+    FREELANCERS ||--o{ MILESTONES : "completes"
+    MILESTONES ||--o| ESCROW : "funded by"
+
+    %% PAYMENTS
+    ASSIGNMENTS ||--o{ PAYMENTS : "has"
+
+    %% PROJECT SUBMISSIONS
+    ASSIGNMENTS ||--o{ SUBMISSIONS : "receives"
+    FREELANCERS ||--o{ SUBMISSIONS : "submits"
+
+    %% REVIEWS
+    ASSIGNMENTS ||--o| REVIEWS : "reviewed by"
+    FREELANCERS ||--o{ REVIEWS : "receives"
+    USERS ||--o{ REVIEWS : "writes"
+
+    %% DIRECT / PROPOSAL PROJECTS
+    JOBS ||--o{ PROPOSAL_PROJECTS : "creates"
+    COMPANIES ||--o{ PROPOSAL_PROJECTS : "assigns"
+    FREELANCERS ||--o{ PROPOSAL_PROJECTS : "receives"
+
+    PROPOSAL_PROJECTS ||--o{ PROPOSAL_PROJECT_SUBMISSIONS : "receives"
+    FREELANCERS ||--o{ PROPOSAL_PROJECT_SUBMISSIONS : "submits"
+
+    %% MESSAGING
+    USERS ||--o{ MESSAGES : "sends"
+    USERS ||--o{ MESSAGES : "receives"
+
+    MESSAGES ||--o{ MESSAGE_ATTACHMENTS : "has"
+
+    USERS ||--o{ CONVERSATIONS : "participates"
+    MESSAGES ||--o| CONVERSATIONS : "last message"
+
+    %% NOTIFICATIONS
+    USERS ||--o{ NOTIFICATIONS : "receives"
+    USERS ||--o{ NOTIFICATIONS : "triggers"
+
+    %% WALLET
+    USERS ||--o{ WALLET_TRANSACTIONS : "has"
+
+    %% WITHDRAWAL
+    FREELANCERS ||--o{ WITHDRAW_REQUESTS : "requests"
