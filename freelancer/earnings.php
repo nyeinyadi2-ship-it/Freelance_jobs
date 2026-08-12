@@ -1,5 +1,5 @@
 <?php
-$page_title = 'Earnings & Wallet';
+$page_title = 'Earnings';
 require __DIR__ . '/../includes/freelancer_layout.php';
 require_once __DIR__ . '/../config/escrow.php';
 

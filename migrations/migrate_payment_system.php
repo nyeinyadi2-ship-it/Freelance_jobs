@@ -1,11 +1,18 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 
+function addColumnIfNotExists($conn, $table, $column, $definition) {
+    $result = $conn->query("SHOW COLUMNS FROM `$table` LIKE '$column'");
+    if ($result->num_rows == 0) {
+        $conn->query("ALTER TABLE `$table` ADD COLUMN `$column` $definition");
+    }
+}
+
 try {
     $conn->begin_transaction();
 
     // 1. Add reserved_balance to users
-    $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS reserved_balance DECIMAL(10,2) DEFAULT '0.00'");
+    addColumnIfNotExists($conn, 'users', 'reserved_balance', "DECIMAL(10,2) DEFAULT '0.00'");
 
     // 2. Update assignments status enum
     $conn->query("ALTER TABLE assignments MODIFY COLUMN status ENUM('assigned','working','submitted','completed','rejected', 'pending','accepted','revision_requested','approved','payment_pending','paid','cancelled') DEFAULT 'assigned'");
@@ -17,14 +24,14 @@ try {
     $conn->query("ALTER TABLE jobs MODIFY COLUMN status ENUM('pending','open','in_progress','submitted','completed','position_filled','expired','closed','approved','rejected', 'payment_pending','paid','cancelled') DEFAULT 'pending'");
 
     // 5. Payments table updates
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS company_id INT DEFAULT NULL");
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS freelancer_id INT DEFAULT NULL");
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS milestone_id INT DEFAULT NULL");
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'MMK'");
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT NULL");
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(100) DEFAULT NULL");
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
-    $conn->query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+    addColumnIfNotExists($conn, 'payments', 'company_id', "INT DEFAULT NULL");
+    addColumnIfNotExists($conn, 'payments', 'freelancer_id', "INT DEFAULT NULL");
+    addColumnIfNotExists($conn, 'payments', 'milestone_id', "INT DEFAULT NULL");
+    addColumnIfNotExists($conn, 'payments', 'currency', "VARCHAR(10) DEFAULT 'MMK'");
+    addColumnIfNotExists($conn, 'payments', 'payment_method', "VARCHAR(50) DEFAULT NULL");
+    addColumnIfNotExists($conn, 'payments', 'transaction_reference', "VARCHAR(100) DEFAULT NULL");
+    addColumnIfNotExists($conn, 'payments', 'created_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    addColumnIfNotExists($conn, 'payments', 'updated_at', "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
 
     $conn->query("ALTER TABLE payments MODIFY COLUMN status ENUM('pending','paid', 'failed') DEFAULT 'pending'");
 

@@ -63,7 +63,8 @@ if ($is_logged_in) {
             ['label' => 'Browse Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'icon' => 'search', 'page' => 'browse_jobs'],
             ['label' => 'My Tasks', 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
             ['label' => 'Test Assignments', 'href' => base_url('freelancer/test_assignments.php'), 'icon' => 'document-text', 'page' => 'test_assignments'],
-            ['label' => 'Wallet', 'href' => base_url('freelancer/wallet.php'), 'icon' => 'credit-card', 'page' => 'wallet'],
+            ['label' => 'Transactions', 'href' => base_url('freelancer/transactions.php'), 'icon' => 'document-text', 'page' => 'transactions'],
+            ['label' => 'Payment Info', 'href' => base_url('freelancer/payment_settings.php'), 'icon' => 'credit-card', 'page' => 'payment_settings'],
         ];
     }
 }

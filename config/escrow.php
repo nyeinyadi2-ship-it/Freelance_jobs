@@ -17,13 +17,9 @@ function get_freelancer_earnings_stats(mysqli $conn, int $freelancer_id): array
     ];
 
     $stmt = $conn->prepare("
-        SELECT
-            COALESCE(SUM(CASE WHEN p.escrow_status = 'released' THEN p.amount ELSE 0 END), 0) AS total_released,
-            COALESCE(SUM(CASE WHEN p.escrow_status IN ('funded','in_progress','submitted','revision_requested','approved') THEN p.amount ELSE 0 END), 0) AS total_pending,
-            COALESCE(SUM(CASE WHEN p.escrow_status = 'refunded' THEN p.amount ELSE 0 END), 0) AS total_refunded,
-            COALESCE(SUM(p.amount), 0) AS total_earned
-        FROM payments p
-        WHERE p.freelancer_id = ?
+        SELECT COALESCE(SUM(amount), 0) AS total_earned
+        FROM payments
+        WHERE freelancer_id = ? AND status = 'paid'
     ");
     $stmt->bind_param('i', $freelancer_id);
     $stmt->execute();
@@ -32,11 +28,33 @@ function get_freelancer_earnings_stats(mysqli $conn, int $freelancer_id): array
 
     if ($row) {
         $stats['total_earned'] = (float) $row['total_earned'];
-        $stats['total_pending'] = (float) $row['total_pending'];
-        $stats['total_released'] = (float) $row['total_released'];
-        $stats['total_refunded'] = (float) $row['total_refunded'];
-        $stats['total_earnings'] = (float) $row['total_released']; // Alias for earnings.php "Total received"
+        $stats['total_released'] = (float) $row['total_earned'];
+        $stats['total_earnings'] = (float) $row['total_earned'];
     }
+
+    // Pending from assignments
+    $stmt_p = $conn->prepare("
+        SELECT COALESCE(SUM(budget), 0) AS pending_a
+        FROM assignments 
+        WHERE freelancer_id = ? AND status = 'payment_pending'
+    ");
+    $stmt_p->bind_param('i', $freelancer_id);
+    $stmt_p->execute();
+    $p_row = $stmt_p->get_result()->fetch_assoc();
+    $stats['total_pending'] += (float) ($p_row['pending_a'] ?? 0);
+    $stmt_p->close();
+
+    // Pending from milestones
+    $stmt_pm = $conn->prepare("
+        SELECT COALESCE(SUM(amount), 0) AS pending_m
+        FROM milestones 
+        WHERE freelancer_id = ? AND status = 'payment_pending'
+    ");
+    $stmt_pm->bind_param('i', $freelancer_id);
+    $stmt_pm->execute();
+    $pm_row = $stmt_pm->get_result()->fetch_assoc();
+    $stats['total_pending'] += (float) ($pm_row['pending_m'] ?? 0);
+    $stmt_pm->close();
 
     $stmt2 = $conn->prepare("SELECT COALESCE(available_balance, 0) FROM freelancers WHERE id = ?");
     $stmt2->bind_param('i', $freelancer_id);

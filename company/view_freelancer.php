@@ -197,34 +197,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             $assignment_id = $stmt->insert_id;
                             $stmt->close();
                             if ($assignment_id > 0) {
-                                if ($payment_type === 'milestone') {
-                                    $first_ms = $conn->prepare("SELECT id, amount FROM milestones WHERE job_id = ? AND sort_order = 1 LIMIT 1");
-                                    $first_ms->bind_param('i', $job_id);
-                                    $first_ms->execute();
-                                    $ms_row = $first_ms->get_result()->fetch_assoc();
-                                    $first_ms->close();
-                                    if ($ms_row) {
+                                    if ($payment_type === 'milestone') {
+                                        $first_ms = $conn->prepare("SELECT id, amount FROM milestones WHERE job_id = ? AND sort_order = 1 LIMIT 1");
+                                        $first_ms->bind_param('i', $job_id);
+                                        $first_ms->execute();
+                                        $ms_row = $first_ms->get_result()->fetch_assoc();
+                                        $first_ms->close();
+                                        if ($ms_row) {
+                                            $conn->begin_transaction();
+                                            try {
+                                                $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
+                                                $stmt_bal->bind_param('ddid', $ms_row['amount'], $ms_row['amount'], $user['user_id'], $ms_row['amount']);
+                                                $stmt_bal->execute();
+                                                if ($stmt_bal->affected_rows === 0) {
+                                                    throw new Exception("Insufficient balance to fund the first milestone.");
+                                                }
+                                                $stmt_bal->close();
+
+                                                $up = $conn->prepare("UPDATE milestones SET status = 'funded' WHERE id = ?");
+                                                $up->bind_param('i', $ms_row['id']); $up->execute(); $up->close();
+                                                $conn->commit();
+                                            } catch (Exception $e) { 
+                                                $conn->rollback();
+                                                $hire_error = $e->getMessage();
+                                                $pending_hire = false;
+                                            }
+                                        }
+                                    } else {
+                                        // Reserve funds for Fixed price project
                                         $conn->begin_transaction();
                                         try {
-                                            $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
-                                            $stmt_bal->bind_param('did', $ms_row['amount'], $user['user_id'], $ms_row['amount']);
+                                            $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
+                                            $stmt_bal->bind_param('ddid', $budget, $budget, $user['user_id'], $budget);
                                             $stmt_bal->execute();
                                             if ($stmt_bal->affected_rows === 0) {
-                                                throw new Exception("Insufficient balance to fund the first milestone.");
+                                                throw new Exception("Insufficient balance to reserve project budget.");
                                             }
                                             $stmt_bal->close();
-
-                                            $tx_id = uniqid('tx_escrow_');
-                                            $type_c = 'escrow_fund';
-                                            $stmt_tx = $conn->prepare("INSERT INTO wallet_transactions (user_id, amount, type, payment_method, transaction_id, status) VALUES (?, ?, ?, 'wallet', ?, 'completed')");
-                                            $stmt_tx->bind_param('idss', $user['user_id'], $ms_row['amount'], $type_c, $tx_id);
-                                            $stmt_tx->execute();
-                                            $stmt_tx->close();
-
-                                            $up = $conn->prepare("UPDATE milestones SET status = 'funded' WHERE id = ?");
-                                            $up->bind_param('i', $ms_row['id']); $up->execute(); $up->close();
-                                            $esc = $conn->prepare("INSERT INTO escrow (milestone_id, amount, status) VALUES (?, ?, 'held')");
-                                            $esc->bind_param('id', $ms_row['id'], $ms_row['amount']); $esc->execute(); $esc->close();
                                             $conn->commit();
                                         } catch (Exception $e) { 
                                             $conn->rollback();
@@ -232,7 +241,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                             $pending_hire = false;
                                         }
                                     }
-                                }
                                 if (empty($hire_error)) {
                                     create_notification($conn, (int) $freelancer['user_id'], 'direct_hire', "You have a new direct hire request from a company for: {$title}", "freelancer/dashboard.php");
                                     $hire_success = 'Hire request sent successfully! The freelancer will be notified.';

@@ -313,6 +313,8 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 .ms-submitted { background:rgba(139,92,246,0.1); color:#8b5cf6; }
 .ms-approved { background:rgba(16,185,129,0.1); color:#10b981; }
 .ms-revision_requested { background:rgba(239,68,68,0.1); color:#ef4444; }
+.ms-payment_pending { background:rgba(59,130,246,0.1); color:#3b82f6; }
+.ms-paid { background:rgba(16,185,129,0.1); color:#10b981; }
 
 .ms-timeline { display:flex; align-items:center; gap:0; margin:0.75rem 0; }
 .ms-timeline-step { display:flex; align-items:center; gap:0.375rem; }
@@ -343,7 +345,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
             $total_ms = count($task['milestones']);
             $approved_ms = 0;
             foreach ($task['milestones'] as $m) {
-                if ($m['status'] === 'approved') $approved_ms++;
+                if ($m['status'] === 'paid' || $m['status'] === 'payment_pending') $approved_ms++;
             }
             $all_approved = $total_ms > 0 && $approved_ms === $total_ms;
             $progress = $total_ms > 0 ? round(($approved_ms / $total_ms) * 100) : 0;
@@ -394,7 +396,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <h3 class="text-sm font-bold mb-4" style="color:var(--color-text-primary)">Milestones</h3>
                     <div class="space-y-4">
                         <?php foreach ($task['milestones'] as $ms):
-                            $status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved','revision_requested'=>'Revision Requested'];
+                            $status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved', 'payment_pending'=>'Payment Pending', 'paid'=>'Paid', 'revision_requested'=>'Revision Requested'];
                             $status_class = 'ms-' . $ms['status'];
                         ?>
                         <div class="rounded-xl overflow-hidden transition-all hover:shadow-md" style="border:1px solid var(--color-border)">
@@ -402,7 +404,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="block p-4 transition-colors" style="background:var(--color-bg);text-decoration:none">
                                 <div class="flex flex-wrap items-start justify-between gap-2">
                                     <div class="flex items-start gap-3">
-                                        <?php if ($ms['status'] === 'approved'): ?>
+                                        <?php if ($ms['status'] === 'paid'): ?>
                                             <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style="background:rgba(16,185,129,0.1)">
                                                 <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                             </div>
@@ -425,8 +427,8 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <!-- Status Timeline -->
                                 <div class="ms-timeline mt-3">
                                     <?php
-                                    $steps = ['funded', 'in_progress', 'submitted', 'approved'];
-                                    $step_labels = ['Funded', 'Working', 'Submitted', 'Approved'];
+                                    $steps = ['funded', 'in_progress', 'submitted', 'payment_pending', 'paid'];
+                                    $step_labels = ['Funded', 'Working', 'Submitted', 'Pending Pay', 'Paid'];
                                     $current_idx = array_search($ms['status'], $steps);
                                     if ($ms['status'] === 'revision_requested') $current_idx = 1;
                                     if ($ms['status'] === 'draft') $current_idx = -1;
@@ -476,10 +478,15 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                     <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
                                     <span class="text-xs font-medium" style="color:var(--color-text-muted)">Under review — awaiting decision</span>
                                 </div>
-                            <?php elseif ($ms['status'] === 'approved'): ?>
+                            <?php elseif ($ms['status'] === 'payment_pending'): ?>
+                                <div class="p-3 flex items-center gap-2" style="border-top:1px solid var(--color-border);background:rgba(59,130,246,0.03)">
+                                    <svg class="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                    <span class="text-xs font-medium text-blue-600">Work approved — awaiting payment</span>
+                                </div>
+                            <?php elseif ($ms['status'] === 'paid'): ?>
                                 <div class="p-3 flex items-center gap-2" style="border-top:1px solid var(--color-border);background:rgba(16,185,129,0.03)">
                                     <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                    <span class="text-xs font-medium text-emerald-600">Approved — payment released</span>
+                                    <span class="text-xs font-medium text-emerald-600">Payment received</span>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -520,6 +527,11 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(139,92,246,0.05);border-color:rgba(139,92,246,0.2)">
                             <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
                             <span class="text-sm font-semibold text-purple-600">Work submitted successfully. Awaiting company review.</span>
+                        </div>
+                    <?php elseif ($task['assignment_status'] === 'payment_pending'): ?>
+                        <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(59,130,246,0.05);border-color:rgba(59,130,246,0.2)">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            <span class="text-sm font-semibold text-blue-600">Work approved. Awaiting payment from the company.</span>
                         </div>
                     <?php elseif ($task['assignment_status'] === 'completed'): ?>
                         <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(16,185,129,0.05);border-color:rgba(16,185,129,0.2)">

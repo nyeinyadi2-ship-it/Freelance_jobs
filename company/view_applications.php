@@ -67,6 +67,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         if ($application) {
             $conn->begin_transaction();
             try {
+                $job_budget = (float) $job['budget'];
+                
+                // Verify balance and reserve funds
+                $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
+                $stmt->bind_param('ddid', $job_budget, $job_budget, $user['user_id'], $job_budget);
+                $stmt->execute();
+                if ($stmt->affected_rows === 0 && $job_budget > 0) {
+                    $stmt->close();
+                    throw new Exception("Insufficient available balance to reserve project budget.");
+                }
+                $stmt->close();
+
                 $freelancer_id = (int) $application['freelancer_id'];
 
                 $stmt = $conn->prepare("UPDATE job_applications SET status = 'accepted' WHERE id = ?");
@@ -189,98 +201,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         $stmt->close();
 
         if ($assignment) {
-            $amount = (float) $assignment['budget'];
-            
-            $stmt = $conn->prepare("SELECT available_balance FROM users WHERE id = ?");
-            $stmt->bind_param('i', $user['user_id']);
-            $stmt->execute();
-            $comp_bal = $stmt->get_result()->fetch_assoc()['available_balance'] ?? 0;
-            $stmt->close();
-            
-            if ($comp_bal < $amount) {
-                set_flash('error', 'Insufficient balance to release payment. Please deposit funds first.');
-            } else {
-                $conn->begin_transaction();
-                try {
-                    $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE id = ?");
-                    $stmt->bind_param('i', $assignment_id);
-                    $stmt->execute();
-                    $stmt->close();
+            $conn->begin_transaction();
+            try {
+                $stmt = $conn->prepare("UPDATE assignments SET status = 'payment_pending' WHERE id = ?");
+                $stmt->bind_param('i', $assignment_id);
+                $stmt->execute();
+                $stmt->close();
 
-                    $stmt = $conn->prepare("UPDATE submissions SET status = 'approved' WHERE assignment_id = ? AND status = 'pending'");
-                    $stmt->bind_param('i', $assignment_id);
-                    $stmt->execute();
-                    $stmt->close();
+                $stmt = $conn->prepare("UPDATE submissions SET status = 'approved' WHERE assignment_id = ? AND status = 'pending'");
+                $stmt->bind_param('i', $assignment_id);
+                $stmt->execute();
+                $stmt->close();
 
-                    // Only mark job as completed when ALL required positions are filled and completed
-                    $stmt = $conn->prepare("SELECT j.freelancers_needed, SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS done FROM jobs j LEFT JOIN assignments a ON j.id = a.job_id WHERE j.id = ? GROUP BY j.id");
-                    $stmt->bind_param('i', $job_id);
-                    $stmt->execute();
-                    $progress = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
+                $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.id = ?");
+                $stmt->bind_param('i', $assignment_id);
+                $stmt->execute();
+                $fl_user = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
 
-                    if ($progress && (int)$progress['done'] >= (int)$progress['freelancers_needed']) {
-                        $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
-                        $stmt->bind_param('i', $job_id);
-                        $stmt->execute();
-                        $stmt->close();
-                    }
-
-                    $paid_status = 'paid';
-                    $stmt = $conn->prepare("INSERT INTO payments (assignment_id, amount, status, paid_at) VALUES (?, ?, ?, NOW())");
-                    $stmt->bind_param('ids', $assignment_id, $amount, $paid_status);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.id = ?");
-                    $stmt->bind_param('i', $assignment_id);
-                    $stmt->execute();
-                    $fl_user = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
-
-                    if (!$fl_user) {
-                        throw new Exception("Freelancer not found.");
-                    }
-
-                    // Deduct from company
-                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
-                    $stmt->bind_param('did', $amount, $user['user_id'], $amount);
-                    $stmt->execute();
-                    if ($stmt->affected_rows === 0) {
-                        throw new Exception("Insufficient balance during deduction.");
-                    }
-                    $stmt->close();
-
-                    // Add to freelancer
-                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance + ? WHERE id = ?");
-                    $stmt->bind_param('di', $amount, $fl_user['id']);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    // Insert wallet transactions
-                    $tx_id = uniqid('tx_dh_');
-                    $type_c = 'payment_release';
-                    $stmt = $conn->prepare("INSERT INTO wallet_transactions (user_id, amount, type, payment_method, transaction_id, status) VALUES (?, ?, ?, 'wallet', ?, 'completed')");
-                    $stmt->bind_param('idss', $user['user_id'], $amount, $type_c, $tx_id);
-                    $stmt->execute();
-                    
-                    $type_f = 'payment_received';
-                    $stmt->bind_param('idss', $fl_user['id'], $amount, $type_f, $tx_id);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    create_notification($conn, (int) $fl_user['id'], 'work_approved', "Your work for \"{$job['title']}\" has been approved.", 'freelancer/my_tasks.php');
-                    create_notification($conn, (int) $fl_user['id'], 'payment_released', "Payment of \${$amount} for \"{$job['title']}\" has been released.", 'freelancer/my_tasks.php');
-
-                    $conn->commit();
-                    set_flash('success', 'Work approved and payment processed successfully.');
-                } catch (Exception $e) {
-                    $conn->rollback();
-                    set_flash('error', $e->getMessage() ?: 'Could not process payment.');
+                if ($fl_user) {
+                    create_notification($conn, (int) $fl_user['id'], 'work_approved', "Your work for \"{$job['title']}\" has been approved. Payment is pending.", 'freelancer/my_tasks.php');
                 }
+
+                $conn->commit();
+                set_flash('success', 'Work approved. Please complete the payment.');
+                redirect('company/pay_freelancer.php?assignment_id=' . $assignment_id);
+            } catch (Exception $e) {
+                $conn->rollback();
+                set_flash('error', 'Could not approve work.');
             }
         } else {
-            set_flash('error', 'Assignment not found or not ready for payment.');
+            set_flash('error', 'Assignment not found or not ready for approval.');
         }
     } elseif ($action === 'request_revision') {
         $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
@@ -451,8 +402,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $conn->begin_transaction();
                 try {
                     // Check and deduct available balance
-                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
-                    $stmt->bind_param('did', $ms['amount'], $user['user_id'], $ms['amount']);
+                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
+                    $stmt->bind_param('ddid', $ms['amount'], $ms['amount'], $user['user_id'], $ms['amount']);
                     $stmt->execute();
                     $affected = $stmt->affected_rows;
                     $stmt->close();
@@ -461,26 +412,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                         throw new Exception("Insufficient balance to fund this milestone.");
                     }
 
-                    // Insert wallet transaction for funding escrow
-                    $tx_id = uniqid('tx_escrow_');
-                    $type_c = 'escrow_fund';
-                    $stmt = $conn->prepare("INSERT INTO wallet_transactions (user_id, amount, type, payment_method, transaction_id, status) VALUES (?, ?, ?, 'wallet', ?, 'completed')");
-                    $stmt->bind_param('idss', $user['user_id'], $ms['amount'], $type_c, $tx_id);
-                    $stmt->execute();
-                    $stmt->close();
-
                     $stmt = $conn->prepare("UPDATE milestones SET status = 'funded' WHERE id = ?");
                     $stmt->bind_param('i', $milestone_id);
                     $stmt->execute();
                     $stmt->close();
 
-                    $stmt = $conn->prepare("INSERT INTO escrow (milestone_id, amount, status) VALUES (?, ?, 'held')");
-                    $stmt->bind_param('id', $milestone_id, $ms['amount']);
-                    $stmt->execute();
-                    $stmt->close();
-
                     $conn->commit();
-                    set_flash('success', 'Milestone funded successfully! Escrow is active.');
+                    set_flash('success', 'Milestone funded successfully! Funds are reserved.');
                 } catch (Exception $e) {
                     $conn->rollback();
                     if (strpos($e->getMessage(), 'Insufficient') !== false) {
@@ -503,139 +441,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $conn->begin_transaction();
                 try {
                     $now = date('Y-m-d H:i:s');
-                    $stmt = $conn->prepare("UPDATE milestones SET status = 'approved', approved_at = ? WHERE id = ?");
+                    $stmt = $conn->prepare("UPDATE milestones SET status = 'payment_pending', approved_at = ? WHERE id = ?");
                     $stmt->bind_param('si', $now, $milestone_id);
                     $stmt->execute();
                     $stmt->close();
-
-                    $stmt = $conn->prepare("UPDATE escrow SET status = 'released', released_at = ? WHERE milestone_id = ? AND status = 'held'");
-                    $stmt->bind_param('si', $now, $milestone_id);
-                    $stmt->execute();
                     
-                    if ($stmt->affected_rows === 0) {
-                        $stmt->close();
-                        throw new Exception("Escrow already released or not found.");
-                    }
-                    $stmt->close();
-
-                    // Credit freelancer's available balance
-                    $stmt = $conn->prepare("SELECT user_id FROM freelancers WHERE id = ?");
-                    $stmt->bind_param('i', $ms['freelancer_id']);
-                    $stmt->execute();
-                    $fl_user_id = (int) $stmt->get_result()->fetch_assoc()['user_id'];
-                    $stmt->close();
-                    
-                    if ($fl_user_id > 0) {
-                        $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance + ? WHERE id = ?");
-                        $stmt->bind_param('di', $ms['amount'], $fl_user_id);
-                        $stmt->execute();
-                        $stmt->close();
-
-                        $tx_id = uniqid('tx_release_');
-                        $type_f = 'payment_received';
-                        $stmt = $conn->prepare("INSERT INTO wallet_transactions (user_id, amount, type, payment_method, transaction_id, status) VALUES (?, ?, ?, 'wallet', ?, 'completed')");
-                        $stmt->bind_param('idss', $fl_user_id, $ms['amount'], $type_f, $tx_id);
-                        $stmt->execute();
-                        $stmt->close();
-                    }
-
-                    // Create payment record for the specific freelancer's assignment
-                    $ms_freelancer_id = (int) ($ms['freelancer_id'] ?? 0);
-                    if ($ms_freelancer_id > 0) {
-                        $stmt = $conn->prepare("SELECT a.id FROM assignments a WHERE a.job_id = ? AND a.freelancer_id = ?");
-                        $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
-                    } else {
-                        $stmt = $conn->prepare("SELECT a.id FROM assignments a WHERE a.job_id = ?");
-                        $stmt->bind_param('i', $job_id);
-                    }
-                    $stmt->execute();
-                    $assignment_row = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
-                    if ($assignment_row) {
-                        $chk = $conn->prepare("SELECT id FROM payments WHERE assignment_id = ? AND status = 'paid' LIMIT 1");
-                        $chk->bind_param('i', $assignment_row['id']);
-                        $chk->execute();
-                        $existing = $chk->get_result()->fetch_assoc();
-                        $chk->close();
-                        if (!$existing) {
-                            $stmt = $conn->prepare("INSERT INTO payments (assignment_id, amount, status, paid_at) VALUES (?, ?, 'paid', ?)");
-                            $stmt->bind_param('ids', $assignment_row['id'], $ms['amount'], $now);
-                            $stmt->execute();
-                            $stmt->close();
-                        }
-                    }
-
-                    // Check if all milestones for this freelancer are approved
-                    if ($ms_freelancer_id > 0) {
-                        $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved FROM milestones WHERE job_id = ? AND freelancer_id = ?");
-                        $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
-                    } else {
-                        $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved FROM milestones WHERE job_id = ?");
-                        $stmt->bind_param('i', $job_id);
-                    }
-                    $stmt->execute();
-                    $counts = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
-
-                    if ($counts && $counts['total'] == $counts['approved']) {
-                        // All milestones for this freelancer done — complete their assignment
-                        if ($ms_freelancer_id > 0) {
-                            $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE job_id = ? AND freelancer_id = ?");
-                            $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
-                        } else {
-                            $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE job_id = ?");
-                            $stmt->bind_param('i', $job_id);
-                        }
-                        $stmt->execute();
-                        $stmt->close();
-                        
-                        // Check if ALL required positions for the job are filled and completed
-                        $stmt = $conn->prepare("SELECT j.freelancers_needed, SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS done FROM jobs j LEFT JOIN assignments a ON j.id = a.job_id WHERE j.id = ? GROUP BY j.id");
-                        $stmt->bind_param('i', $job_id);
-                        $stmt->execute();
-                        $ac = $stmt->get_result()->fetch_assoc();
-                        $stmt->close();
-                        if ($ac && (int)$ac['done'] >= (int)$ac['freelancers_needed']) {
-                            $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
-                            $stmt->bind_param('i', $job_id);
-                            $stmt->execute();
-                            $stmt->close();
-                        }
-                    } else {
-                        // Not all done yet — set assignment back to working for next milestone
-                        if ($ms_freelancer_id > 0) {
-                            $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND freelancer_id = ? AND status = 'submitted'");
-                            $stmt->bind_param('ii', $job_id, $ms_freelancer_id);
-                        } else {
-                            $stmt = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status = 'submitted'");
-                            $stmt->bind_param('i', $job_id);
-                        }
-                        $stmt->execute();
-                        $stmt->close();
-                    }
-
                     $conn->commit();
 
-                    // Notify the specific freelancer
-                    try {
-                        if ($ms_freelancer_id > 0) {
-                            $stmt = $conn->prepare("SELECT u.id FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
-                            $stmt->bind_param('i', $ms_freelancer_id);
-                        } else {
-                            $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.job_id = ?");
-                            $stmt->bind_param('i', $job_id);
-                        }
+                    $fl_user_id = 0;
+                    if ($ms['freelancer_id'] > 0) {
+                        $stmt = $conn->prepare("SELECT user_id FROM freelancers WHERE id = ?");
+                        $stmt->bind_param('i', $ms['freelancer_id']);
                         $stmt->execute();
-                        $fl_user = $stmt->get_result()->fetch_assoc();
+                        $fl = $stmt->get_result()->fetch_assoc();
+                        $fl_user_id = (int) ($fl['user_id'] ?? 0);
                         $stmt->close();
-                        if ($fl_user) {
-                            create_notification($conn, (int) $fl_user['id'], 'payment_released', "Milestone payment of \${$ms['amount']} has been released.", 'freelancer/my_tasks.php');
-                        }
-                    } catch (Exception $ne) {
-                        error_log("Notification failed after milestone approval: " . $ne->getMessage());
+                    }
+                    if ($fl_user_id > 0) {
+                        create_notification($conn, $fl_user_id, 'work_approved', "Milestone approved. Payment is pending.", 'freelancer/my_tasks.php');
                     }
 
-                    set_flash('success', 'Milestone approved and payment released!');
+                    set_flash('success', 'Milestone approved. Please complete the payment.');
+                    redirect('company/pay_freelancer.php?milestone_id=' . $milestone_id);
                 } catch (Exception $e) {
                     $conn->rollback();
                     error_log("Milestone approve failed: " . $e->getMessage());
@@ -878,8 +705,8 @@ require __DIR__ . '/../includes/header.php';
                         <div class="flex items-center gap-2">
                             <span class="text-sm font-bold" style="color:#f59e0b"><?= number_format((float) $ms['amount'], 2) ?> MMK</span>
                             <?php
-                            $ms_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Submitted','approved'=>'Approved','revision_requested'=>'Revision'];
-                            $ms_colors = ['draft'=>'#6b7280','funded'=>'#f59e0b','in_progress'=>'#6366f1','submitted'=>'#8b5cf6','approved'=>'#10b981','revision_requested'=>'#ef4444'];
+                            $ms_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Submitted','approved'=>'Approved','revision_requested'=>'Revision','payment_pending'=>'Payment Pending','paid'=>'Paid'];
+                            $ms_colors = ['draft'=>'#6b7280','funded'=>'#f59e0b','in_progress'=>'#6366f1','submitted'=>'#8b5cf6','approved'=>'#10b981','revision_requested'=>'#ef4444','payment_pending'=>'#3b82f6','paid'=>'#10b981'];
                             $ms_label = $ms_labels[$ms['status']] ?? $ms['status'];
                             $ms_color = $ms_colors[$ms['status']] ?? '#6b7280';
                             ?>
@@ -1060,6 +887,16 @@ require __DIR__ . '/../includes/header.php';
                             <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#10b981">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                 Payment released <?= $ms['approved_at'] ? date('M j', strtotime($ms['approved_at'])) : '' ?>
+                            </span>
+                        <?php elseif ($ms['status'] === 'payment_pending'): ?>
+                            <a href="<?= e(base_url('company/pay_freelancer.php?milestone_id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:-translate-y-0.5" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                                Pay Milestone
+                            </a>
+                        <?php elseif ($ms['status'] === 'paid'): ?>
+                            <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#10b981">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                Paid
                             </span>
                         <?php elseif ($ms['status'] === 'revision_requested'): ?>
                             <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#ef4444">
