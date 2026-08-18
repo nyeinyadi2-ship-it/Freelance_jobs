@@ -62,8 +62,6 @@ function get_freelancer_earnings_stats(mysqli $conn, int $freelancer_id): array
     if ($bal) {
         $stats['available_balance'] = (float) ($bal['available_balance'] ?? 0);
     }
-    
-    }
 
     return $stats;
 }

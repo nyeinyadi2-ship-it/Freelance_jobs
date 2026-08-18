@@ -11,7 +11,7 @@ $earnings_stats = get_freelancer_earnings_stats($conn, $fl_freelancer_id);
 
 $escrow_active = [];
 try {
-    $s = $conn->prepare("SELECT p.id, p.amount, p.escrow_status, p.funded_at, p.created_at, a.id AS assignment_id, a.status AS assignment_status, a.submission_link, a.assigned_at, j.title AS job_title, j.budget, c.company_name, c.logo_image FROM payments p JOIN assignments a ON p.assignment_id = a.id JOIN jobs j ON a.job_id = j.id JOIN companies c ON p.company_id = c.id WHERE p.freelancer_id = ? AND p.escrow_status IN ('funded','in_progress','submitted','revision_requested','approved') ORDER BY p.funded_at DESC");
+    $s = $conn->prepare("SELECT m.id AS milestone_id, m.amount, m.status AS escrow_status, m.created_at AS funded_at, a.id AS assignment_id, a.status AS assignment_status, j.title AS job_title, c.company_name, c.logo_image FROM milestones m JOIN assignments a ON m.job_id = a.job_id AND m.freelancer_id = a.freelancer_id JOIN jobs j ON m.job_id = j.id JOIN companies c ON j.company_id = c.id WHERE m.freelancer_id = ? AND m.status IN ('funded','in_progress','submitted','revision_requested') ORDER BY m.id DESC");
     $s->bind_param('i', $fl_freelancer_id);
     $s->execute();
     $r = $s->get_result();
@@ -21,18 +21,21 @@ try {
 
 $escrow_completed = [];
 try {
-    $s = $conn->prepare("SELECT p.id, p.amount, p.escrow_status, p.paid_at, p.released_at, p.refunded_at, a.id AS assignment_id, j.title AS job_title, j.budget, c.company_name, c.logo_image FROM payments p JOIN assignments a ON p.assignment_id = a.id JOIN jobs j ON a.job_id = j.id JOIN companies c ON p.company_id = c.id WHERE p.freelancer_id = ? AND p.escrow_status IN ('released','refunded') ORDER BY COALESCE(p.released_at, p.refunded_at) DESC");
+    $s = $conn->prepare("SELECT p.id, p.amount, p.status AS escrow_status, p.paid_at AS released_at, p.paid_at AS refunded_at, a.id AS assignment_id, j.title AS job_title, j.budget, c.company_name, c.logo_image FROM payments p JOIN assignments a ON p.assignment_id = a.id JOIN jobs j ON a.job_id = j.id JOIN companies c ON p.company_id = c.id WHERE p.freelancer_id = ? AND p.status = 'paid' ORDER BY p.paid_at DESC");
     $s->bind_param('i', $fl_freelancer_id);
     $s->execute();
     $r = $s->get_result();
-    while ($row = $r->fetch_assoc()) $escrow_completed[] = $row;
+    while ($row = $r->fetch_assoc()) {
+        $row['escrow_status'] = 'released'; // map paid to released for UI compatibility
+        $escrow_completed[] = $row;
+    }
     $s->close();
 } catch (Exception $e) {}
 
 
 $active_submissions = [];
 try {
-    $s = $conn->prepare("SELECT s.assignment_id, s.project_url, s.notes, s.status AS sub_status, s.revision_notes, s.version, s.created_at AS submitted_at FROM submissions s JOIN payments p ON s.assignment_id = p.assignment_id WHERE p.freelancer_id = ? AND p.escrow_status IN ('submitted','revision_requested','approved') ORDER BY s.version DESC");
+    $s = $conn->prepare("SELECT s.assignment_id, s.project_url, s.notes, s.status AS sub_status, s.revision_notes, s.version, s.created_at AS submitted_at FROM submissions s JOIN assignments a ON s.assignment_id = a.id WHERE a.freelancer_id = ? ORDER BY s.version DESC");
     $s->bind_param('i', $fl_freelancer_id);
     $s->execute();
     $r = $s->get_result();
@@ -156,7 +159,7 @@ try {
                                 </div>
                             <?php endif; ?>
 
-                            <?php if ($sub && in_array($ep['escrow_status'], ['submitted', 'approved'])): ?>
+                            <?php if ($sub && in_array($ep['escrow_status'], ['submitted', 'revision_requested'])): ?>
                                 <div class="mt-4 p-3.5 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800/40">
                                     <div class="flex items-center gap-2 mb-1.5">
                                         <svg class="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>

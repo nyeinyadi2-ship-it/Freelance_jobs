@@ -1,6 +1,7 @@
 <?php
 require 'config/db.php';
-
-$stmt = $conn->prepare("UPDATE users SET available_balance = 5000000 WHERE id = 12");
-$stmt->execute();
-echo "User 12 balance updated.\n";
+$res = $conn->query('SHOW COLUMNS FROM payments');
+while($row = $res->fetch_assoc()) echo $row['Field'].' '.$row['Type']."\n";
+echo "---\n";
+$res = $conn->query('SHOW COLUMNS FROM milestones');
+while($row = $res->fetch_assoc()) echo $row['Field'].' '.$row['Type']."\n";

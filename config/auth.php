@@ -45,10 +45,12 @@ function check_and_update_suspension_status($conn, int $user_id, string $status,
     if ($status === 'suspended' && $end_date) {
         $today = date('Y-m-d');
         if ($today > $end_date) {
-            $stmt = $conn->prepare("UPDATE users SET account_status = 'active' WHERE id = ?");
-            $stmt->bind_param('i', $user_id);
-            $stmt->execute();
-            $stmt->close();
+            if ($conn) {
+                $stmt = $conn->prepare("UPDATE users SET account_status = 'active' WHERE id = ?");
+                $stmt->bind_param('i', $user_id);
+                $stmt->execute();
+                $stmt->close();
+            }
             return 'active';
         }
     }
@@ -67,10 +69,26 @@ function require_login(): void
         return;
     }
 
-    $status = $_SESSION['account_status'] ?? null;
+    // Cache account status check in session for 5 minutes to avoid DB query on every page load
+    $last_check = $_SESSION['_status_check_time'] ?? 0;
+    $cached_status = $_SESSION['account_status'] ?? null;
+    if ($cached_status !== null && (time() - $last_check) < 300) {
+        // Use cached status, but still check expiration inline (no DB needed)
+        $status = check_and_update_suspension_status(null, (int) $_SESSION['user_id'], $cached_status, $_SESSION['suspension_end_date'] ?? null);
+        if ($status !== $cached_status) {
+            $_SESSION['account_status'] = $status;
+        }
+        if ($status === 'suspended' || $status === 'blocked') {
+            session_destroy();
+            set_flash('error', 'Your account has been ' . $status . '.');
+            redirect('auth/login.php');
+        }
+        return;
+    }
+
     $uid = (int) $_SESSION['user_id'];
     
-    // Always fetch fresh status to catch mid-session suspensions/expirations
+    // Fetch fresh status
     global $conn;
     $stmt = $conn->prepare('SELECT account_status, suspension_end_date FROM users WHERE id = ?');
     $stmt->bind_param('i', $uid);
@@ -83,6 +101,8 @@ function require_login(): void
     
     $status = check_and_update_suspension_status($conn, $uid, $status, $end_date);
     $_SESSION['account_status'] = $status;
+    $_SESSION['suspension_end_date'] = $end_date;
+    $_SESSION['_status_check_time'] = time();
 
     if ($status === 'suspended') {
         session_destroy();
@@ -128,24 +148,36 @@ function profile_image_url(?string $filename): ?string
 
 function get_company_id(mysqli $conn, int $user_id): ?int
 {
+    // Cache in session to avoid DB query on every page load
+    $cache_key = 'company_id_' . $user_id;
+    if (isset($_SESSION[$cache_key])) {
+        return (int) $_SESSION[$cache_key];
+    }
     $stmt = $conn->prepare('SELECT id FROM companies WHERE user_id = ?');
     $stmt->bind_param('i', $user_id);
     $stmt->execute();
     $result = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-
-    return $result ? (int) $result['id'] : null;
+    $id = $result ? (int) $result['id'] : null;
+    $_SESSION[$cache_key] = $id;
+    return $id;
 }
 
 function get_freelancer_id(mysqli $conn, int $user_id): ?int
 {
+    // Cache in session to avoid DB query on every page load
+    $cache_key = 'freelancer_id_' . $user_id;
+    if (isset($_SESSION[$cache_key])) {
+        return (int) $_SESSION[$cache_key];
+    }
     $stmt = $conn->prepare('SELECT id FROM freelancers WHERE user_id = ?');
     $stmt->bind_param('i', $user_id);
     $stmt->execute();
     $result = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-
-    return $result ? (int) $result['id'] : null;
+    $id = $result ? (int) $result['id'] : null;
+    $_SESSION[$cache_key] = $id;
+    return $id;
 }
 
 function set_flash(string $type, string $message): void

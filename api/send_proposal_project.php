@@ -41,7 +41,7 @@ if (!$job) {
 $attachment_path = null;
 if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
     $error_msg = null;
-    $uploaded_filename = upload_attachment($_FILES['attachment'], 10485760, $error_msg);
+    $uploaded_filename = upload_attachment($_FILES['attachment'], 500 * 1024 * 1024, $error_msg);
     if ($uploaded_filename !== null) {
         $attachment_path = $uploaded_filename;
     } else {
@@ -66,12 +66,12 @@ if ($stmt->execute()) {
     $stmt2->close();
 
     if ($fl_user) {
-        create_notification($conn, (int)$fl_user['user_id'], 'system', "You have received a Test Assignment for '{$job['title']}'.", 'freelancer/view_proposal.php?id=' . $proposal_id);
+        create_notification($conn, (int)$fl_user['user_id'], 'system', "You have received a Trial Task for '{$job['title']}'.", 'freelancer/view_proposal.php?id=' . $proposal_id);
     }
 
-    set_flash('success', 'Test Assignment sent successfully.');
+    set_flash('success', 'Trial Task sent successfully.');
 } else {
-    set_flash('error', 'Could not send test assignment.');
+    set_flash('error', 'Could not send trial task.');
 }
 $stmt->close();
 

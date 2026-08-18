@@ -1,5 +1,5 @@
 <?php
-$page_title = 'Test Assignments';
+$page_title = 'Trial Tasks';
 require __DIR__ . '/../includes/freelancer_init.php';
 
 // Fetch all proposal projects for this freelancer
@@ -29,8 +29,8 @@ require __DIR__ . '/../includes/freelancer_layout.php';
         <svg class="w-24 h-24 mx-auto mb-6 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
             <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
         </svg>
-        <p class="text-xl font-semibold mb-2">No test assignments yet.</p>
-        <p class="text-sm">When a company asks you to complete a test assignment, it will appear here.</p>
+        <p class="text-xl font-semibold mb-2">No trial tasks yet.</p>
+        <p class="text-sm">When a company asks you to complete a trial task, it will appear here.</p>
     </div>
 <?php else: ?>
     <div class="space-y-6">
@@ -64,7 +64,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 
                 <div class="flex justify-end">
                     <a href="<?= e(base_url('freelancer/view_proposal.php?id=' . $ta['id'])) ?>" class="btn-grad inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl text-white shadow-lg">
-                        View Assignment <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        View Trial Task <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </a>
                 </div>
             </div>

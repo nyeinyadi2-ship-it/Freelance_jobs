@@ -87,7 +87,7 @@ try {
     unset($req);
 } catch(Exception $e) {}
 
-// Proposal Projects (Test Assignments)
+// Proposal Projects (Trial Tasks)
 $proposal_projects = [];
 try {
     $s = $conn->prepare("SELECT p.*, j.title AS job_title, c.company_name, c.logo_image 
@@ -329,9 +329,8 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
             <?php if (!empty($proposal_projects)): ?>
                 <div class="mt-8">
                     <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-lg font-bold flex items-center gap-2" style="color:var(--color-text-primary)">
-                            <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                            Test Assignments
+                        <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">
+                            Trial Tasks
                         </h2>
                     </div>
                     <div class="space-y-3">
@@ -473,7 +472,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                         <?php endif; ?>
                         <span class="inline-flex items-center gap-1.5" style="color:var(--color-text-muted)">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"/></svg>
-                            Payment: <strong class="capitalize"><?= e($req['payment_type']) ?></strong>
+                            Payment: <strong class="capitalize"><?= $req['payment_type'] === 'fixed' ? 'Project Payment' : e($req['payment_type']) ?></strong>
                         </span>
                         <span class="text-xs" style="color:var(--color-text-placeholder)">Sent <?= date('M j, Y', strtotime($req['assigned_at'])) ?></span>
                     </div>

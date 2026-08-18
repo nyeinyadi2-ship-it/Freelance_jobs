@@ -151,7 +151,7 @@ require __DIR__ . '/../includes/header.php';
                 </div>
                 <div>
                     <h4 class="font-semibold text-sm mb-1" style="color:var(--color-text-primary)">Fast Turnaround</h4>
-                    <p class="text-sm" style="color:var(--color-text-muted)">Get proposals within hours and hire the right talent in days, not weeks.</p>
+                    <p class="text-sm" style="color:var(--color-text-muted)">Get posts within hours and hire the right talent in days, not weeks.</p>
                 </div>
             </div>
             <div class="flex items-start gap-3">

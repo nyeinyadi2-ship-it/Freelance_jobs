@@ -319,17 +319,6 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 }
 
 /* Badges */
-.badge-private {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.375rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.6875rem;
-    font-weight: 600;
-    background: rgba(245, 158, 11, 0.9);
-    color: #fff;
-}
 .badge-attachment {
     display: inline-flex;
     align-items: center;
@@ -449,12 +438,6 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <?php endif; ?>
                     <!-- Badges -->
                     <div class="absolute top-3 left-3 flex gap-2 flex-wrap">
-                        <?php if ($job['visibility'] === 'private'): ?>
-                            <span class="badge-private">
-                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                Private
-                            </span>
-                        <?php endif; ?>
                         <?php if ($job['attachment']): ?>
                             <span class="badge-attachment">
                                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
@@ -475,17 +458,17 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             </span>
                         <?php endif; ?>
                         <span class="meta-item">
-                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            Remote
-                        </span>
-                        <span class="meta-item">
                             <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             <?= e(str_replace('_', ' ', ucfirst($job['experience_level']))) ?>
+                        </span>
+                        <span class="meta-item">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            Posted: <?= e(date('M j, Y', strtotime($job['created_at']))) ?>
                         </span>
                         <?php if ($job['deadline']): ?>
                             <span class="meta-item">
                                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                <?= e(date('M j, Y', strtotime($job['deadline']))) ?>
+                                Deadline: <?= e(date('M j, Y', strtotime($job['deadline']))) ?>
                             </span>
                         <?php endif; ?>
                     </div>

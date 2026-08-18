@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_FILES['submission_file']['name'])) {
                 $submission_file = upload_attachment($_FILES['submission_file']);
                 if ($submission_file === null) {
-                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 10MB.');
+                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.');
                     redirect('freelancer/milestone.php?id=' . $milestone_id);
                 }
             }
@@ -231,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_FILES['submission_file']['name'])) {
                 $submission_file = upload_attachment($_FILES['submission_file']);
                 if ($submission_file === null) {
-                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 10MB.');
+                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.');
                     redirect('freelancer/my_tasks.php');
                 }
             }
@@ -315,8 +315,23 @@ $st->close();
 // Fetch milestones for each task
 foreach ($tasks as &$task) {
     $task['milestones'] = [];
-    $ms = $conn->prepare("SELECT * FROM milestones WHERE job_id = ? AND (freelancer_id = ? OR freelancer_id IS NULL) ORDER BY sort_order ASC");
-    $ms->bind_param('ii', $task['job_id'], $fl_freelancer_id);
+    $ms = $conn->prepare("
+        SELECT m1.* 
+        FROM milestones m1
+        WHERE m1.job_id = ? 
+          AND (m1.freelancer_id = ? OR m1.freelancer_id IS NULL)
+          AND (
+              m1.freelancer_id IS NOT NULL 
+              OR NOT EXISTS (
+                  SELECT 1 FROM milestones m2 
+                  WHERE m2.job_id = m1.job_id 
+                    AND m2.freelancer_id = ? 
+                    AND m2.sort_order = m1.sort_order
+              )
+          )
+        ORDER BY m1.sort_order ASC
+    ");
+    $ms->bind_param('iii', $task['job_id'], $fl_freelancer_id, $fl_freelancer_id);
     $ms->execute();
     $mr = $ms->get_result();
     while ($m = $mr->fetch_assoc()) { $task['milestones'][] = $m; }
@@ -412,7 +427,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <?php endif; ?>
 
                 <div class="flex flex-wrap items-center gap-4 text-sm mb-4">
-                    <span style="color:var(--color-text-muted)">Budget (<?= ucfirst(e($task['payment_type'] ?? 'fixed')) ?>): <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span>
+                    <span style="color:var(--color-text-muted)">Budget (<?= ($task['payment_type'] ?? 'fixed') === 'fixed' ? 'Project Payment' : ucfirst(e($task['payment_type'] ?? 'fixed')) ?>): <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span>
                     <span style="color:var(--color-text-placeholder)">Assigned <?= date('M j, Y', strtotime($task['assigned_at'])) ?></span>
                     <?php if (!empty($task['deadline'])): ?>
                         <?php 

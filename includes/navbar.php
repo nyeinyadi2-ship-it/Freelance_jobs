@@ -34,7 +34,7 @@ if ($role === 'company') {
     $home_links = [
         ['label' => 'Home', 'href' => base_url('index.php'), 'anchor' => ''],
         ['label' => 'Find Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'anchor' => 'find-jobs'],
-        ['label' => 'Freelancers', 'href' => base_url('freelancer/dashboard.php'), 'anchor' => ''],
+        ['label' => 'Freelancers', 'href' => base_url('company/find_freelancers.php'), 'anchor' => 'find_freelancers'],
         ['label' => 'About', 'href' => base_url('index.php'), 'anchor' => ''],
     ];
 } else {
@@ -74,7 +74,7 @@ if ($is_logged_in) {
             ['label' => 'Dashboard', 'href' => base_url('freelancer/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
             ['label' => 'Browse Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'icon' => 'search', 'page' => 'browse_jobs'],
             ['label' => 'My Tasks', 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
-            ['label' => 'Test Assignments', 'href' => base_url('freelancer/test_assignments.php'), 'icon' => 'document-text', 'page' => 'test_assignments'],
+            ['label' => 'Trial Task', 'href' => base_url('freelancer/test_assignments.php'), 'icon' => 'document-text', 'page' => 'test_assignments'],
             ['label' => 'Transactions', 'href' => base_url('freelancer/transactions.php'), 'icon' => 'document-text', 'page' => 'transactions'],
             ['label' => 'Payment Info', 'href' => base_url('freelancer/payment_settings.php'), 'icon' => 'credit-card', 'page' => 'payment_settings'],
         ];
@@ -84,8 +84,11 @@ if ($is_logged_in) {
 <style>
     /* ===== GLASS NAVBAR ===== */
     .nb {
-        position: sticky;
+        position: fixed;
         top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
         z-index: 50;
         background: rgba(255, 255, 255, .82);
         backdrop-filter: blur(24px) saturate(180%);
@@ -334,84 +337,6 @@ if ($is_logged_in) {
     .nc:active {
         transform: translateY(0)
     }
-
-    /* Mobile */
-    .mo {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, .45);
-        backdrop-filter: blur(4px);
-        z-index: 99;
-        opacity: 0;
-        visibility: hidden;
-        transition: all .3s
-    }
-
-    .mo.show {
-        opacity: 1;
-        visibility: visible
-    }
-
-    .mp {
-        position: fixed;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        width: min(320px, 85vw);
-        background: #fff;
-        z-index: 100;
-        transform: translateX(100%);
-        transition: transform .3s cubic-bezier(.16, 1, .3, 1);
-        overflow-y: auto;
-        box-shadow: -8px 0 32px rgba(0, 0, 0, .12)
-    }
-
-    html.dark .mp {
-        background: #0f172a
-    }
-
-    .mp.show {
-        transform: translateX(0)
-    }
-
-    .ml {
-        display: flex;
-        align-items: center;
-        gap: .625rem;
-        padding: .75rem 1.125rem;
-        font-size: .875rem;
-        font-weight: 500;
-        color: #475569;
-        text-decoration: none;
-        border-radius: 10px;
-        margin: 2px .75rem;
-        transition: all .15s
-    }
-
-    html.dark .ml {
-        color: #cbd5e1
-    }
-
-    .ml:hover {
-        background: rgba(99, 102, 241, .06);
-        color: #4f46e5
-    }
-
-    html.dark .ml:hover {
-        background: rgba(99, 102, 241, .1);
-        color: #818cf8
-    }
-
-    .ml.on {
-        background: rgba(99, 102, 241, .08);
-        color: #4f46e5;
-        font-weight: 600
-    }
-
-    html.dark .ml.on {
-        background: rgba(99, 102, 241, .12);
-        color: #818cf8
-    }
 </style>
 
 <nav class="nb" id="main-nav">
@@ -429,7 +354,7 @@ if ($is_logged_in) {
             </a>
 
             <!-- Desktop Links -->
-            <div class="hidden lg:flex items-center gap-0.5">
+            <div class="flex items-center gap-0.5 flex-wrap">
                 <?php foreach ($home_links as $i => $link): ?>
                     <?php
                     $active = false;
@@ -449,6 +374,7 @@ if ($is_logged_in) {
                     <a href="<?= e($link['href']) ?>" class="nl <?= $active ? 'on' : '' ?>"><?= e($link['label']) ?><span class="nl-bar"></span></a>
                 <?php endforeach; ?>
 
+                <?php if ($role === 'freelancer'): ?>
                 <!-- Skills Dropdown -->
                 <div class="relative" id="skills-dropdown-wrap">
                     <button type="button" id="skills-dropdown-toggle" class="nl <?= (!$is_home && $current_script === 'skill_jobs.php') ? 'on' : '' ?>" style="display:inline-flex;align-items:center;gap:4px;">
@@ -471,6 +397,7 @@ if ($is_logged_in) {
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
             </div>
 
             <!-- Right -->
@@ -591,6 +518,9 @@ if ($is_logged_in) {
                                         <?php elseif ($rl['icon'] === 'credit-card'): ?><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                                             </svg>
+                                        <?php elseif ($rl['icon'] === 'document-text'): ?><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
                                             <?php endif; ?><?= e($rl['label']) ?>
                                     </a>
                                 <?php endforeach; ?>
@@ -611,126 +541,18 @@ if ($is_logged_in) {
 
                 <?php else: ?>
                     <?php if ($is_home): ?>
-                        <button type="button" onclick="document.getElementById('loginModal').classList.remove('hidden')" class="nl font-semibold hidden sm:inline-flex">Login</button>
+                        <button type="button" onclick="document.getElementById('loginModal').classList.remove('hidden')" class="nl font-semibold">Login</button>
                     <?php else: ?>
-                        <a href="<?= e(base_url('auth/login.php')) ?>" class="nl font-semibold hidden sm:inline-flex">Login</a>
+                        <a href="<?= e(base_url('auth/login.php')) ?>" class="nl font-semibold">Login</a>
                     <?php endif; ?>
-                    <a href="<?= e(base_url('auth/register.php')) ?>" class="nc hidden sm:inline-flex">Register</a>
+                    <a href="<?= e(base_url('auth/register.php')) ?>" class="nc">Register</a>
                 <?php endif; ?>
-
-                <!-- Mobile -->
-                <button id="mobile-toggle" class="lg:hidden ni" aria-label="Menu">
-                    <svg class="w-5 h-5 ham" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                    <svg class="w-5 h-5 cls hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
             </div>
         </div>
     </div>
 </nav>
 
-<!-- Mobile -->
-<div id="mobile-overlay" class="mo" onclick="closeMobileMenu()"></div>
-<div id="mobile-panel" class="mp">
-    <div class="flex items-center justify-between p-4" style="border-bottom:1px solid rgba(0,0,0,.06)">
-        <a href="<?= e($role === 'company' ? base_url('index.php') : base_url('index.php')) ?>" class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"><svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg></div>
-            <span class="text-sm font-bold" style="color:#1e293b"><?= e('FreelanceHub') ?></span>
-        </a>
-        <button onclick="closeMobileMenu()" class="p-2 rounded-lg transition-colors hover:bg-gray-100 dark:hover:bg-gray-800" style="color:#64748b"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg></button>
-    </div>
-    <div class="py-2">
-        <?php
-        $mobile_pc = pathinfo($current_script, PATHINFO_FILENAME);
-        foreach ($home_links as $i => $link):
-            $active = false;
-            if ($role === 'company') {
-                if ($i === 0 && $mobile_pc === 'index') $active = true;
-                elseif ($link['anchor'] === 'find_freelancers' && $mobile_pc === 'find_freelancers') $active = true;
-                elseif ($link['anchor'] === 'manage_jobs' && in_array($mobile_pc, ['manage_jobs', 'post_job', 'edit_job', 'view_job', 'view_applications'])) $active = true;
-                elseif ($link['anchor'] === 'about' && $mobile_pc === 'about') $active = true;
-            } else {
-                $active = ($is_home && $i === 0);
-            }
-        ?>
-            <a href="<?= e($link['href']) ?>" class="ml <?= $active ? 'on' : '' ?>" onclick="closeMobileMenu()"><?= e($link['label']) ?></a>
-        <?php endforeach; ?>
-
-        <!-- Mobile Skills -->
-        <div class="mt-3 pt-2 mx-3" style="border-top:1px solid rgba(0,0,0,.06)">
-            <p class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest" style="color:#94a3b8">Skills</p>
-        </div>
-        <div class="max-h-48 overflow-y-auto scrollbar-thin">
-            <?php foreach ($nav_skills as $sk): ?>
-                <a href="<?= e(base_url('freelancer/skill_jobs.php?skill=' . urlencode($sk['skill_name']))) ?>" class="ml" onclick="closeMobileMenu()"><?= e($sk['skill_name']) ?></a>
-            <?php endforeach; ?>
-        </div>
-
-        <?php if ($is_logged_in): ?>
-            <div class="mt-3 pt-2 mx-3" style="border-top:1px solid rgba(0,0,0,.06)">
-                <p class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest" style="color:#94a3b8">Dashboard</p>
-            </div>
-            <?php foreach ($role_links as $link): ?>
-                <a href="<?= e($link['href']) ?>" class="ml <?= basename($_SERVER['SCRIPT_NAME'] ?? '', '.php') === $link['page'] ? 'on' : '' ?>">
-                    <?php if ($link['icon'] === 'home'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                        </svg>
-                    <?php elseif ($link['icon'] === 'plus'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                    <?php elseif ($link['icon'] === 'briefcase'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                    <?php elseif ($link['icon'] === 'search'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                    <?php elseif ($link['icon'] === 'clipboard'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                        </svg>
-                    <?php elseif ($link['icon'] === 'credit-card'): ?><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                        </svg>
-                        <?php endif; ?><?= e($link['label']) ?>
-                </a>
-            <?php endforeach; ?>
-
-            <div class="mt-3 pt-2 mx-3" style="border-top:1px solid rgba(0,0,0,.06)">
-                <p class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest" style="color:#94a3b8">Account</p>
-            </div>
-            <a href="<?= e(base_url('chat/index.php')) ?>" class="ml"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>Messages<span id="chatBadgeMobile" class="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white" style="background:#10b981;display:<?= $chat_unread > 0 ? 'inline-flex' : 'none' ?>"><?= $chat_unread > 99 ? '99+' : $chat_unread ?></span></a>
-            <a href="<?= e(base_url('notifications.php')) ?>" class="ml"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>Notifications<?php if ($unread_count > 0): ?><span id="notifBadgeMobile" class="ml-auto badge" style="background:#ef4444"><?= min($unread_count, 99) ?></span><?php endif; ?></a>
-            <?php $pm = $role === 'company' ? 'company/profile.php' : 'freelancer/profile.php'; ?>
-            <a href="<?= e(base_url($pm)) ?>" class="ml"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>My Profile</a>
-            <a href="<?= e(base_url('auth/logout.php')) ?>" class="ml text-red-600 dark:text-red-400"><svg class="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>Logout</a>
-        <?php else: ?>
-            <div class="mt-3 pt-2 mx-3 space-y-2" style="border-top:1px solid rgba(0,0,0,.06)">
-                <?php if ($is_home): ?>
-                    <button type="button" onclick="document.getElementById('loginModal').classList.remove('hidden');closeMobileMenu()" class="block w-full text-left px-4 py-2.5 text-sm font-semibold rounded-xl transition-colors" style="color:#4f46e5;background:rgba(99,102,241,.06)">Login</button>
-                <?php else: ?>
-                    <a href="<?= e(base_url('auth/login.php')) ?>" class="ml font-semibold" style="color:#4f46e5">Login</a>
-                <?php endif; ?>
-                <a href="<?= e(base_url('auth/register.php')) ?>" class="block px-4 py-2.5 text-sm font-semibold text-white text-center rounded-xl" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">Register</a>
-            </div>
-        <?php endif; ?>
-    </div>
-</div>
-
-<script src="<?= e(base_url('assets/js/notification-sse.js')) ?>"></script>
+<script src="<?= e(base_url('assets/js/notification-sse.js')) ?>" defer></script>
 <script>
     (function() {
         /* ===== Scroll shadow ===== */
@@ -739,36 +561,6 @@ if ($is_logged_in) {
             nav.classList.toggle('sh', window.scrollY > 10)
         }, {
             passive: true
-        });
-
-        /* ===== Mobile menu ===== */
-        window.closeMobileMenu = function() {
-            var o = document.getElementById('mobile-overlay'),
-                p = document.getElementById('mobile-panel');
-            if (o) o.classList.remove('show');
-            if (p) p.classList.remove('show');
-            var h = document.querySelector('.ham'),
-                c = document.querySelector('.cls');
-            if (h) h.classList.remove('hidden');
-            if (c) c.classList.add('hidden');
-            document.body.style.overflow = '';
-        };
-
-        var mt = document.getElementById('mobile-toggle');
-        if (mt) mt.addEventListener('click', function() {
-            var p = document.getElementById('mobile-panel');
-            if (p && p.classList.contains('show')) {
-                closeMobileMenu();
-                return;
-            }
-            var o = document.getElementById('mobile-overlay');
-            if (o) o.classList.add('show');
-            if (p) p.classList.add('show');
-            var h = document.querySelector('.ham'),
-                c = document.querySelector('.cls');
-            if (h) h.classList.add('hidden');
-            if (c) c.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
         });
 
         /* ===== Close all dropdowns ===== */
@@ -972,33 +764,12 @@ if ($is_logged_in) {
             });
         });
 
-        /* ===== SSE notifications ===== */
+        /* ===== SSE notifications (badge updated by notification-sse.js) ===== */
         if (typeof NotificationSSE !== 'undefined') NotificationSSE.init({
             user_id: <?= (int)($user['user_id'] ?? 0) ?>
         });
 
-        /* ===== Polling for counts ===== */
-        setInterval(function() {
-            fetch('<?= e(base_url("api/notifications.php")) ?>?action=count', {
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                })
-                .then(function(r) {
-                    return r.json()
-                }).then(function(d) {
-                    var t = d.count > 99 ? '99+' : d.count;
-                    var s = d.count > 0 ? 'flex' : 'none';
-                    ['notifBadge', 'notifBadgeMobile'].forEach(function(id) {
-                        var b = document.getElementById(id);
-                        if (b) {
-                            b.textContent = t;
-                            b.style.display = s;
-                        }
-                    });
-                }).catch(function() {});
-        }, 15000);
-
+        /* ===== Polling for chat unread count ===== */
         setInterval(function() {
             fetch('<?= e(base_url("api/chat.php")) ?>?action=get_unread_count', {
                     headers: {
@@ -1019,5 +790,15 @@ if ($is_logged_in) {
                     if (cbm) { cbm.textContent = t; cbm.style.display = s2; }
                 }).catch(function() {});
         }, 15000);
+
+        /* ===== Fixed Navbar Padding ===== */
+        function setNbPadding() {
+            var nav = document.querySelector('.nb');
+            if (nav && document.body) document.body.style.paddingTop = nav.offsetHeight + 'px';
+        }
+        setNbPadding();
+        document.addEventListener('DOMContentLoaded', setNbPadding);
+        window.addEventListener('load', setNbPadding);
+        window.addEventListener('resize', setNbPadding);
     })();
 </script>

@@ -30,15 +30,6 @@ if (!$job) {
     redirect('index.php');
 }
 
-// Skills
-$skills = [];
-$ss = $conn->prepare('SELECT s.skill_name FROM job_skills js JOIN skills s ON js.skill_id = s.id WHERE js.job_id = ?');
-$ss->bind_param('i', $job_id);
-$ss->execute();
-$sr = $ss->get_result();
-while ($row = $sr->fetch_assoc()) $skills[] = $row['skill_name'];
-$ss->close();
-
 // Application count & applicants
 $app_count = 0;
 $apps = [];
@@ -105,7 +96,6 @@ require __DIR__ . '/../includes/header.php';
 .vj-status-rejected::before { background:#f87171; }
 .vj-section { background:var(--color-surface,#fff); border:1px solid var(--color-border,#e5e7eb); border-radius:1rem; padding:1.5rem; margin-bottom:1.5rem; }
 .vj-section h3 { font-size:1rem; font-weight:700; margin-bottom:1rem; color:var(--color-text-primary); }
-.vj-skill { display:inline-block; background:rgba(37,99,235,0.08); color:#2563eb; font-size:0.75rem; font-weight:600; padding:4px 12px; border-radius:999px; }
 .vj-app-row { display:flex; align-items:center; gap:12px; padding:0.75rem 0; border-bottom:1px solid var(--color-border,#e5e7eb); }
 .vj-app-row:last-child { border-bottom:none; }
 .vj-app-avatar { width:40px; height:40px; border-radius:50%; object-fit:cover; border:2px solid var(--color-border); }
@@ -140,7 +130,7 @@ require __DIR__ . '/../includes/header.php';
                 <?php endif; ?>
                 <div>
                     <p class="font-bold text-base"><?= e($job['company_name']) ?></p>
-                    <p class="text-blue-200 text-xs">Posted <?= date('M j, Y', strtotime($job['created_at'])) ?></p>
+                    <p class="text-blue-200 text-xs">Posted: <?= date('M j, Y', strtotime($job['created_at'])) ?></p>
                 </div>
             </div>
             <h1 class="text-2xl md:text-3xl font-extrabold mb-3"><?= e($job['title']) ?></h1>
@@ -176,7 +166,7 @@ require __DIR__ . '/../includes/header.php';
     <!-- Quick Info -->
     <div class="grid sm:grid-cols-4 gap-4 mb-6">
         <div class="vj-section" style="text-align:center;margin-bottom:0">
-            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Budget (<?= ucfirst(e($job['payment_type'] ?? 'fixed')) ?>)</p>
+            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Budget (<?= ($job['payment_type'] ?? 'fixed') === 'fixed' ? 'Project Payment' : ucfirst(e($job['payment_type'] ?? 'fixed')) ?>)</p>
             <p style="font-size:1.5rem;font-weight:800;color:#2563eb"><?= e(number_format((float) $job['budget'], 2)) ?> MMK</p>
         </div>
         <div class="vj-section" style="text-align:center;margin-bottom:0">
@@ -184,8 +174,12 @@ require __DIR__ . '/../includes/header.php';
             <p style="font-size:1.5rem;font-weight:800;color:var(--color-text-primary)"><?= $hired_count ?>/<?= $freelancers_needed ?></p>
         </div>
         <div class="vj-section" style="text-align:center;margin-bottom:0">
-            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Proposals</p>
+            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Posts</p>
             <p style="font-size:1.5rem;font-weight:800;color:var(--color-text-primary)"><?= $app_count ?></p>
+        </div>
+        <div class="vj-section" style="text-align:center;margin-bottom:0">
+            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Posted</p>
+            <p style="font-size:1rem;font-weight:700;color:var(--color-text-primary)"><?= date('M j, Y', strtotime($job['created_at'])) ?></p>
         </div>
         <div class="vj-section" style="text-align:center;margin-bottom:0">
             <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Deadline</p>
@@ -204,18 +198,6 @@ require __DIR__ . '/../includes/header.php';
         <h3>Requirements</h3>
         <p style="color:var(--color-text-secondary);line-height:1.8;white-space:pre-wrap"><?= e($job['requirements'] ?: 'No requirements listed.') ?></p>
     </div>
-
-    <!-- Skills -->
-    <?php if (!empty($skills)): ?>
-        <div class="vj-section">
-            <h3>Required Skills</h3>
-            <div class="flex flex-wrap gap-2">
-                <?php foreach ($skills as $sk): ?>
-                    <span class="vj-skill"><?= e($sk) ?></span>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    <?php endif; ?>
 
     <!-- Milestones -->
     <?php if (!empty($milestones)): ?>

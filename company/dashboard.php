@@ -39,19 +39,19 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-// Proposal counts
+// Posts count (Hired Freelancers)
 try {
     $stmt = $conn->prepare("
-        SELECT COUNT(*) AS cnt FROM job_applications ja
-        JOIN jobs j ON ja.job_id = j.id
-        WHERE j.company_id = ? AND ja.status = 'pending'
+        SELECT COUNT(DISTINCT a.freelancer_id) AS cnt FROM assignments a
+        JOIN jobs j ON a.job_id = j.id
+        WHERE j.company_id = ? AND a.status NOT IN ('pending', 'rejected', 'cancelled')
     ");
     $stmt->bind_param('i', $company_id);
     $stmt->execute();
-    $pending_proposals = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+    $total_posts = (int) $stmt->get_result()->fetch_assoc()['cnt'];
     $stmt->close();
 } catch (mysqli_sql_exception $e) {
-    $pending_proposals = 0;
+    $total_posts = 0;
 }
 
 try {
@@ -312,10 +312,7 @@ require __DIR__ . '/../includes/header.php';
     </button>
     <button class="dash-tab px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg" data-tab="proposals" style="color:var(--color-text-muted)">
       <svg class="w-4 h-4 inline-block mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      Proposals
-      <?php if ($pending_proposals > 0): ?>
-        <span class="ml-1.5 text-xs bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 font-bold rounded-full px-1.5 py-0.5"><?= $pending_proposals ?></span>
-      <?php endif; ?>
+      Applications
     </button>
     <button class="dash-tab px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg" data-tab="hired" style="color:var(--color-text-muted)">
       <svg class="w-4 h-4 inline-block mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -345,7 +342,7 @@ require __DIR__ . '/../includes/header.php';
 
 <!-- ====== OVERVIEW TAB ====== -->
 <div class="dash-section active" id="tab-overview">
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+  <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
     <div class="card stat-card relative overflow-hidden" style="background:linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);color:#fff;border:none;">
       <div class="absolute top-0 right-0 w-24 h-24 opacity-10">
         <svg class="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
@@ -359,13 +356,6 @@ require __DIR__ . '/../includes/header.php';
       </div>
       <p class="text-sm opacity-80 font-medium"><?= 'Completed Jobs' ?></p>
       <p class="text-3xl font-bold mt-1"><?= $stats['completed'] ?? 0 ?></p>
-    </div>
-    <div class="card stat-card relative overflow-hidden" style="background:linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);color:#fff;border:none;">
-      <div class="absolute top-0 right-0 w-24 h-24 opacity-10">
-        <svg class="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-      </div>
-      <p class="text-sm opacity-80 font-medium">Active Proposals</p>
-      <p class="text-3xl font-bold mt-1"><?= $pending_proposals ?></p>
     </div>
     <div class="card stat-card relative overflow-hidden" style="background:linear-gradient(135deg, #d97706 0%, #f59e0b 100%);color:#fff;border:none;">
       <div class="absolute top-0 right-0 w-24 h-24 opacity-10">
@@ -508,7 +498,7 @@ require __DIR__ . '/../includes/header.php';
 
 <!-- ====== PROPOSALS TAB ====== -->
 <div class="dash-section" id="tab-proposals">
-  <h2 class="text-lg font-semibold mb-5" style="color:var(--color-text-primary)">Received Proposals</h2>
+  <h2 class="text-lg font-semibold mb-5" style="color:var(--color-text-primary)">Applications</h2>
   <?php if (empty($recent_apps)): ?>
     <div class="card text-center py-12" style="color:var(--color-text-placeholder)">
       <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -549,7 +539,7 @@ require __DIR__ . '/../includes/header.php';
   <?php if (empty($hired)): ?>
     <div class="card text-center py-12" style="color:var(--color-text-placeholder)">
       <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-      <p>No freelancers hired yet. Review proposals and hire talent to get started.</p>
+      <p>No freelancers hired yet. Review posts and hire talent to get started.</p>
     </div>
   <?php else: ?>
     <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">

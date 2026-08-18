@@ -58,7 +58,7 @@ $unread_total = get_unread_count($conn, $user_id);
         }
     };
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
 <?php endif; ?>
     <script src="<?= e(base_url('assets/js/emoji-picker.js')) ?>"></script>
@@ -496,7 +496,7 @@ $unread_total = get_unread_count($conn, $user_id);
                 <p class="text-sm max-w-xs" style="color:var(--color-text-muted)"><?= e('Select a person to start chatting') ?></p>
                 <div class="mt-6 flex items-center gap-2 text-xs px-4 py-2 rounded-xl" style="color:var(--color-text-placeholder);background:rgba(99,102,241,0.04);border:1px solid rgba(99,102,241,0.06)">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    Chat is available after a proposal is accepted or you're hired
+                    Chat is available after a post is accepted or you're hired
                 </div>
             </div>
         <?php endif; ?>

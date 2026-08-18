@@ -88,8 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_hire'])) {
 
                 // Verify and reserve balance
                 if ($reserve_amount > 0) {
-                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
-                    $stmt->bind_param('ddid', $reserve_amount, $reserve_amount, $user['user_id'], $reserve_amount);
+                    $stmt = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
+                    $stmt->bind_param('did', $reserve_amount, $user['user_id'], $reserve_amount);
                     $stmt->execute();
                     if ($stmt->affected_rows === 0) {
                         $stmt->close();
@@ -117,16 +117,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_hire'])) {
                 
                 // Add freelancer specific milestones
                 if ($payment_type === 'milestone') {
+                    $stmt_chk = $conn->prepare("SELECT id FROM milestones WHERE job_id = ? AND freelancer_id = ? AND sort_order = ?");
                     $stmt_ms = $conn->prepare("INSERT INTO milestones (job_id, freelancer_id, title, amount, status, sort_order) VALUES (?, ?, ?, ?, 'draft', ?)");
                     foreach ($titles as $idx => $mtitle) {
                         $mamt = (float)$amounts[$idx];
                         $ms_order = $idx + 1;
                         if ($mamt > 0 && trim($mtitle) !== '') {
                             $mtitle_clean = trim($mtitle);
-                            $stmt_ms->bind_param('iisdi', $job_id, $app['freelancer_id'], $mtitle_clean, $mamt, $ms_order);
-                            $stmt_ms->execute();
+                            
+                            $stmt_chk->bind_param('iii', $job_id, $app['freelancer_id'], $ms_order);
+                            $stmt_chk->execute();
+                            $existing = $stmt_chk->get_result()->fetch_assoc();
+                            
+                            if (!$existing) {
+                                $stmt_ms->bind_param('iisdi', $job_id, $app['freelancer_id'], $mtitle_clean, $mamt, $ms_order);
+                                $stmt_ms->execute();
+                            }
                         }
                     }
+                    $stmt_chk->close();
                     $stmt_ms->close();
                 }
 
@@ -199,7 +208,7 @@ require __DIR__ . '/../includes/header.php';
 
             <?php if ($app['payment_type'] === 'fixed'): ?>
                 <div class="mb-8 p-5 rounded-xl bg-indigo-50 border border-indigo-100 dark:bg-indigo-900/20 dark:border-indigo-800/30">
-                    <h3 class="text-sm font-semibold text-indigo-900 dark:text-indigo-300 mb-2">Fixed Payment Total</h3>
+                    <h3 class="text-sm font-semibold text-indigo-900 dark:text-indigo-300 mb-2">Project Payment Total</h3>
                     <div class="text-3xl font-bold text-indigo-600 dark:text-indigo-400">
                         <?= number_format((float)$app['budget'], 2) ?> <span class="text-lg font-medium text-indigo-400">MMK</span>
                     </div>

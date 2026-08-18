@@ -86,32 +86,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
         if ($assignment) {
             $conn->begin_transaction();
             try {
-                $stmt = $conn->prepare("UPDATE assignments SET status = 'payment_pending' WHERE id = ?");
+                $now = date('Y-m-d H:i:s');
+                $amount = (float) $assignment['budget'];
+
+                // Update assignment status
+                $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE id = ?");
                 $stmt->bind_param('i', $assignment_id);
                 $stmt->execute();
                 $stmt->close();
 
+                // Update submission status
                 $stmt = $conn->prepare("UPDATE submissions SET status = 'approved' WHERE assignment_id = ? AND status = 'pending'");
                 $stmt->bind_param('i', $assignment_id);
                 $stmt->execute();
                 $stmt->close();
 
-                $stmt = $conn->prepare("SELECT u.id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.id = ?");
+                // Get freelancer user_id
+                $stmt = $conn->prepare("SELECT f.id as freelancer_id, u.id as user_id FROM assignments a JOIN freelancers f ON a.freelancer_id = f.id JOIN users u ON f.user_id = u.id WHERE a.id = ?");
                 $stmt->bind_param('i', $assignment_id);
                 $stmt->execute();
-                $fl_user = $stmt->get_result()->fetch_assoc();
+                $fl = $stmt->get_result()->fetch_assoc();
                 $stmt->close();
 
-                if ($fl_user) {
-                    create_notification($conn, (int) $fl_user['id'], 'work_approved', "Your work for \"{$job['title']}\" has been approved. Payment is pending.", 'freelancer/my_tasks.php');
+                if ($fl) {
+                    $fl_user_id = (int) $fl['user_id'];
+                    $freelancer_id = (int) $fl['freelancer_id'];
+                    
+                    // Credit Freelancer Wallet
+                    if ($fl_user_id > 0 && $amount > 0) {
+                        $stmt_cred = $conn->prepare("UPDATE users SET available_balance = available_balance + ? WHERE id = ?");
+                        $stmt_cred->bind_param('di', $amount, $fl_user_id);
+                        $stmt_cred->execute();
+                        $stmt_cred->close();
+                    }
+
+                    // Insert into payments
+                    $pmt_method = 'wallet';
+                    $stmt_pmt = $conn->prepare("INSERT INTO payments (assignment_id, company_id, freelancer_id, amount, payment_method, status, paid_at) VALUES (?, ?, ?, ?, ?, 'paid', ?)");
+                    $stmt_pmt->bind_param('iiidss', $assignment_id, $company_id, $freelancer_id, $amount, $pmt_method, $now);
+                    $stmt_pmt->execute();
+                    $stmt_pmt->close();
+
+                    // Insert into wallet_transactions
+                    $desc = "Project Payment: " . ($job['title'] ?? 'Job');
+                    $null_ms = null;
+                    $stmt_wt = $conn->prepare("INSERT INTO wallet_transactions (user_id, sender_id, receiver_id, job_id, milestone_id, description, amount, type, payment_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'payment', ?, 'completed', ?)");
+                    $stmt_wt->bind_param('iiiiisdss', $fl_user_id, $user['user_id'], $fl_user_id, $job_id, $null_ms, $desc, $amount, $pmt_method, $now);
+                    $stmt_wt->execute();
+                    $stmt_wt->close();
+
+                    create_notification($conn, $fl_user_id, 'work_approved', "Your work for \"{$job['title']}\" has been approved and " . number_format($amount, 2) . " MMK credited to your wallet.", 'freelancer/earnings.php');
+                }
+
+                // Check if job is fully completed
+                $stmt = $conn->prepare("SELECT freelancers_needed, (SELECT COUNT(*) FROM assignments WHERE job_id = jobs.id AND status = 'completed') as done FROM jobs WHERE id = ?");
+                $stmt->bind_param('i', $job_id);
+                $stmt->execute();
+                $j_prog = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+                
+                if ($j_prog && (int)$j_prog['done'] >= (int)$j_prog['freelancers_needed']) {
+                    $stmt = $conn->prepare("UPDATE jobs SET status = 'completed' WHERE id = ?");
+                    $stmt->bind_param('i', $job_id);
+                    $stmt->execute();
+                    $stmt->close();
                 }
 
                 $conn->commit();
-                set_flash('success', 'Work approved. Please complete the payment.');
-                redirect('company/pay_freelancer.php?assignment_id=' . $assignment_id);
+                set_flash('success', 'Work approved and freelancer has been paid.');
             } catch (Exception $e) {
                 $conn->rollback();
-                set_flash('error', 'Could not approve work.');
+                set_flash('error', 'Could not approve work and pay freelancer.');
             }
         } else {
             set_flash('error', 'Assignment not found or not ready for approval.');
@@ -344,12 +389,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             $fl_user = $stmt->get_result()->fetch_assoc();
             $stmt->close();
             if ($fl_user) {
-                create_notification($conn, (int) $fl_user['user_id'], 'admin_announcement', "The deadline for your test assignment \"{$prop['title']}\" has been extended to " . date('M j, Y g:ia', strtotime($new_deadline_formatted)) . ".", 'freelancer/view_proposal.php?id=' . $proposal_id);
+                create_notification($conn, (int) $fl_user['user_id'], 'admin_announcement', "The deadline for your trial task \"{$prop['title']}\" has been extended to " . date('M j, Y g:ia', strtotime($new_deadline_formatted)) . ".", 'freelancer/view_proposal.php?id=' . $proposal_id);
             }
             
-            set_flash('success', 'Test assignment deadline extended successfully.');
+            set_flash('success', 'Trial task deadline extended successfully.');
         } else {
-            set_flash('error', 'Invalid test assignment or missing deadline.');
+            set_flash('error', 'Invalid trial task or missing deadline.');
         }
     } elseif ($action === 'cancel_pp_project') {
         $proposal_id = (int) ($_POST['proposal_id'] ?? 0);
@@ -375,12 +420,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             $fl_user = $stmt->get_result()->fetch_assoc();
             $stmt->close();
             if ($fl_user) {
-                create_notification($conn, (int) $fl_user['user_id'], 'account_suspended', "Your test assignment for \"{$prop['title']}\" has been cancelled by the company.", 'freelancer/my_tasks.php');
+                create_notification($conn, (int) $fl_user['user_id'], 'account_suspended', "Your trial task for \"{$prop['title']}\" has been cancelled by the company.", 'freelancer/my_tasks.php');
             }
             
-            set_flash('success', 'Test assignment cancelled successfully.');
+            set_flash('success', 'Trial task cancelled successfully.');
         } else {
-            set_flash('error', 'Invalid test assignment.');
+            set_flash('error', 'Invalid trial task.');
         }
     } elseif (isset($_POST['ms_action'])) {
         // Milestone actions
@@ -469,10 +514,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 } else {
                     $conn->begin_transaction();
                     try {
-                        // Deduct from available balance, add to reserved balance
-                        $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
+                        // Deduct from available balance
+                        $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
                         $amount = (float) $ms['amount'];
-                        $stmt_bal->bind_param('ddid', $amount, $amount, $user['user_id'], $amount);
+                        $stmt_bal->bind_param('did', $amount, $user['user_id'], $amount);
                         $stmt_bal->execute();
                         if ($stmt_bal->affected_rows === 0) {
                             $stmt_bal->close();
@@ -486,9 +531,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                         $up->execute();
                         $up->close();
 
-                        $conn->commit();
-
-                        // Notify freelancer
+                        // Notify freelancer & log transaction
                         if ($ms['freelancer_id'] > 0) {
                             $stmt = $conn->prepare("SELECT user_id FROM freelancers WHERE id = ?");
                             $stmt->bind_param('i', $ms['freelancer_id']);
@@ -496,10 +539,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                             $fl = $stmt->get_result()->fetch_assoc();
                             $stmt->close();
                             if ($fl) {
-                                create_notification($conn, (int) $fl['user_id'], 'admin_announcement', "Milestone \"{$ms['title']}\" for \"{$ms['title']}\" has been funded! You can now start working.", 'freelancer/my_tasks.php');
+                                // Log internal wallet transaction
+                                $desc = "Fund Milestone: " . ($ms['title'] ?? 'Unknown');
+                                $now = date('Y-m-d H:i:s');
+                                $fl_user_id = (int) $fl['user_id'];
+                                $stmt_wt = $conn->prepare("INSERT INTO wallet_transactions (user_id, sender_id, receiver_id, job_id, milestone_id, description, amount, type, payment_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'funding', 'platform_fund', 'completed', ?)");
+                                $stmt_wt->bind_param('iiiiisds', $user['user_id'], $user['user_id'], $fl_user_id, $job_id, $milestone_id, $desc, $amount, $now);
+                                $stmt_wt->execute();
+                                $stmt_wt->close();
+                                
+                                create_notification($conn, $fl_user_id, 'admin_announcement', "Milestone \"{$ms['title']}\" for \"{$job['title']}\" has been funded! You can now start working.", 'freelancer/my_tasks.php');
                             }
                         }
 
+                        $conn->commit();
                         set_flash('success', 'Milestone funded successfully.');
                     } catch (Exception $e) {
                         $conn->rollback();
@@ -520,13 +573,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $conn->begin_transaction();
                 try {
                     $now = date('Y-m-d H:i:s');
+                    $amount = (float) $ms['amount'];
+                    
+                    // Update milestone status
                     $stmt = $conn->prepare("UPDATE milestones SET status = 'payment_pending', approved_at = ? WHERE id = ?");
                     $stmt->bind_param('si', $now, $milestone_id);
                     $stmt->execute();
                     $stmt->close();
                     
-                    $conn->commit();
-
                     $fl_user_id = 0;
                     if ($ms['freelancer_id'] > 0) {
                         $stmt = $conn->prepare("SELECT user_id FROM freelancers WHERE id = ?");
@@ -535,17 +589,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                         $fl = $stmt->get_result()->fetch_assoc();
                         $fl_user_id = (int) ($fl['user_id'] ?? 0);
                         $stmt->close();
-                    }
-                    if ($fl_user_id > 0) {
-                        create_notification($conn, $fl_user_id, 'work_approved', "Milestone approved. Payment is pending.", 'freelancer/my_tasks.php');
+                        
+                        if ($fl_user_id > 0) {
+                            create_notification($conn, $fl_user_id, 'work_approved', "Milestone approved. Payment is pending.", 'freelancer/my_tasks.php');
+                        }
                     }
 
-                    set_flash('success', 'Milestone approved. Please complete the payment.');
-                    redirect('company/pay_freelancer.php?milestone_id=' . $milestone_id);
+                    $conn->commit();
+                    set_flash('success', 'Milestone approved. Please proceed to make the manual payment.');
                 } catch (Exception $e) {
                     $conn->rollback();
                     error_log("Milestone approve failed: " . $e->getMessage());
-                    set_flash('error', 'Failed to approve milestone.');
+                    set_flash('error', 'Failed to approve and pay milestone.');
                 }
             } else {
                 set_flash('error', 'Milestone not found or not submitted.');
@@ -695,25 +750,6 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
-$freelancer_skills = [];
-if (!empty($applications)) {
-    $fl_ids = array_unique(array_column($applications, 'freelancer_id'));
-    $placeholders = implode(',', array_fill(0, count($fl_ids), '?'));
-    $sk_stmt = $conn->prepare("SELECT fs.freelancer_id, s.skill_name FROM freelancer_skills fs JOIN skills s ON fs.skill_id = s.id WHERE fs.freelancer_id IN ($placeholders)");
-    $sk_stmt->bind_param(str_repeat('i', count($fl_ids)), ...$fl_ids);
-    $sk_stmt->execute();
-    $sk_res = $sk_stmt->get_result();
-    while ($sk = $sk_res->fetch_assoc()) {
-        $freelancer_skills[$sk['freelancer_id']][] = $sk['skill_name'];
-    }
-    $sk_stmt->close();
-}
-
-foreach ($applications as &$app) {
-    $app['skills'] = $freelancer_skills[$app['freelancer_id']] ?? [];
-}
-unset($app);
-
 $proposal_projects = [];
 $stmt = $conn->prepare("SELECT * FROM proposal_projects WHERE job_id = ? AND company_id = ?");
 $stmt->bind_param('ii', $job_id, $company_id);
@@ -728,9 +764,19 @@ $assignment = null;
 $assignments = [];
 $payment = null;
 $stmt = $conn->prepare("
-    SELECT a.id, a.status, a.rejection_reason, a.submission_link, a.assigned_at, a.deadline, f.full_name, f.id AS freelancer_id
+    SELECT a.id, a.status, a.rejection_reason, a.submission_link, a.assigned_at, a.deadline, f.full_name, f.id AS freelancer_id,
+           sub.file_path, sub.notes, sub.status AS sub_status, sub.created_at AS submitted_at
     FROM assignments a
     JOIN freelancers f ON a.freelancer_id = f.id
+    LEFT JOIN (
+        SELECT s1.assignment_id, s1.file_path, s1.notes, s1.status, s1.created_at
+        FROM submissions s1
+        INNER JOIN (
+            SELECT assignment_id, MAX(version) AS max_version
+            FROM submissions
+            GROUP BY assignment_id
+        ) s2 ON s1.assignment_id = s2.assignment_id AND s1.version = s2.max_version
+    ) sub ON sub.assignment_id = a.id
     WHERE a.job_id = ?
     ORDER BY a.assigned_at DESC
 ");
@@ -738,11 +784,13 @@ $stmt->bind_param('i', $job_id);
 $stmt->execute();
 $ar = $stmt->get_result();
 while ($row = $ar->fetch_assoc()) { 
-    $sub_stmt = $conn->prepare("SELECT file_path, notes, status AS sub_status, created_at AS submitted_at FROM submissions WHERE assignment_id = ? ORDER BY version DESC LIMIT 1");
-    $sub_stmt->bind_param('i', $row['id']);
-    $sub_stmt->execute();
-    $row['submission'] = $sub_stmt->get_result()->fetch_assoc();
-    $sub_stmt->close();
+    $row['submission'] = !empty($row['file_path']) ? [
+        'file_path' => $row['file_path'],
+        'notes' => $row['notes'],
+        'sub_status' => $row['sub_status'],
+        'submitted_at' => $row['submitted_at'],
+    ] : null;
+    unset($row['file_path'], $row['notes'], $row['sub_status'], $row['submitted_at']);
     $assignments[] = $row; 
 }
 $stmt->close();
@@ -898,18 +946,6 @@ require __DIR__ . '/../includes/header.php';
                                 </div>
                                 <?php if ($ms['submitted_at']): ?>
                                     <span class="text-[11px]" style="color:var(--color-text-muted)"><?= date('M j, Y g:ia', strtotime($ms['submitted_at'])) ?></span>
-                                <?php endif; ?>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                <button type="button" onclick="document.getElementById('submissionModal-<?= $ms['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:-translate-y-0.5" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 2px 8px rgba(139,92,246,0.3)">
-                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                    View Submission
-                                </button>
-                                <?php if ($ms_asgn && $ms_asgn['status'] !== 'rejected'): ?>
-                                <button type="button" onclick="document.getElementById('rejectModal-<?= $ms_asgn['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-all border border-red-200">
-                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    Reject Project
-                                </button>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -1069,7 +1105,7 @@ require __DIR__ . '/../includes/header.php';
                         <?php elseif ($ms['status'] === 'payment_pending'): ?>
                             <a href="<?= e(base_url('company/pay_freelancer.php?milestone_id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:-translate-y-0.5" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                                Pay Milestone
+                                Make Payment
                             </a>
                         <?php elseif ($ms['status'] === 'paid'): ?>
                             <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#10b981">
@@ -1301,22 +1337,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     <!-- Application Details -->
                     <div class="flex-1 flex flex-col gap-3 mt-2 text-sm">
-                        <?php if (!empty($app['skills'])): ?>
-                            <div>
-                                <p class="text-xs font-semibold mb-1" style="color:var(--color-text-muted)">Skills</p>
-                                <div class="flex flex-wrap gap-1">
-                                    <?php foreach (array_slice($app['skills'], 0, 5) as $sk): ?>
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800">
-                                            <?= e($sk) ?>
-                                        </span>
-                                    <?php endforeach; ?>
-                                    <?php if (count($app['skills']) > 5): ?>
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">+<?= count($app['skills']) - 5 ?> more</span>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-
                         <?php if (!empty($app['estimated_completion_time'])): ?>
                             <div>
                                 <p class="text-xs font-semibold mb-0.5" style="color:var(--color-text-muted)">Estimated Time</p>
@@ -1331,7 +1351,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <?= nl2br(e($app['cover_letter'])) ?>
                                 </div>
                                 <button type="button" onclick="openAppModal(<?= (int)$app['id'] ?>)" class="text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 text-xs font-semibold mt-1.5 inline-flex items-center gap-1">
-                                    Read Full Proposal <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                    Read Full Post <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                 </button>
                             </div>
                         <?php endif; ?>
@@ -1357,7 +1377,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <?php if (isset($proposal_projects[$app['freelancer_id']])): ?>
                                 <?php $prop = $proposal_projects[$app['freelancer_id']]; ?>
                                 <div class="flex flex-col items-center gap-1 bg-gray-50 dark:bg-gray-800 p-2 rounded-lg w-full text-center">
-                                    <span class="text-xs font-semibold text-gray-500 uppercase">Test Assignment</span>
+                                    <span class="text-xs font-semibold text-gray-500 uppercase">Trial Task</span>
                                     <?= status_badge($prop['status']) ?>
                                     <?php if(in_array($prop['status'], ['submitted', 'reviewed'])): ?>
                                         <a href="<?= e(base_url('company/review_proposal.php?id=' . $prop['id'])) ?>" class="text-indigo-600 hover:underline text-sm font-medium mt-1">Review Submission</a>
@@ -1368,7 +1388,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <button type="button" onclick="document.getElementById('extendPpModal-<?= $prop['id'] ?>').classList.remove('hidden')" class="btn-primary px-3 py-1 text-xs inline-flex items-center gap-1">
                                                 Extend
                                             </button>
-                                            <form method="POST" onsubmit="return confirm('Cancel this test assignment? Freelancer will not be able to submit.')">
+                                            <form method="POST" onsubmit="return confirm('Cancel this trial task? Freelancer will not be able to submit.')">
                                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                                 <input type="hidden" name="action" value="cancel_pp_project">
                                                 <input type="hidden" name="proposal_id" value="<?= $prop['id'] ?>">
@@ -1386,7 +1406,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('extendPpModal-<?= $prop['id'] ?>').classList.add('hidden')"></div>
                                     <div class="relative w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" style="background:var(--color-card);border:1px solid var(--color-border)">
                                         <div class="flex items-center justify-between p-5 border-b" style="border-color:var(--color-border)">
-                                            <h3 class="text-base font-bold" style="color:var(--color-text-primary)">Extend Test Assignment Deadline</h3>
+                                            <h3 class="text-base font-bold" style="color:var(--color-text-primary)">Extend Trial Task Deadline</h3>
                                             <button type="button" onclick="document.getElementById('extendPpModal-<?= $prop['id'] ?>').classList.add('hidden')" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                                                 <svg class="w-5 h-5" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                                             </button>
@@ -1414,7 +1434,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <?php else: ?>
                                 <button type="button" onclick="openProposalModal(<?= $app['freelancer_id'] ?>, '<?= e(addslashes($app['full_name'])) ?>')" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all w-full" style="background:rgba(99,102,241,0.08);color:#6366f1">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                    Send Test Assignment
+                                    Send Trial Task
                                 </button>
                             <?php endif; ?>
                         </div>
@@ -1615,7 +1635,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <input type="hidden" name="freelancer_id" id="proposal_freelancer_id" value="">
             
             <div class="flex items-center justify-between mb-5">
-                <h3 class="text-xl font-bold" style="color:var(--color-text-primary)">Send Test Assignment to <span id="proposal_freelancer_name" class="text-indigo-600"></span></h3>
+                <h3 class="text-xl font-bold" style="color:var(--color-text-primary)">Send Trial Task to <span id="proposal_freelancer_name" class="text-indigo-600"></span></h3>
                 <button type="button" onclick="closeProposalModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
@@ -1628,7 +1648,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             <div class="mb-4">
                 <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Description</label>
-                <textarea name="description" rows="3" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="Describe the test assignment briefly..."></textarea>
+                <textarea name="description" rows="3" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="Describe the trial task briefly..."></textarea>
             </div>
 
             <div class="mb-4">
@@ -1665,7 +1685,7 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <div class="overflow-y-auto p-6 space-y-5">
             <div>
-                <h4 class="text-sm font-semibold mb-1" style="color:var(--color-text-muted)">Cover Letter / Proposal</h4>
+                <h4 class="text-sm font-semibold mb-1" style="color:var(--color-text-muted)">Cover Letter / Post</h4>
                 <div id="app_cover_letter" class="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap border border-gray-100 dark:border-gray-700"></div>
             </div>
             <div>

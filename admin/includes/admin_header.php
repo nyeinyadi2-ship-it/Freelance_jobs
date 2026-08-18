@@ -36,10 +36,10 @@ if (isset($admin_user['user_id'])) {
     </script>
     <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <style>
     *, *::before, *::after { box-sizing: border-box; }
-    html, body { overflow-x: hidden; }
+    html, body { overflow-x: clip; }
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
 
     /* Admin Layout */
@@ -289,7 +289,7 @@ if (isset($admin_user['user_id'])) {
     html.dark .notif-badge { border-color: #1e293b; }
     </style>
 </head>
-<body class="bg-gray-50 dark:bg-slate-900" style="overflow-x:hidden">
+<body class="bg-gray-50 dark:bg-slate-900" style="overflow-x: clip;">
 
 <!-- Top Navigation Bar -->
 <header class="admin-topbar">

@@ -27,7 +27,7 @@ $proposal = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$proposal) {
-    set_flash('error', 'Proposal project not found.');
+    set_flash('error', 'Post not found.');
     redirect('company/manage_jobs.php');
 }
 
@@ -40,7 +40,7 @@ if (in_array($proposal['status'], ['submitted', 'reviewed', 'hired'])) {
     $stmt->close();
 }
 
-$page_title = 'Review Test Assignment: ' . $proposal['title'];
+$page_title = 'Review Trial Task: ' . $proposal['title'];
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -115,7 +115,7 @@ require __DIR__ . '/../includes/header.php';
                 <?php endif; ?>
             <?php else: ?>
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                    <p class="text-gray-500 italic">The freelancer has not submitted the test assignment yet.</p>
+                    <p class="text-gray-500 italic">The freelancer has not submitted the trial task yet.</p>
                 </div>
             <?php endif; ?>
         </div>

@@ -48,7 +48,7 @@ html.dark {
     transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
-html, body { overflow-x: hidden; }
+html, body { overflow-x: clip; }
 
 body {
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;

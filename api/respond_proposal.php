@@ -27,7 +27,7 @@ $proposal = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$proposal) {
-    set_flash('error', 'Proposal project not found or already responded.');
+    set_flash('error', 'Post not found or already responded.');
     redirect('freelancer/dashboard.php');
 }
 
@@ -47,11 +47,11 @@ if ($stmt->affected_rows > 0) {
 
     if ($company_user) {
         $fl_name = $user['username']; // or fetch freelancer name
-        $msg = $action === 'accept' ? "Freelancer accepted the Test Assignment for '{$proposal['title']}'." : "Freelancer declined the Test Assignment for '{$proposal['title']}'.";
+        $msg = $action === 'accept' ? "Freelancer accepted the Trial Task for '{$proposal['title']}'." : "Freelancer declined the Trial Task for '{$proposal['title']}'.";
         create_notification($conn, (int)$company_user['user_id'], 'system', $msg, 'company/dashboard.php');
     }
 
-    set_flash('success', "You have {$new_status} the test assignment.");
+    set_flash('success', "You have {$new_status} the trial task.");
 } else {
     set_flash('error', 'Failed to update status.');
 }

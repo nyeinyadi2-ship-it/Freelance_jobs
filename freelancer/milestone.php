@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_FILES['submission_file']['name'])) {
                 $submission_file = upload_attachment($_FILES['submission_file']);
                 if ($submission_file === null) {
-                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 10MB.');
+                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.');
                     redirect('freelancer/milestone.php?id=' . $post_milestone_id);
                 }
             }
@@ -245,10 +245,34 @@ $st->close();
 
 if (!$milestone) { redirect('freelancer/my_tasks.php'); }
 
+$payment_details = null;
+if (in_array($milestone['status'], ['paid', 'payment_pending'])) {
+    $st_pay = $conn->prepare("SELECT payment_method, transaction_reference, transaction_slip, paid_at FROM payments WHERE milestone_id = ? AND freelancer_id = ? ORDER BY id DESC LIMIT 1");
+    $st_pay->bind_param('ii', $ms_id, $fl_freelancer_id);
+    $st_pay->execute();
+    $payment_details = $st_pay->get_result()->fetch_assoc();
+    $st_pay->close();
+}
+
 // Fetch all milestones for this job (for sidebar/progress) — only those assigned to this freelancer
 $all_ms = [];
-$st = $conn->prepare("SELECT id, title, amount, status, sort_order FROM milestones WHERE job_id = ? AND (freelancer_id = ? OR freelancer_id IS NULL) ORDER BY sort_order ASC");
-$st->bind_param('ii', $milestone['job_id'], $fl_freelancer_id);
+$st = $conn->prepare("
+    SELECT m1.id, m1.title, m1.amount, m1.status, m1.sort_order 
+    FROM milestones m1
+    WHERE m1.job_id = ? 
+      AND (m1.freelancer_id = ? OR m1.freelancer_id IS NULL)
+      AND (
+          m1.freelancer_id IS NOT NULL 
+          OR NOT EXISTS (
+              SELECT 1 FROM milestones m2 
+              WHERE m2.job_id = m1.job_id 
+                AND m2.freelancer_id = ? 
+                AND m2.sort_order = m1.sort_order
+          )
+      )
+    ORDER BY m1.sort_order ASC
+");
+$st->bind_param('iii', $milestone['job_id'], $fl_freelancer_id, $fl_freelancer_id);
 $st->execute();
 $mr = $st->get_result();
 while ($row = $mr->fetch_assoc()) { $all_ms[] = $row; }
@@ -260,7 +284,7 @@ $progress = count($all_ms) > 0 ? round(($approved_count / count($all_ms)) * 100)
 
 require __DIR__ . '/../includes/freelancer_layout.php';
 
-$status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved','revision_requested'=>'Revision Requested','paid'=>'Received','cancelled'=>'Cancelled'];
+$status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved','revision_requested'=>'Revision Requested','payment_pending'=>'Payment Pending','paid'=>'Received','cancelled'=>'Cancelled'];
 $escrow_labels = ['held'=>'Held in Escrow','released'=>'Released','refunded'=>'Refunded'];
 $escrow_colors = ['held'=>'#f59e0b','released'=>'#10b981','refunded'=>'#ef4444'];
 $draft_enabled = ($milestone['status'] === 'draft');
@@ -273,6 +297,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
 .ms-in_progress-lg { background:rgba(99,102,241,0.1); color:#6366f1; }
 .ms-submitted-lg { background:rgba(139,92,246,0.1); color:#8b5cf6; }
 .ms-approved-lg { background:rgba(16,185,129,0.1); color:#10b981; }
+.ms-payment_pending-lg { background:rgba(245,158,11,0.1); color:#f59e0b; }
 .ms-revision_requested-lg { background:rgba(239,68,68,0.1); color:#ef4444; }
 
 .ms-timeline-lg { display:flex; align-items:center; gap:0; margin:1rem 0; }
@@ -380,7 +405,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                             <p class="text-xs" style="color:var(--color-text-muted)">Escrow has not been funded yet</p>
                         </div>
                     </div>
-                    <p class="text-sm" style="color:var(--color-text-secondary)">The company needs to fund this milestone via Escrow before you can start working. You'll be notified once it's funded.</p>
+                    <p class="text-sm" style="color:var(--color-text-secondary)">The company needs to fund this milestone before you can start working. You'll be notified once it's funded.</p>
                     <div class="mt-4 p-3 rounded-xl flex items-center gap-2" style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.15)">
                         <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         <span class="text-xs font-medium text-amber-600">Submission is disabled until the milestone is funded.</span>
@@ -398,7 +423,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                             <p class="text-xs" style="color:var(--color-text-muted)">Escrow is active — <?= number_format((float) $milestone['amount'], 2) ?> MMK held</p>
                         </div>
                     </div>
-                    <p class="text-sm mb-4" style="color:var(--color-text-secondary)">This milestone has been funded via Escrow. Click below to begin working.</p>
+                    <p class="text-sm mb-4" style="color:var(--color-text-secondary)">This milestone has been funded. Click below to begin working.</p>
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="ms_action" value="start">
@@ -453,7 +478,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                                 <input type="file" name="submission_file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.zip,.rar" class="hidden">
                                 <svg class="w-10 h-10 mx-auto mb-2" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
                                 <p class="text-sm font-medium" style="color:var(--color-text-secondary)">Click or drag to attach</p>
-                                <p class="text-xs mt-1" style="color:var(--color-text-muted)">ZIP, PDF, DOCX, Images — Max 10MB</p>
+                                <p class="text-xs mt-1" style="color:var(--color-text-muted)">ZIP, PDF, DOCX, Images — Max 500MB</p>
                             </div>
                             <div id="fileInfo" class="hidden mt-3 flex items-center gap-3 p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
                                 <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:rgba(16,185,129,0.1)">
@@ -526,7 +551,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                                 <input type="file" name="submission_file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.zip,.rar" class="hidden">
                                 <svg class="w-10 h-10 mx-auto mb-2" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
                                 <p class="text-sm font-medium" style="color:var(--color-text-secondary)">Click or drag to attach</p>
-                                <p class="text-xs mt-1" style="color:var(--color-text-muted)">ZIP, PDF, DOCX, Images — Max 10MB</p>
+                                <p class="text-xs mt-1" style="color:var(--color-text-muted)">ZIP, PDF, DOCX, Images — Max 500MB</p>
                             </div>
                             <div id="fileInfo" class="hidden mt-3 flex items-center gap-3 p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
                                 <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:rgba(16,185,129,0.1)">
@@ -593,6 +618,19 @@ $draft_enabled = ($milestone['status'] === 'draft');
                     <?php endif; ?>
                 </div>
 
+            <?php elseif ($milestone['status'] === 'payment_pending'): ?>
+                <div class="glass rounded-2xl p-6 reveal" style="background:rgba(245,158,11,0.03);border:1px solid rgba(245,158,11,0.15)">
+                    <div class="flex items-center gap-3 mb-3">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background:rgba(245,158,11,0.1)">
+                            <svg class="w-6 h-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-bold text-amber-700">Payment Pending</h2>
+                        </div>
+                    </div>
+                    <p class="text-sm text-amber-600">The company has approved your work. Payment is currently being processed via your preferred payment method.</p>
+                </div>
+
             <?php elseif ($milestone['status'] === 'paid'): ?>
                 <div class="glass rounded-2xl p-6 reveal" style="background:rgba(16,185,129,0.03);border:1px solid rgba(16,185,129,0.15)">
                     <div class="flex items-center gap-3 mb-3">
@@ -601,12 +639,36 @@ $draft_enabled = ($milestone['status'] === 'draft');
                         </div>
                         <div>
                             <h2 class="text-lg font-bold text-emerald-700">Payment Status: Received</h2>
-                            <?php if ($milestone['approved_at']): ?>
-                                <p class="text-xs text-emerald-600">Paid on <?= date('F j, Y \a\t g:ia', strtotime($milestone['approved_at'])) ?></p>
+                            <?php if ($milestone['approved_at'] || ($payment_details && $payment_details['paid_at'])): ?>
+                                <p class="text-xs text-emerald-600">Paid on <?= date('F j, Y \a\t g:ia', strtotime($payment_details['paid_at'] ?? $milestone['approved_at'])) ?></p>
                             <?php endif; ?>
                         </div>
                     </div>
                     <p class="text-sm text-emerald-600">You have received payment of <?= number_format((float) $milestone['amount'], 2) ?> MMK for this milestone.</p>
+                    
+                    <?php if ($payment_details): ?>
+                    <div class="mt-4 p-4 rounded-xl border border-emerald-100 bg-white/50">
+                        <h4 class="text-sm font-semibold text-emerald-800 mb-3">Transaction Details</h4>
+                        <div class="grid grid-cols-2 gap-4 text-sm mb-4">
+                            <div>
+                                <p class="text-emerald-600/70 text-xs uppercase tracking-wider font-semibold mb-1">Method</p>
+                                <p class="text-emerald-900 font-medium"><?= e(ucwords(str_replace('_', ' ', $payment_details['payment_method']))) ?></p>
+                            </div>
+                            <?php if ($payment_details['transaction_reference']): ?>
+                            <div>
+                                <p class="text-emerald-600/70 text-xs uppercase tracking-wider font-semibold mb-1">Reference No.</p>
+                                <p class="text-emerald-900 font-medium"><?= e($payment_details['transaction_reference']) ?></p>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($payment_details['transaction_slip']): ?>
+                            <a href="<?= e(base_url('api/download_slip.php?milestone_id=' . $milestone['id'])) ?>" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition-colors font-medium text-sm">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                View Transaction Slip
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
             <?php elseif ($milestone['status'] === 'cancelled'): ?>
                 <div class="glass rounded-2xl p-6 reveal" style="background:rgba(239,68,68,0.03);border:1px solid rgba(239,68,68,0.15)">
@@ -731,8 +793,8 @@ function confirmSubmit() {
         alert('Please provide a submission link or upload a file.');
         return false;
     }
-    if (fileInput.files && fileInput.files.length && fileInput.files[0].size > 10 * 1024 * 1024) {
-        alert('File is too large. Maximum size is 10MB.');
+    if (fileInput.files && fileInput.files.length && fileInput.files[0].size > 500 * 1024 * 1024) {
+        alert('File size must not exceed 500MB.');
         return false;
     }
     return confirm('Submit this work for review?');

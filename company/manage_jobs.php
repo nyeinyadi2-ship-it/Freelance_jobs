@@ -15,6 +15,7 @@ if (!$company_id) {
 $active_jobs = [];
 $expired_jobs = [];
 $closed_jobs = [];
+$expired_ids_to_update = [];
 $stmt = $conn->prepare('
     SELECT j.id, j.title, j.category, j.experience_level, j.budget, j.status, j.created_at,
            j.deadline, j.freelancers_needed, j.visibility, j.attachment,
@@ -31,9 +32,22 @@ $stmt = $conn->prepare('
 $stmt->bind_param('i', $company_id);
 $stmt->execute();
 $result = $stmt->get_result();
+$now = new DateTime();
 while ($row = $result->fetch_assoc()) {
     $row['skills'] = !empty($row['skills_concat']) ? explode(',', $row['skills_concat']) : [];
+    // Check if job should be treated as expired based on deadline date and time
+    $is_expired = false;
     if ($row['status'] === 'expired') {
+        $is_expired = true;
+    } elseif ($row['status'] === 'open' && !empty($row['deadline'])) {
+        $deadline = new DateTime($row['deadline']);
+        if ($deadline <= $now) {
+            $is_expired = true;
+            $expired_ids_to_update[] = $row['id'];
+            $row['status'] = 'expired';
+        }
+    }
+    if ($is_expired) {
         $expired_jobs[] = $row;
     } elseif ($row['status'] === 'closed') {
         $closed_jobs[] = $row;
@@ -43,6 +57,12 @@ while ($row = $result->fetch_assoc()) {
 }
 $stmt->close();
 
+// Batch update expired jobs in a single query instead of per-row UPDATE
+if (!empty($expired_ids_to_update)) {
+    $ids_str = implode(',', array_map('intval', $expired_ids_to_update));
+    $conn->query("UPDATE jobs SET status = 'expired' WHERE id IN ($ids_str)");
+}
+
 $page_title = 'My Jobs';
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -50,8 +70,6 @@ require __DIR__ . '/../includes/header.php';
 <style>
 .job-card { border-radius:1rem; padding:1.5rem; transition:all .3s; background:var(--color-card); border:1px solid var(--color-border); box-shadow:0 2px 10px rgba(0,0,0,0.03); }
 .job-card:hover { box-shadow:0 8px 30px rgba(99,102,241,0.1); transform:translateY(-2px); }
-.skill-tag { display:inline-flex; padding:0.2rem 0.5rem; border-radius:9999px; font-size:0.7rem; font-weight:500; background:rgba(99,102,241,0.08); color:#6366f1; }
-.remote-badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.2rem 0.5rem; border-radius:9999px; font-size:0.7rem; font-weight:600; background:rgba(16,185,129,0.1); color:#10b981; }
 .btn-gradient-sm { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; font-weight:600; padding:0.5rem 1rem; border-radius:0.5rem; font-size:0.8125rem; transition:all .2s; }
 .btn-gradient-sm:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(99,102,241,0.3); }
 </style>
@@ -140,16 +158,6 @@ function closeExtendModal() {
                                 <div class="flex items-center gap-3 mb-2 flex-wrap">
                                     <h3 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($job['title']) ?></h3>
                                     <?= status_badge($job['status']) ?>
-                                    <span class="remote-badge">
-                                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        Remote
-                                    </span>
-                                    <?php if ($job['visibility'] === 'private'): ?>
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style="background:rgba(245,158,11,0.1);color:#f59e0b">
-                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                            Private
-                                        </span>
-                                    <?php endif; ?>
                                 </div>
 
                                 <div class="flex items-center gap-4 text-sm mb-3 flex-wrap" style="color:var(--color-text-muted)">
@@ -161,31 +169,18 @@ function closeExtendModal() {
                                         </span>
                                     <?php endif; ?>
                                     <span class="capitalize"><?= e(str_replace('_', ' ', $job['experience_level'])) ?></span>
-                                    <?php if ($job['deadline']): ?>
-                                        <span class="flex items-center gap-1 <?= $secKey === 'expired' ? 'text-red-500 font-bold' : '' ?>">
-                                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                            <?= e(date('M j, Y', strtotime($job['deadline']))) ?>
-                                        </span>
-                                    <?php endif; ?>
                                     <span class="flex items-center gap-1">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                        <?= (int) $job['freelancers_needed'] ?> needed
+                                        <?= (int) $job['freelancers_needed'] ?> <?= (int) $job['freelancers_needed'] === 1 ? 'Post' : 'Posts' ?>
                                     </span>
                                 </div>
 
-                                <?php if (!empty($job['skills'])): ?>
-                                    <div class="flex flex-wrap gap-1.5 mb-3">
-                                        <?php foreach (array_slice($job['skills'], 0, 6) as $sk): ?>
-                                            <span class="skill-tag"><?= e($sk) ?></span>
-                                        <?php endforeach; ?>
-                                        <?php if (count($job['skills']) > 6): ?>
-                                            <span class="skill-tag">+<?= count($job['skills']) - 6 ?> more</span>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php endif; ?>
-
                                 <p class="text-xs" style="color:var(--color-text-muted)">
-                                    Posted <?= e($job['created_at']) ?>
+                                    Posted: <?= e(date('M j, Y', strtotime($job['created_at']))) ?>
+                                    <?php if ($job['deadline']): ?>
+                                        <span class="mx-1">·</span>
+                                        Deadline: <?= e(date('M j, Y', strtotime($job['deadline']))) ?>
+                                    <?php endif; ?>
                                     <span class="mx-1">·</span>
                                     <?= (int) $job['app_count'] ?> application<?= (int) $job['app_count'] !== 1 ? 's' : '' ?>
                                     <?php if ($job['attachment']): ?>

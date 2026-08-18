@@ -129,11 +129,17 @@ function get_notification_count_by_type(mysqli $conn, int $user_id): array
 
 function get_admin_user_id(mysqli $conn): ?int
 {
+    // Cache in session to avoid DB query on every page load
+    if (isset($_SESSION['admin_user_id'])) {
+        return (int) $_SESSION['admin_user_id'];
+    }
     $stmt = $conn->prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-    return $row ? (int) $row['id'] : null;
+    $id = $row ? (int) $row['id'] : null;
+    $_SESSION['admin_user_id'] = $id;
+    return $id;
 }
 
 function get_company_user_id(mysqli $conn, int $company_id): ?int

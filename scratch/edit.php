@@ -35,7 +35,7 @@ if ($startPos !== false && $endPos !== false) {
                         <?php
                         \$freelancer_steps = [
                             ['num' => '1', 'title' => 'Find a Job', 'desc' => 'Browse through hundreds of available projects matching your skills.'],
-                            ['num' => '2', 'title' => 'Apply', 'desc' => 'Submit your proposal and showcase your past experience.'],
+                            ['num' => '2', 'title' => 'Apply', 'desc' => 'Submit your post and showcase your past experience.'],
                             ['num' => '3', 'title' => 'Get Hired', 'desc' => 'Communicate with the client and start working on the project.'],
                             ['num' => '4', 'title' => 'Complete Work', 'desc' => 'Deliver the project and receive secure payment instantly.'],
                         ];
@@ -66,7 +66,7 @@ if ($startPos !== false && $endPos !== false) {
                         <?php
                         \$company_steps = [
                             ['num' => '1', 'title' => 'Post a Job', 'desc' => 'Describe your project requirements and set a budget easily.'],
-                            ['num' => '2', 'title' => 'Receive Applications', 'desc' => 'Review proposals from talented freelancers globally.'],
+                            ['num' => '2', 'title' => 'Receive Applications', 'desc' => 'Review posts from talented freelancers globally.'],
                             ['num' => '3', 'title' => 'Hire Freelancer', 'desc' => 'Select the best fit for your needs and begin collaboration.'],
                             ['num' => '4', 'title' => 'Complete Payment', 'desc' => 'Release payment safely once the work is approved.'],
                         ];

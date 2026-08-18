@@ -177,7 +177,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
             }
         };
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
     <style>
         * {

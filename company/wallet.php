@@ -44,12 +44,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // Fetch current balance
-$stmt = $conn->prepare("SELECT available_balance, reserved_balance FROM users WHERE id = ?");
+$stmt = $conn->prepare("SELECT available_balance FROM users WHERE id = ?");
 $stmt->bind_param('i', $user['user_id']);
 $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
-$total_balance = (float)($row['available_balance'] ?? 0) + (float)($row['reserved_balance'] ?? 0);
 $stmt->close();
+$total_balance = (float)($row['available_balance'] ?? 0);
 
 // Fetch transaction history
 $transactions = [];
@@ -71,6 +71,8 @@ while ($t = $res->fetch_assoc()) {
     $transactions[] = $t;
 }
 $stmt->close();
+
+
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -122,7 +124,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </thead>
                     <tbody class="divide-y dark:divide-gray-700">
                         <?php foreach ($transactions as $t): 
-                            $is_payment = ($t['type'] === 'payment' && $t['sender_id'] == $user['user_id']);
+                            $is_payment = in_array($t['type'], ['payment', 'funding']) && $t['sender_id'] == $user['user_id'];
                             $is_credit = in_array($t['type'], ['deposit', 'refund']) && !$is_payment;
                             
                             $sign = $is_credit ? '+' : '-';
@@ -130,7 +132,8 @@ require_once __DIR__ . '/../includes/header.php';
                             $bg = $is_credit ? 'bg-emerald-100 dark:bg-emerald-500/20' : 'bg-red-100 dark:bg-red-500/20';
                             
                             $label = ucwords(str_replace('_', ' ', $t['type']));
-                            if ($is_payment) $label = 'Payment to Freelancer';
+                            if ($t['type'] === 'funding') $label = 'Fund Milestone';
+                            elseif ($is_payment) $label = 'Payment to Freelancer';
                         ?>
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                 <td class="py-3 px-4">
@@ -143,7 +146,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     </span>
                                 </td>
                                 <td class="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
-                                    <?= $is_payment ? e($t['freelancer_name'] ?? 'Unknown') : '—' ?>
+                                    <?= $is_payment ? e($t['freelancer_name'] ?? 'Unknown') : '-' ?>
                                 </td>
                                 <td class="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
                                     <?php if ($t['job_title']): ?>
@@ -152,7 +155,7 @@ require_once __DIR__ . '/../includes/header.php';
                                             <div class="text-xs text-gray-500 mt-0.5">Milestone: <?= e($t['ms_title']) ?></div>
                                         <?php endif; ?>
                                     <?php else: ?>
-                                        —
+                                        -
                                     <?php endif; ?>
                                 </td>
                                 <td class="py-3 px-4">
@@ -176,6 +179,8 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+
 
 <!-- Add Funds Modal -->
 <div id="addFundsModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">

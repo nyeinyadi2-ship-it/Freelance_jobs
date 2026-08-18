@@ -46,7 +46,7 @@
     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
 </button>
 
-<script src="<?= e(base_url('assets/js/notification-sse.js')) ?>"></script>
+<script src="<?= e(base_url('assets/js/notification-sse.js')) ?>" defer></script>
 <script>
 if (typeof NotificationSSE !== 'undefined') {
     NotificationSSE.init({ user_id: <?= (int) ($fl_uid ?? 0) ?> });
@@ -71,11 +71,6 @@ if (typeof NotificationSSE !== 'undefined') {
         window.addEventListener('scroll',function(){btt.style.opacity=window.scrollY>400?'1':'0';btt.style.visibility=window.scrollY>400?'visible':'hidden';});
         btt.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
     }
-
-    // Mobile menu
-    var mt=document.getElementById('fl-mobile-toggle');
-    var mm=document.getElementById('fl-mobile-menu');
-    if(mt&&mm)mt.addEventListener('click',function(){mm.classList.toggle('hidden');});
 
     // Close dropdowns on outside click
     document.addEventListener('click',function(e){

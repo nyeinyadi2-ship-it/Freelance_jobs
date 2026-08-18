@@ -36,7 +36,7 @@ if ($proposal && !empty($proposal['deadline'])) {
 }
 
 if (!$proposal) {
-    set_flash('error', 'Proposal project not found or not in accepted state.');
+    set_flash('error', 'Post not found or not in accepted state.');
     redirect("freelancer/view_proposal.php?id=$proposal_id");
 }
 
@@ -44,7 +44,7 @@ if (!$proposal) {
 $file_path = null;
 if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
     $upload_err = null;
-    $uploaded_filename = upload_attachment($_FILES['file'], 10 * 1024 * 1024, $upload_err);
+    $uploaded_filename = upload_attachment($_FILES['file'], 500 * 1024 * 1024, $upload_err);
     if ($uploaded_filename !== null) {
         $file_path = 'uploads/attachments/' . $uploaded_filename;
     } else {
@@ -80,7 +80,7 @@ if ($stmt->execute()) {
         create_notification($conn, (int)$company_user['user_id'], 'system', "Freelancer submitted their work for '{$proposal['title']}'.", 'company/review_proposal.php?id=' . $proposal_id);
     }
 
-    set_flash('success', 'Your test assignment has been submitted successfully.');
+    set_flash('success', 'Your trial task has been submitted successfully.');
 } else {
     set_flash('error', 'Could not submit assignment.');
 }

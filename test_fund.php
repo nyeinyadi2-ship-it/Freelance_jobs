@@ -2,7 +2,7 @@
 require 'config/db.php';
 
 // Give user 34 enough balance
-$conn->query("UPDATE users SET available_balance = 5000000 WHERE id = 34");
+$conn->query("-- UPDATE users SET available_balance = 5000000 WHERE id = 34");
 
 // Simulate funding milestone 54
 $milestone_id = 54;
@@ -32,8 +32,9 @@ if ($ms) {
         
         $conn->begin_transaction();
         
-        $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
-        $stmt_bal->bind_param('ddid', $amount, $amount, $user_id, $amount);
+        // Only update available balance
+        $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
+        $stmt_bal->bind_param('did', $amount, $user_id, $amount);
         $stmt_bal->execute();
         if ($stmt_bal->affected_rows === 0) {
             echo "Error: Insufficient balance.\n";
@@ -46,8 +47,8 @@ if ($ms) {
             $conn->commit();
             echo "Success: Funded $amount MMK.\n";
             
-            $u = $conn->query("SELECT available_balance, reserved_balance FROM users WHERE id = $user_id")->fetch_assoc();
-            echo "Available: {$u['available_balance']}, Reserved: {$u['reserved_balance']}\n";
+            $u = $conn->query("SELECT available_balance FROM users WHERE id = $user_id")->fetch_assoc();
+            echo "Available: {$u['available_balance']}\n";
         }
     }
 } else {

@@ -3,14 +3,21 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';
 
-require_role('company');
+require_login();
 
 $user = current_user();
-$company_id = get_company_id($conn, (int) $user['user_id']);
 
-if (!$company_id) {
-    set_flash('error', 'Company profile not found.');
-    redirect('auth/login.php');
+if (!in_array($user['role'], ['company', 'freelancer', 'admin'], true)) {
+    redirect('index.php');
+}
+
+$company_id = null;
+if ($user['role'] === 'company') {
+    $company_id = get_company_id($conn, (int) $user['user_id']);
+    if (!$company_id) {
+        set_flash('error', 'Company profile not found.');
+        redirect('auth/login.php');
+    }
 }
 
 // Get filter parameters

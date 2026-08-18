@@ -25,7 +25,7 @@ $proposal = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$proposal) {
-    set_flash('error', 'Proposal project not found.');
+    set_flash('error', 'Post not found.');
     redirect('freelancer/dashboard.php');
 }
 
@@ -39,7 +39,7 @@ if (in_array($proposal['status'], ['submitted', 'reviewed', 'hired'])) {
     $stmt->close();
 }
 
-$page_title = 'Test Assignment: ' . $proposal['title'];
+$page_title = 'Trial Task: ' . $proposal['title'];
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -115,7 +115,7 @@ require __DIR__ . '/../includes/header.php';
                 <?php else: ?>
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-800 p-6 border-t-4 border-t-red-500">
                     <h3 class="text-xl font-bold mb-2 text-red-600">Deadline Passed</h3>
-                    <p class="text-gray-600 dark:text-gray-400">The deadline for this test assignment has passed and you can no longer submit your work.</p>
+                    <p class="text-gray-600 dark:text-gray-400">The deadline for this trial task has passed and you can no longer submit your work.</p>
                 </div>
                 <?php endif; ?>
             <?php elseif ($submission): ?>
@@ -163,7 +163,7 @@ require __DIR__ . '/../includes/header.php';
 
                 <?php if ($proposal['status'] === 'pending'): ?>
                     <hr class="my-6 border-gray-200 dark:border-gray-700">
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">You have been invited to complete a test assignment for this job. Do you accept?</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">You have been invited to complete a trial task for this job. Do you accept?</p>
                     <div class="flex flex-col gap-3">
                         <form action="<?= e(base_url('api/respond_proposal.php')) ?>" method="POST">
                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
@@ -171,7 +171,7 @@ require __DIR__ . '/../includes/header.php';
                             <input type="hidden" name="action" value="accept">
                             <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-xl transition-colors">Accept Assignment</button>
                         </form>
-                        <form action="<?= e(base_url('api/respond_proposal.php')) ?>" method="POST" onsubmit="return confirm('Are you sure you want to decline this test assignment?');">
+                        <form action="<?= e(base_url('api/respond_proposal.php')) ?>" method="POST" onsubmit="return confirm('Are you sure you want to decline this trial task?');">
                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="proposal_id" value="<?= $proposal['id'] ?>">
                             <input type="hidden" name="action" value="reject">

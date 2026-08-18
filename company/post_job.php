@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $old['deadline'] = trim($_POST['deadline'] ?? '');
         $old['duration'] = trim($_POST['duration'] ?? '');
         $old['freelancers_needed'] = trim($_POST['freelancers_needed'] ?? '1');
-        $old['visibility'] = $_POST['visibility'] ?? 'public';
+        $old['visibility'] = 'public';
 
         // Validation
         if ($old['title'] === '') {
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_FILES['attachment']['name'])) {
                 $attachment_name = upload_attachment($_FILES['attachment']);
                 if ($attachment_name === null) {
-                    $error = 'Invalid attachment. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP. Max 10MB.';
+                    $error = 'Invalid attachment. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP. Max 500MB.';
                 }
             }
 
@@ -330,7 +330,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 <div>
                                     <label class="form-label">Payment Type</label>
                                     <select name="payment_type" id="paymentTypeSelect" class="form-input" onchange="togglePaymentType(); updatePreview()">
-                                        <option value="fixed" <?= $old['payment_type'] === 'fixed' ? 'selected' : '' ?>>Fixed Payment</option>
+                                        <option value="fixed" <?= $old['payment_type'] === 'fixed' ? 'selected' : '' ?>>Project Payment</option>
                                         <option value="milestone" <?= $old['payment_type'] === 'milestone' ? 'selected' : '' ?>>Milestone Payment</option>
                                     </select>
                                 </div>
@@ -369,13 +369,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                     <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Total Milestone Amount:</span>
                                     <span class="text-lg font-bold text-indigo-600" id="milestoneTotal">0.00 MMK</span>
                                 </div>
-                            </div>
-                            <div>
-                                <label class="form-label">Visibility</label>
-                                <select name="visibility" class="form-input" onchange="updatePreview()">
-                                    <option value="public" <?= $old['visibility'] === 'public' ? 'selected' : '' ?>>Public</option>
-                                    <option value="private" <?= $old['visibility'] === 'private' ? 'selected' : '' ?>>Private</option>
-                                </select>
                             </div>
                         </div>
                     </div>
@@ -447,12 +440,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                     <label class="form-label">Freelancers Needed</label>
                                     <input type="number" name="freelancers_needed" min="1" max="50" class="form-input" value="<?= e($old['freelancers_needed']) ?>">
                                 </div>
-                                <div class="flex items-end pb-1">
-                                    <div class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl" style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15)">
-                                        <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        <span class="text-sm font-semibold text-emerald-700">Remote Only</span>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -494,7 +481,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                     <input type="file" name="attachment" id="attachmentInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.zip,.rar">
                                     <svg class="w-10 h-10 mx-auto mb-3" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
                                     <p class="text-sm font-medium" style="color:var(--color-text-secondary)">Drag & drop a file here, or <span style="color:#6366f1">browse</span></p>
-                                    <p class="text-xs mt-1" style="color:var(--color-text-muted)">JPG, PNG, PDF, DOCX, ZIP up to 10MB</p>
+                                    <p class="text-xs mt-1" style="color:var(--color-text-muted)">JPG, PNG, PDF, DOCX, ZIP up to 500MB</p>
                                 </div>
                                 <div id="filePreview" class="flex items-center gap-3 p-3 rounded-xl mt-3" style="display:none;background:var(--color-bg);border:1px solid var(--color-border)">
                                     <span id="fileIcon"></span>
@@ -557,10 +544,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                             <div class="flex justify-between py-2.5 border-b" style="border-color:var(--color-border)">
                                 <span class="text-sm" style="color:var(--color-text-muted)">Freelancers Needed</span>
                                 <span class="text-sm font-semibold" style="color:var(--color-text-primary)" id="reviewFreelancers">1</span>
-                            </div>
-                            <div class="flex justify-between py-2.5 border-b" style="border-color:var(--color-border)">
-                                <span class="text-sm" style="color:var(--color-text-muted)">Visibility</span>
-                                <span class="text-sm font-semibold capitalize" style="color:var(--color-text-primary)" id="reviewVisibility">public</span>
                             </div>
                             <div class="py-2.5 border-b" style="border-color:var(--color-border)">
                                 <span class="text-sm font-medium block mb-1.5" style="color:var(--color-text-muted)">Description</span>
@@ -1006,7 +989,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         document.getElementById('reviewDeadline').textContent = g('deadline') ? new Date(g('deadline')).toLocaleString() : 'Not set';
         document.getElementById('reviewDuration').textContent = g('duration') || 'Not set';
         document.getElementById('reviewFreelancers').textContent = g('freelancers_needed') || '1';
-        document.getElementById('reviewVisibility').textContent = g('visibility');
         document.getElementById('reviewDesc').textContent = g('description') || '-';
         document.getElementById('reviewReq').textContent = g('requirements') || '-';
 
@@ -1052,8 +1034,8 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     fileInput.addEventListener('change', function(){ if(fileInput.files.length) showFile(fileInput.files[0]); });
 
     function showFile(file) {
-        if (file.size > 10*1024*1024) {
-            alert('File is too large. Maximum size is 10MB.');
+        if (file.size > 500 * 1024 * 1024) {
+            alert('File size must not exceed 500MB.');
             fileInput.value = '';
             return;
         }
@@ -1113,8 +1095,8 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                 showStepError(3, 'Invalid file type. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR.');
                 if (!firstErrorStep) firstErrorStep = 3;
             }
-            if (file.size > 10*1024*1024) {
-                showStepError(3, 'File must be under 10MB.');
+            if (fileInput.files.length > 0 && fileInput.files[0].size > 500 * 1024 * 1024) {
+                showStepError(3, 'File size must not exceed 500MB.');
                 if (!firstErrorStep) firstErrorStep = 3;
             }
         }

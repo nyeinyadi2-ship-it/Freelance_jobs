@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $attachment_name = null;
             if (!empty($_FILES['attachment']['name'])) {
                 $attachment_name = upload_attachment($_FILES['attachment']);
-                if ($attachment_name === null) { $hire_error = 'Invalid attachment. Allowed: JPG, PNG, PDF, DOCX, ZIP. Max 10MB.'; }
+                if ($attachment_name === null) { $hire_error = 'Invalid attachment. Allowed: JPG, PNG, PDF, DOCX, ZIP. Max 500MB.'; }
             }
             if ($title === '') { $hire_error = 'Project title is required.'; }
             elseif ($description === '') { $hire_error = 'Project description is required.'; }
@@ -194,8 +194,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                         if ($ms_row) {
                                             $conn->begin_transaction();
                                             try {
-                                                $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
-                                                $stmt_bal->bind_param('ddid', $ms_row['amount'], $ms_row['amount'], $user['user_id'], $ms_row['amount']);
+                                                $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
+                                                $stmt_bal->bind_param('did', $ms_row['amount'], $viewer_user_id, $ms_row['amount']);
                                                 $stmt_bal->execute();
                                                 if ($stmt_bal->affected_rows === 0) {
                                                     throw new Exception("Insufficient balance to fund the first milestone.");
@@ -204,6 +204,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                                                 $up = $conn->prepare("UPDATE milestones SET status = 'funded' WHERE id = ?");
                                                 $up->bind_param('i', $ms_row['id']); $up->execute(); $up->close();
+                                                
+                                                // Log the funding in wallet_transactions
+                                                $desc = "Fund Milestone: " . ($title ?? 'Job');
+                                                $now = date('Y-m-d H:i:s');
+                                                $fl_user_id = (int) $freelancer['user_id'];
+                                                $stmt_wt = $conn->prepare("INSERT INTO wallet_transactions (user_id, sender_id, receiver_id, job_id, milestone_id, description, amount, type, payment_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'funding', 'platform_fund', 'completed', ?)");
+                                                $stmt_wt->bind_param('iiiiisds', $viewer_user_id, $viewer_user_id, $fl_user_id, $job_id, $ms_row['id'], $desc, $ms_row['amount'], $now);
+                                                $stmt_wt->execute();
+                                                $stmt_wt->close();
+
                                                 $conn->commit();
                                             } catch (Exception $e) { 
                                                 $conn->rollback();
@@ -215,8 +225,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                         // Reserve funds for Fixed price project
                                         $conn->begin_transaction();
                                         try {
-                                            $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ?, reserved_balance = reserved_balance + ? WHERE id = ? AND available_balance >= ?");
-                                            $stmt_bal->bind_param('ddid', $budget, $budget, $user['user_id'], $budget);
+                                            $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
+                                            $stmt_bal->bind_param('did', $budget, $user['user_id'], $budget);
                                             $stmt_bal->execute();
                                             if ($stmt_bal->affected_rows === 0) {
                                                 throw new Exception("Insufficient balance to reserve project budget.");
@@ -257,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         theme:{extend:{fontFamily:{poppins:['Poppins','system-ui','sans-serif']}}}
     };
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <style>
         *,*::before,*::after{font-family:'Poppins',system-ui,sans-serif;box-sizing:border-box;}
 
@@ -390,24 +400,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         .section-card:hover{
             transform:translateY(-3px);
             box-shadow:0 16px 48px rgba(99,102,241,0.1);
-        }
-
-        /* ===== SKILL TAGS ===== */
-        .skill-tag{
-            display:inline-flex;align-items:center;gap:6px;
-            padding:8px 16px;border-radius:12px;font-size:13px;font-weight:600;
-            background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(139,92,246,0.08));
-            color:#6366f1;border:1px solid rgba(99,102,241,0.15);
-            transition:all .25s ease;cursor:default;
-        }
-        .skill-tag:hover{
-            transform:translateY(-3px);
-            box-shadow:0 8px 20px rgba(99,102,241,0.2);
-            background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.15));
-        }
-        html.dark .skill-tag{
-            background:linear-gradient(135deg,rgba(99,102,241,0.12),rgba(139,92,246,0.12));
-            color:#a5b4fc;border-color:rgba(99,102,241,0.2);
         }
 
 
@@ -604,18 +596,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <?php endif; ?>
                 </div>
             </div>
-
-            <!-- Skills List in Left Sidebar -->
-            <?php if (!empty($fl_skills)): ?>
-            <div class="section-card p-6 reveal">
-                <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-4 uppercase tracking-wider">Skills</h3>
-                <div class="flex flex-wrap gap-2">
-                    <?php foreach ($fl_skills as $sk): ?>
-                        <span class="skill-tag"><?= e($sk) ?></span>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-            <?php endif; ?>
         </div>
         
         <!-- MAIN COLUMN: Content -->
@@ -775,7 +755,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <div>
                 <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Payment Type <span class="text-red-500">*</span></label>
                 <select name="payment_type" id="hirePaymentType" required onchange="toggleMilestones()" class="w-full px-4 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-                    <option value="fixed">Fixed Price</option>
+                    <option value="fixed">Project Payment</option>
                     <option value="milestone">Milestone-Based</option>
                 </select>
             </div>
@@ -805,7 +785,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <div>
                 <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Attachment</label>
                 <input type="file" name="attachment" accept=".jpg,.jpeg,.png,.pdf,.docx,.zip" class="w-full px-4 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 dark:file:bg-indigo-900/30 dark:file:text-indigo-400">
-                <p class="text-xs text-slate-400 mt-1">JPG, PNG, PDF, DOCX, ZIP (Max 10MB)</p>
+                <p class="text-xs text-slate-400 mt-1">JPG, PNG, PDF, DOCX, ZIP (Max 500MB)</p>
             </div>
 
             <div class="flex gap-3 pt-2">

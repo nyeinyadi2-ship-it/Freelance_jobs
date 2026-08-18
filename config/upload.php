@@ -15,7 +15,7 @@ function upload_image(array $file, int $max_size = 10 * 1024 * 1024, ?string &$e
     }
 
     if ($file['size'] > $max_size) {
-        $error = 'File size exceeds maximum allowed limit (10MB).';
+        $error = 'Profile photo size must not exceed 10MB.';
         return null;
     }
 
@@ -66,7 +66,7 @@ function upload_image(array $file, int $max_size = 10 * 1024 * 1024, ?string &$e
     return null;
 }
 
-function upload_attachment(array $file, int $max_size = 10 * 1024 * 1024, ?string &$error = null): ?string
+function upload_attachment(array $file, int $max_size = 500 * 1024 * 1024, ?string &$error = null): ?string
 {
     $allowed_exts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'zip', 'rar'];
 
@@ -81,7 +81,7 @@ function upload_attachment(array $file, int $max_size = 10 * 1024 * 1024, ?strin
     }
 
     if ($file['size'] > $max_size) {
-        $error = 'File size exceeds maximum allowed limit (10MB).';
+        $error = 'File size must not exceed 500MB.';
         return null;
     }
 

@@ -372,7 +372,7 @@ function send_message_with_attachment(mysqli $conn, int $sender_id, int $receive
 function upload_chat_attachment(array $file): ?array
 {
     $allowed = ['jpg','jpeg','png','gif','webp','pdf','doc','docx','zip','rar'];
-    $max_size = 10 * 1024 * 1024; // 10MB
+    $max_size = 500 * 1024 * 1024; // 500MB
 
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowed, true)) return null;

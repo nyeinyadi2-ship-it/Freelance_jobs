@@ -1,12 +1,18 @@
 <?php
 function check_and_update_expired_jobs($conn) {
-    // Only target jobs that are open (Active), deadline has passed, and NO freelancer has been hired
+    // Throttle: only run once per hour per session to avoid heavy UPDATE on every page load
+    $now = time();
+    $last_run = $_SESSION['_expired_jobs_check'] ?? 0;
+    if ($now - $last_run < 3600) return;
+    $_SESSION['_expired_jobs_check'] = $now;
+
+    // Mark jobs as expired when deadline has passed (based on date AND time)
     $sql = "UPDATE jobs j 
             SET j.status = 'expired' 
             WHERE j.status = 'open' 
             AND j.deadline IS NOT NULL 
             AND j.deadline < NOW()
-            AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.job_id = j.id)";
+            LIMIT 500";
     $conn->query($sql);
 }
 
@@ -136,7 +142,7 @@ function check_assignment_deadlines($conn) {
         }
     }
 
-    // Target proposal projects (test assignments) that are active and have a deadline
+    // Target proposal projects (trial tasks) that are active and have a deadline
     $sql_pp = "SELECT p.id, p.deadline, p.status, p.job_id, p.freelancer_id,
                       j.company_id, j.title as job_title, f.user_id as freelancer_user_id
                FROM proposal_projects p
@@ -164,13 +170,13 @@ function check_assignment_deadlines($conn) {
                 
                 $type = "pp_ovr_" . $proposal_id;
                 if (!_dl_notification_exists($conn, $freelancer_id, $type)) {
-                    create_notification($conn, $freelancer_id, $type, "The deadline for your test assignment '$job_title' has passed.", "freelancer/view_proposal.php?id=" . $proposal_id);
+                    create_notification($conn, $freelancer_id, $type, "The deadline for your trial task '$job_title' has passed.", "freelancer/view_proposal.php?id=" . $proposal_id);
                 }
                 
                 $company_id = (int)$row['company_id'];
                 $c_type = "pp_c_ovr_" . $proposal_id;
                 if (!_dl_notification_exists($conn, $company_id, $c_type)) {
-                    create_notification($conn, $company_id, $c_type, "The deadline for test assignment '$job_title' has passed and the freelancer has not submitted the work.", "company/view_applications.php?id=" . $row['job_id']);
+                    create_notification($conn, $company_id, $c_type, "The deadline for trial task '$job_title' has passed and the freelancer has not submitted the work.", "company/view_applications.php?id=" . $row['job_id']);
                 }
             }
         }

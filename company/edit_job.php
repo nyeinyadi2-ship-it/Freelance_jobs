@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deadline = trim($_POST['deadline'] ?? '') ?: null;
         $duration = trim($_POST['duration'] ?? '');
         $freelancers_needed = max(1, (int) ($_POST['freelancers_needed'] ?? 1));
-        $visibility = $_POST['visibility'] ?? 'public';
+        $visibility = 'public';
         $selected_skills = $_POST['skills'] ?? [];
 
         if ($title === '' || $category === '') {
@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($_FILES['attachment']['name'])) {
                 $new_att = upload_attachment($_FILES['attachment']);
                 if ($new_att === null) {
-                    $error = 'Invalid attachment. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP. Max 10MB.';
+                    $error = 'Invalid attachment. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP. Max 500MB.';
                 } else {
                     // Delete old attachment
                     if ($job['attachment']) {
@@ -265,14 +265,6 @@ require __DIR__ . '/../includes/header.php';
                         <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Freelancers Needed</label>
                         <input type="number" name="freelancers_needed" min="1" max="50" class="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($_POST['freelancers_needed'] ?? $job['freelancers_needed'] ?? 1) ?>">
                     </div>
-                    <div>
-                        <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Visibility</label>
-                        <select name="visibility" class="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
-                            <?php $cur_vis = $_POST['visibility'] ?? $job['visibility'] ?? 'public'; ?>
-                            <option value="public" <?= $cur_vis === 'public' ? 'selected' : '' ?>>Public</option>
-                            <option value="private" <?= $cur_vis === 'private' ? 'selected' : '' ?>>Private</option>
-                        </select>
-                    </div>
                 </div>
             </div>
         </div>
@@ -318,7 +310,7 @@ require __DIR__ . '/../includes/header.php';
                 <input type="file" name="attachment" id="attachmentInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.zip,.rar">
                 <svg class="w-10 h-10 mx-auto mb-3" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
                 <p class="text-sm font-medium" style="color:var(--color-text-secondary)">Drag & drop a new file to replace, or <span style="color:#6366f1">browse</span></p>
-                <p class="text-xs mt-1" style="color:var(--color-text-muted)">JPG, PNG, PDF, DOCX, ZIP up to 10MB</p>
+                <p class="text-xs mt-1" style="color:var(--color-text-muted)">JPG, PNG, PDF, DOCX, ZIP up to 500MB</p>
             </div>
             <div id="filePreview" class="file-preview" style="display:none">
                 <span id="fileIcon"></span>

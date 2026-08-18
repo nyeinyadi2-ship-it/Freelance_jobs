@@ -105,15 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     } else {
         $conn->begin_transaction();
         try {
-            // Deduct from Company Reserved Balance
-            $stmt = $conn->prepare("UPDATE users SET reserved_balance = reserved_balance - ? WHERE id = ? AND reserved_balance >= ?");
-            $stmt->bind_param('did', $amount, $user['user_id'], $amount);
-            $stmt->execute();
-            if ($stmt->affected_rows === 0 && $amount > 0) {
-                $stmt->close();
-                throw new Exception("Error: Reserved funds mismatch. Cannot complete payment.");
-            }
-            $stmt->close();
+            // Deduct from Company Reserved Balance removed
+            // The money was already held by the platform at the time of funding.
 
             // Handle Transaction Slip Upload
             $transaction_slip = null;
@@ -143,9 +136,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             $now = date('Y-m-d H:i:s');
 
             if ($is_milestone) {
-                $stmt = $conn->prepare("UPDATE milestones SET status = 'paid' WHERE id = ?");
+                $stmt = $conn->prepare("UPDATE milestones SET status = 'paid' WHERE id = ? AND status = 'payment_pending'");
                 $stmt->bind_param('i', $milestone_id);
                 $stmt->execute();
+                if ($stmt->affected_rows === 0) {
+                    $stmt->close();
+                    throw new Exception("Milestone is not pending payment or has already been paid.");
+                }
                 $stmt->close();
 
                 // Find assignment to link payment
@@ -161,12 +158,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $stmt->execute();
                 $stmt->close();
 
-                // Insert into wallet_transactions for Unified Transaction History
-                $desc = $title;
-                $stmt_wt = $conn->prepare("INSERT INTO wallet_transactions (user_id, sender_id, receiver_id, job_id, milestone_id, description, amount, type, payment_method, transaction_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'payment', ?, ?, 'completed', ?)");
-                $stmt_wt->bind_param('iiiisidsss', $user['user_id'], $user['user_id'], $fl_user_id, $job_id, $milestone_id, $desc, $amount, $payment_method, $transaction_ref, $now);
-                $stmt_wt->execute();
-                $stmt_wt->close();
 
                 // Check if all milestones are paid
                 $stmt = $conn->prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid FROM milestones WHERE job_id = ? AND freelancer_id = ?");
@@ -187,9 +178,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     $stmt->close();
                 }
             } else {
-                $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE id = ?");
+                $stmt = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE id = ? AND status = 'payment_pending'");
                 $stmt->bind_param('i', $assignment_id);
                 $stmt->execute();
+                if ($stmt->affected_rows === 0) {
+                    $stmt->close();
+                    throw new Exception("Assignment is not pending payment or has already been paid.");
+                }
                 $stmt->close();
 
                 $stmt = $conn->prepare("INSERT INTO payments (assignment_id, company_id, freelancer_id, amount, payment_method, transaction_reference, transaction_slip, status, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?)");
@@ -197,14 +192,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $stmt->execute();
                 $stmt->close();
 
-                // Insert into wallet_transactions for Unified Transaction History
-                $desc = $title;
-                $null_milestone = null;
-                $stmt_wt = $conn->prepare("INSERT INTO wallet_transactions (user_id, sender_id, receiver_id, job_id, milestone_id, description, amount, type, payment_method, transaction_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'payment', ?, ?, 'completed', ?)");
-                $stmt_wt->bind_param('iiiisidsss', $user['user_id'], $user['user_id'], $fl_user_id, $job_id, $null_milestone, $desc, $amount, $payment_method, $transaction_ref, $now);
-                $stmt_wt->execute();
-                $stmt_wt->close();
             }
+
+            // Credit Freelancer Wallet
+            if ($fl_user_id > 0 && $amount > 0) {
+                $stmt_cred = $conn->prepare("UPDATE users SET available_balance = available_balance + ? WHERE id = ?");
+                $stmt_cred->bind_param('di', $amount, $fl_user_id);
+                $stmt_cred->execute();
+                $stmt_cred->close();
+            }
+
+            // Insert into wallet_transactions
+            $desc = $is_milestone ? "Milestone Payment: " . ($title ?? 'Job') : "Project Payment: " . ($title ?? 'Job');
+            $ms_id_for_wt = $is_milestone ? $milestone_id : null;
+            $sender_id_for_wt = $is_milestone ? null : $user['user_id'];
+            $stmt_wt = $conn->prepare("INSERT INTO wallet_transactions (user_id, sender_id, receiver_id, job_id, milestone_id, description, amount, type, payment_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'payment', ?, 'completed', ?)");
+            $stmt_wt->bind_param('iiiiisdss', $fl_user_id, $sender_id_for_wt, $fl_user_id, $job_id, $ms_id_for_wt, $desc, $amount, $payment_method, $now);
+            $stmt_wt->execute();
+            $stmt_wt->close();
 
             // Check if job is fully completed
             $stmt = $conn->prepare("SELECT freelancers_needed, (SELECT COUNT(*) FROM assignments WHERE job_id = jobs.id AND status = 'completed') as done FROM jobs WHERE id = ?");

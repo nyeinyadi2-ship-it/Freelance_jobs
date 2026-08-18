@@ -86,8 +86,6 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 
 <style>
 .skill-tag { display:inline-flex; padding:0.15rem 0.5rem; border-radius:9999px; font-size:0.7rem; font-weight:500; background:rgba(99,102,241,0.08); color:#6366f1; }
-.remote-badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.2rem 0.5rem; border-radius:9999px; font-size:0.7rem; font-weight:600; background:rgba(16,185,129,0.1); color:#10b981; }
-.private-badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.2rem 0.5rem; border-radius:9999px; font-size:0.7rem; font-weight:600; background:rgba(245,158,11,0.1); color:#f59e0b; }
 </style>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 mb-6">
@@ -141,16 +139,6 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap mb-1">
                             <h2 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($job['title']) ?></h2>
-                            <span class="remote-badge">
-                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                Remote
-                            </span>
-                            <?php if ($job['visibility'] === 'private'): ?>
-                                <span class="private-badge">
-                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                    Private
-                                </span>
-                            <?php endif; ?>
                         </div>
                         <p class="text-sm flex items-center gap-2 mb-2" style="color:var(--color-text-muted)">
                             <?= e($job['company_name']) ?>
@@ -191,7 +179,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <?php endif; ?>
 
                         <div class="flex items-center gap-3 mt-3 text-xs" style="color:var(--color-text-placeholder)">
-                            <span>Posted <?= e($job['created_at']) ?></span>
+                            <span>Posted: <?= e(date('M j, Y', strtotime($job['created_at']))) ?></span>
                             <?php if ($job['deadline']): ?>
                                 <span class="flex items-center gap-1">
                                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
