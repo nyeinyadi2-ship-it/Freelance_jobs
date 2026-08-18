@@ -19,7 +19,7 @@ use Freelance\ChatServer;
 $port = (int) ($argv[1] ?? 8080);
 
 echo "============================================\n";
-echo "  HireWork WebSocket Chat Server\n";
+echo "  FreelanceHub WebSocket Chat Server\n";
 echo "  Starting on ws://localhost:{$port}\n";
 echo "============================================\n";
 

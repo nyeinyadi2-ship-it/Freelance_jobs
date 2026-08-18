@@ -81,7 +81,7 @@ $order_by = match($sort) {
     'rate_high' => 'f.hourly_rate DESC',
     'experience' => 'f.experience_years DESC',
     'name' => 'f.full_name ASC',
-    default => 'COALESCE(AVG(r.rating), 0) DESC, review_count DESC'
+    default => 'avg_rating DESC, review_count DESC'
 };
 
 $sql = "SELECT f.id, f.full_name, f.title, f.hourly_rate, f.experience_years, f.location, f.bio,

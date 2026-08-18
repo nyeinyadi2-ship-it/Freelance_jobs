@@ -22,11 +22,18 @@ if (!$freelancer_id || $proposal_id <= 0) {
     redirect('freelancer/dashboard.php');
 }
 
-$stmt = $conn->prepare("SELECT p.id, p.company_id, p.status, j.title FROM proposal_projects p JOIN jobs j ON p.job_id = j.id WHERE p.id = ? AND p.freelancer_id = ? AND p.status = 'accepted'");
+$stmt = $conn->prepare("SELECT p.id, p.company_id, p.status, p.deadline, j.title FROM proposal_projects p JOIN jobs j ON p.job_id = j.id WHERE p.id = ? AND p.freelancer_id = ? AND p.status = 'accepted'");
 $stmt->bind_param('ii', $proposal_id, $freelancer_id);
 $stmt->execute();
 $proposal = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
+if ($proposal && !empty($proposal['deadline'])) {
+    if (new DateTime($proposal['deadline']) <= new DateTime()) {
+        set_flash('error', 'Submission blocked: Deadline has passed.');
+        redirect("freelancer/view_proposal.php?id=$proposal_id");
+    }
+}
 
 if (!$proposal) {
     set_flash('error', 'Proposal project not found or not in accepted state.');

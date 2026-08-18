@@ -37,7 +37,6 @@ if ($has_status_col) {
         $params[] = $filter_status;
         $types .= 's';
     } else {
-        // Exclude admin users from the list
         $where[] = "u.role != 'admin'";
     }
 } else {
@@ -93,40 +92,35 @@ require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Page Header -->
-<div class="mb-6 admin-fade">
-    <div class="flex items-center gap-3 mb-1">
-        <a href="<?= e(base_url('admin/admin_dashboard.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e('Admin Dashboard') ?></a>
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--color-text-placeholder)"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        <span class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e('Manage Users') ?></span>
-    </div>
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= e('Manage Users') ?></h1>
-        <div class="text-sm" style="color:var(--color-text-muted)"><?= e('Total Users') ?>: <?= $total ?></div>
+<div class="mb-5 admin-fade">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <h1 class="text-xl font-bold" style="color:var(--color-text-primary)"><?= e('Manage Users') ?></h1>
+            <p class="text-sm mt-0.5" style="color:var(--color-text-muted)"><?= e('Manage and monitor platform users.') ?></p>
+        </div>
+        <span class="text-xs" style="color:var(--color-text-muted)"><?= e('Total') ?>: <?= $total ?></span>
     </div>
 </div>
 
 <?php if (!$has_status_col): ?>
-    <div class="card mb-6 admin-fade" style="background:var(--color-flash-error-bg);border-color:var(--color-flash-error-border)">
+    <div class="card mb-5 admin-fade" style="background:var(--color-flash-error-bg);border-color:var(--color-flash-error-border)">
         <div class="flex items-start gap-3">
-            <svg class="w-5 h-5 mt-0.5 flex-shrink-0" style="color:var(--color-flash-error-text)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <svg class="w-4 h-4 mt-0.5 flex-shrink-0" style="color:var(--color-flash-error-text)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
             <div>
-                <p class="font-semibold mb-1" style="color:var(--color-flash-error-text)"><?= e('Database migration required') ?></p>
-                <p class="text-sm" style="color:var(--color-flash-error-text)"><?= e('The account_status column is missing from the users table. Run this SQL command:') ?></p>
-                <code class="block mt-2 p-2 rounded text-xs" style="background:rgba(0,0,0,0.05);color:var(--color-flash-error-text)">ALTER TABLE users ADD COLUMN account_status ENUM('active', 'suspended', 'blocked') DEFAULT 'active' AFTER last_activity;</code>
+                <p class="font-semibold text-sm mb-1" style="color:var(--color-flash-error-text)"><?= e('Database migration required') ?></p>
+                <p class="text-xs" style="color:var(--color-flash-error-text)"><?= e('The account_status column is missing from the users table.') ?></p>
             </div>
         </div>
     </div>
 <?php endif; ?>
 
 <!-- Search and Filters -->
-<div class="card mb-6">
-    <form method="GET" class="flex flex-wrap gap-3 items-end">
-        <div class="flex-1 min-w-[200px]">
-            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e('Search Users') ?></label>
+<div class="card mb-5 admin-fade">
+    <form method="GET" class="flex flex-wrap gap-2 items-end">
+        <div class="flex-1 min-w-[180px]">
             <input type="text" name="q" value="<?= e($search) ?>" placeholder="<?= e('Search by name or email...') ?>" class="form-input">
         </div>
-        <div class="min-w-[140px]">
-            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e('Role') ?></label>
+        <div class="min-w-[120px]">
             <select name="role" class="form-input">
                 <option value=""><?= e('All Roles') ?></option>
                 <option value="company" <?= $filter_role === 'company' ? 'selected' : '' ?>><?= e('Company') ?></option>
@@ -134,8 +128,7 @@ require __DIR__ . '/includes/admin_header.php';
             </select>
         </div>
         <?php if ($has_status_col): ?>
-        <div class="min-w-[140px]">
-            <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)"><?= e('Status') ?></label>
+        <div class="min-w-[120px]">
             <select name="status" class="form-input">
                 <option value=""><?= e('All Statuses') ?></option>
                 <option value="active" <?= $filter_status === 'active' ? 'selected' : '' ?>><?= e('Active') ?></option>
@@ -144,7 +137,7 @@ require __DIR__ . '/includes/admin_header.php';
             </select>
         </div>
         <?php endif; ?>
-        <div class="flex gap-2">
+        <div class="flex gap-1.5">
             <button type="submit" class="btn-primary"><?= e('Search') ?></button>
             <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="btn-secondary"><?= e('Clear') ?></a>
         </div>
@@ -153,56 +146,54 @@ require __DIR__ . '/includes/admin_header.php';
 
 <!-- Users Table -->
 <?php if (empty($users)): ?>
-    <div class="card text-center" style="color:var(--color-text-muted)"><?= e('No users found.') ?></div>
+    <div class="card text-center py-10 admin-fade" style="color:var(--color-text-muted)"><?= e('No users found.') ?></div>
 <?php else: ?>
-    <div class="card overflow-x-auto">
+    <div class="card admin-fade overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
-                <tr style="border-bottom:1px solid var(--color-border)">
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('User') ?></th>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Email') ?></th>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Role') ?></th>
+                <tr style="border-bottom:2px solid var(--color-border)">
+                    <th class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)"><?= e('User') ?></th>
+                    <th class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style="color:var(--color-text-muted)"><?= e('Email') ?></th>
+                    <th class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)"><?= e('Role') ?></th>
                     <?php if ($has_status_col): ?>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Status') ?></th>
+                    <th class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)"><?= e('Status') ?></th>
                     <?php endif; ?>
-                    <th class="text-left py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Joined') ?></th>
-                    <th class="text-right py-3 px-3 font-semibold" style="color:var(--color-text-secondary)"><?= e('Actions') ?></th>
+                    <th class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style="color:var(--color-text-muted)"><?= e('Joined') ?></th>
+                    <th class="text-right py-2 px-3 text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)"><?= e('Actions') ?></th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($users as $u): ?>
-                    <tr style="border-bottom:1px solid var(--color-border)" class="hover:opacity-80">
-                        <td class="py-3 px-3">
-                            <div class="flex items-center gap-3">
+                    <tr style="border-bottom:1px solid var(--color-border)" class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                        <td class="py-2.5 px-3">
+                            <div class="flex items-center gap-2.5">
                                 <?php $imgUrl = profile_image_url($u['profile_image']); ?>
                                 <?php if ($imgUrl): ?>
-                                    <img src="<?= e($imgUrl) ?>" alt="" class="w-8 h-8 rounded-full object-cover">
+                                    <img src="<?= e($imgUrl) ?>" alt="" class="w-7 h-7 rounded-full object-cover flex-shrink-0">
                                 <?php else: ?>
-                                    <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs">
+                                    <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs flex-shrink-0">
                                         <?= e(_first_char($u['username'])) ?>
                                     </div>
                                 <?php endif; ?>
-                                <div>
-                                    <div class="font-medium" style="color:var(--color-text-primary)"><?= e($u['username']) ?></div>
-                                    <?php if ($u['role'] === 'company' && $u['company_name']): ?>
-                                        <div class="text-xs" style="color:var(--color-text-muted)"><?= e($u['company_name']) ?></div>
-                                    <?php elseif ($u['role'] === 'freelancer' && $u['full_name']): ?>
-                                        <div class="text-xs" style="color:var(--color-text-muted)"><?= e($u['full_name']) ?></div>
-                                    <?php endif; ?>
+                                <div class="min-w-0">
+                                    <div class="font-medium text-sm truncate" style="color:var(--color-text-primary)"><?= e($u['username']) ?></div>
+                                    <div class="text-xs truncate md:hidden" style="color:var(--color-text-muted)"><?= e($u['email']) ?></div>
                                 </div>
                             </div>
                         </td>
-                        <td class="py-3 px-3" style="color:var(--color-text-secondary)"><?= e($u['email']) ?></td>
-                        <td class="py-3 px-3">
+                        <td class="py-2.5 px-3 hidden md:table-cell" style="color:var(--color-text-secondary)">
+                            <span class="text-sm"><?= e($u['email']) ?></span>
+                        </td>
+                        <td class="py-2.5 px-3">
                             <?php
                             $role_class = $u['role'] === 'company'
                                 ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
                                 : 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300';
                             ?>
-                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full <?= $role_class ?>"><?= e(ucfirst($u['role'])) ?></span>
+                            <span class="inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full <?= $role_class ?>"><?= e(ucfirst($u['role'])) ?></span>
                         </td>
                         <?php if ($has_status_col): ?>
-                        <td class="py-3 px-3">
+                        <td class="py-2.5 px-3">
                             <?php
                             $status = $u['account_status'] ?? 'active';
                             $status_classes = [
@@ -212,13 +203,13 @@ require __DIR__ . '/includes/admin_header.php';
                             ];
                             $sc = $status_classes[$status] ?? $status_classes['active'];
                             ?>
-                            <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full <?= $sc ?>"><?= e(__('user_status.' . $status)) ?></span>
+                            <span class="inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full <?= $sc ?>"><?= e(__('user_status.' . $status)) ?></span>
                         </td>
                         <?php endif; ?>
-                        <td class="py-3 px-3 text-xs" style="color:var(--color-text-muted)"><?= e($u['created_at']) ?></td>
-                        <td class="py-3 px-3 text-right">
+                        <td class="py-2.5 px-3 text-xs hidden lg:table-cell" style="color:var(--color-text-muted)"><?= e($u['created_at']) ?></td>
+                        <td class="py-2.5 px-3 text-right">
                             <a href="<?= e(base_url('admin/view_user.php?id=' . $u['id'])) ?>" class="btn-secondary text-xs py-1 px-2">
-                                <?= e('View Profile') ?>
+                                <?= e('View') ?>
                             </a>
                         </td>
                     </tr>
@@ -229,14 +220,14 @@ require __DIR__ . '/includes/admin_header.php';
 
     <!-- Pagination -->
     <?php if ($total_pages > 1): ?>
-        <div class="flex justify-center gap-2 mt-6">
+        <div class="flex justify-center gap-1.5 mt-5">
             <?php
             $qs = $_GET;
             for ($i = 1; $i <= $total_pages; $i++):
                 $qs['page'] = $i;
             ?>
                 <a href="?<?= e(http_build_query($qs)) ?>"
-                   class="px-3 py-1 text-sm rounded-lg border <?= $i === $page ? 'bg-indigo-600 text-white border-indigo-600' : 'hover:opacity-80' ?>"
+                   class="px-2.5 py-1 text-xs rounded-md border transition-colors <?= $i === $page ? 'bg-indigo-600 text-white border-indigo-600' : '' ?>"
                    style="<?= $i !== $page ? 'color:var(--color-text-secondary);border-color:var(--color-border);background:var(--color-card)' : '' ?>">
                     <?= $i ?>
                 </a>

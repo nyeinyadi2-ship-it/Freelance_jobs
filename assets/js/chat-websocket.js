@@ -1,5 +1,5 @@
 /**
- * HireWork WebSocket Chat Client
+ * FreelanceHub WebSocket Chat Client
  * Connects to Ratchet PHP WebSocket server with AJAX fallback
  */
 var ChatWS = (function() {

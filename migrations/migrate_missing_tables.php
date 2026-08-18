@@ -22,18 +22,6 @@ $tables = [
         FOREIGN KEY (`related_payment_id`) REFERENCES `payments`(`id`) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
-    'withdraw_requests' => "CREATE TABLE IF NOT EXISTS `withdraw_requests` (
-        `id` INT PRIMARY KEY AUTO_INCREMENT,
-        `freelancer_id` INT NOT NULL,
-        `amount` DECIMAL(10,2) NOT NULL,
-        `status` ENUM('pending','approved','rejected','completed') DEFAULT 'pending',
-        `payment_method` VARCHAR(50) DEFAULT NULL,
-        `payment_details` TEXT DEFAULT NULL,
-        `admin_notes` TEXT DEFAULT NULL,
-        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        `processed_at` TIMESTAMP NULL DEFAULT NULL,
-        FOREIGN KEY (`freelancer_id`) REFERENCES `freelancers`(`id`) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
     'submissions' => "CREATE TABLE IF NOT EXISTS `submissions` (
         `id` INT PRIMARY KEY AUTO_INCREMENT,

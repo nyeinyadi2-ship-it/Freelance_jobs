@@ -2,7 +2,7 @@
 $page_title = 'Skill Jobs';
 require __DIR__ . '/../includes/freelancer_init.php';
 
-$skill_name = trim($_GET['skill'] ?? '');
+$skill_name = trim(urldecode($_GET['skill'] ?? ''));
 
 if ($skill_name === '') {
     redirect('freelancer/browse_jobs.php');
@@ -58,36 +58,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 }
 
 // Fetch jobs for this skill
-$params = [$fl_freelancer_id];
-$types = 'i';
+$params = [$fl_freelancer_id, $skill_info['id']];
+$types = 'ii';
 
-$sql = "SELECT j.id, j.title, j.description, j.budget, j.created_at, j.category, j.experience_level,
-        j.gender_requirement, j.deadline, j.duration, j.freelancers_needed, j.visibility, j.attachment, j.status,
-        c.company_name, c.logo_image,
-        (SELECT ja.status FROM job_applications ja WHERE ja.job_id = j.id AND ja.freelancer_id = ?) AS my_status,
-        (SELECT COUNT(*) FROM assignments a WHERE a.job_id = j.id) AS assigned_count
-        FROM jobs j
-        JOIN companies c ON j.company_id = c.id
-        JOIN job_skills js ON js.job_id = j.id
-        JOIN skills s ON js.skill_id = s.id
-        WHERE j.status IN ('open', 'position_filled') AND j.category != 'Direct Hire' AND s.skill_name = ?
+$sql = "SELECT j.id,j.title,j.description,j.budget,j.created_at,j.category,j.experience_level,j.gender_requirement,j.deadline,j.duration,j.freelancers_needed,j.visibility,j.attachment,j.status,
+        c.company_name,c.logo_image,
+        (SELECT ja.status FROM job_applications ja WHERE ja.job_id=j.id AND ja.freelancer_id=?) AS my_status,
+        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id AND a.status != 'completed') AS assigned_count,
+        (SELECT GROUP_CONCAT(s.skill_name SEPARATOR ',') FROM job_skills js2 JOIN skills s ON js2.skill_id = s.id WHERE js2.job_id = j.id) AS skills_concat
+        FROM jobs j LEFT JOIN companies c ON j.company_id=c.id
+        WHERE j.status IN ('open', 'position_filled') AND (j.category != 'Direct Hire' OR j.category IS NULL) AND EXISTS (SELECT 1 FROM job_skills js_filter WHERE js_filter.job_id = j.id AND js_filter.skill_id = ?)
         ORDER BY j.created_at DESC";
-
-$params[] = $skill_info['id'];
-$types .= 'i';
 
 $st = $conn->prepare($sql);
 $st->bind_param($types, ...$params);
-$st->execute();
+$st->execute(); 
 $r = $st->get_result();
 $jobs = [];
 while ($row = $r->fetch_assoc()) {
-    $ss = $conn->prepare('SELECT s.skill_name FROM job_skills js JOIN skills s ON js.skill_id = s.id WHERE js.job_id = ?');
-    $ss->bind_param('i', $row['id']); $ss->execute();
-    $sr2 = $ss->get_result();
-    $row['skills'] = [];
-    while ($sk = $sr2->fetch_assoc()) { $row['skills'][] = $sk['skill_name']; }
-    $ss->close();
+    $row['skills'] = !empty($row['skills_concat']) ? explode(',', $row['skills_concat']) : [];
     $jobs[] = $row;
 }
 $st->close();

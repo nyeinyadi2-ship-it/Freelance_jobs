@@ -3,7 +3,14 @@ $page_title = 'Company Wallet';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 
-require_role('company');
+require_login();
+
+if (($_SESSION['role'] ?? '') !== 'company') {
+    require_once __DIR__ . '/../includes/header.php';
+    echo '<div class="max-w-4xl mx-auto mt-10"><div class="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-6 py-4 rounded-xl shadow-sm text-center font-medium">You do not have permission to access this page.</div></div>';
+    require_once __DIR__ . '/../includes/footer.php';
+    exit;
+}
 $user = current_user();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_funds') {
@@ -41,19 +48,19 @@ $stmt = $conn->prepare("SELECT available_balance, reserved_balance FROM users WH
 $stmt->bind_param('i', $user['user_id']);
 $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
-$available_balance = (float) ($row['available_balance'] ?? 0);
-$reserved_balance = (float) ($row['reserved_balance'] ?? 0);
-$total_balance = $available_balance + $reserved_balance;
+$total_balance = (float)($row['available_balance'] ?? 0) + (float)($row['reserved_balance'] ?? 0);
 $stmt->close();
 
 // Fetch transaction history
 $transactions = [];
 $stmt = $conn->prepare("
-    SELECT wt.*, u.username as freelancer_name, u.profile_image, j.title as job_title, m.title as ms_title 
+    SELECT wt.*, u.username as freelancer_name, u.profile_image, j.title as job_title, m.title as ms_title,
+           p.id as payment_id, p.transaction_slip
     FROM wallet_transactions wt
     LEFT JOIN users u ON wt.receiver_id = u.id
     LEFT JOIN jobs j ON wt.job_id = j.id
     LEFT JOIN milestones m ON wt.milestone_id = m.id
+    LEFT JOIN payments p ON p.paid_at = wt.created_at AND p.amount = wt.amount
     WHERE wt.user_id = ? OR wt.sender_id = ? 
     ORDER BY wt.created_at DESC
 ");
@@ -81,20 +88,8 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="space-y-4">
             <div>
                 <p class="text-sm text-gray-500 dark:text-gray-400">Total Fund</p>
-                <div class="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                <div class="text-3xl font-bold text-slate-800 dark:text-slate-100 mt-1">
                     <?= number_format($total_balance, 2) ?> MMK
-                </div>
-            </div>
-            <div class="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 mt-4">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Available Fund</p>
-                <div class="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-                    <?= number_format($available_balance, 2) ?> MMK
-                </div>
-            </div>
-            <div class="flex justify-between items-center">
-                <p class="text-sm text-gray-500 dark:text-gray-400">Reserved Fund</p>
-                <div class="text-lg font-bold text-yellow-600 dark:text-yellow-500">
-                    <?= number_format($reserved_balance, 2) ?> MMK
                 </div>
             </div>
         </div>
@@ -120,8 +115,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <tr class="border-b dark:border-gray-700 text-gray-500">
                             <th class="py-3 px-4 font-medium">Date</th>
                             <th class="py-3 px-4 font-medium">Type</th>
+                            <th class="py-3 px-4 font-medium">Username</th>
+                            <th class="py-3 px-4 font-medium">Project</th>
                             <th class="py-3 px-4 font-medium">Amount</th>
-                            <th class="py-3 px-4 font-medium">Status</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y dark:divide-gray-700">
@@ -145,24 +141,31 @@ require_once __DIR__ . '/../includes/header.php';
                                     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium <?= $bg ?> <?= $color ?>">
                                         <?= e($label) ?>
                                     </span>
-                                    <?php if ($is_payment): ?>
-                                        <div class="mt-1">
-                                            <span class="text-sm text-gray-600 dark:text-gray-300">To: <span class="font-medium text-gray-900 dark:text-white"><?= e($t['freelancer_name'] ?? 'Unknown') ?></span></span>
-                                        </div>
-                                    <?php elseif ($t['type'] === 'deposit'): ?>
-                                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Add Fund</div>
+                                </td>
+                                <td class="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
+                                    <?= $is_payment ? e($t['freelancer_name'] ?? 'Unknown') : '—' ?>
+                                </td>
+                                <td class="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
+                                    <?php if ($t['job_title']): ?>
+                                        <div class="font-medium"><?= e($t['job_title']) ?></div>
+                                        <?php if ($t['ms_title']): ?>
+                                            <div class="text-xs text-gray-500 mt-0.5">Milestone: <?= e($t['ms_title']) ?></div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        —
                                     <?php endif; ?>
                                 </td>
-                                <td class="py-3 px-4 font-bold text-gray-900 dark:text-gray-100">
-                                    <?= $sign ?><?= number_format($t['amount'], 2) ?> MMK
-                                </td>
                                 <td class="py-3 px-4">
-                                    <?php if($t['status'] === 'pending'): ?>
-                                        <span class="px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 capitalize">Pending</span>
-                                    <?php elseif($t['status'] === 'completed'): ?>
-                                        <span class="px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 capitalize">Completed</span>
-                                    <?php elseif($t['status'] === 'rejected' || $t['status'] === 'failed'): ?>
-                                        <span class="px-2 py-1 text-xs font-semibold rounded bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 capitalize"><?= e($t['status']) ?></span>
+                                    <div class="font-bold <?= $color ?>">
+                                        <?= $sign ?><?= number_format($t['amount'], 2) ?> MMK
+                                    </div>
+                                    <?php if ($is_payment && !empty($t['transaction_slip']) && !empty($t['payment_id'])): ?>
+                                        <div class="mt-2">
+                                            <a href="<?= base_url('api/view_slip.php?payment_id=' . $t['payment_id']) ?>" target="_blank" class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+                                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                                View Slip
+                                            </a>
+                                        </div>
                                     <?php endif; ?>
                                 </td>
                             </tr>

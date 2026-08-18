@@ -25,10 +25,17 @@ $base = base_url('');
 $home_links = [];
 if ($role === 'company') {
     $home_links = [
-        ['label' => 'Home', 'href' => base_url('company/index.php'), 'anchor' => ''],
+        ['label' => 'Home', 'href' => base_url('index.php'), 'anchor' => ''],
         ['label' => 'Find Freelancers', 'href' => base_url('company/find_freelancers.php'), 'anchor' => 'find_freelancers'],
         ['label' => 'My Jobs', 'href' => base_url('company/manage_jobs.php'), 'anchor' => 'manage_jobs'],
         ['label' => 'About', 'href' => base_url('company/about.php'), 'anchor' => 'about'],
+    ];
+} elseif ($role === 'freelancer') {
+    $home_links = [
+        ['label' => 'Home', 'href' => base_url('index.php'), 'anchor' => ''],
+        ['label' => 'Find Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'anchor' => 'find-jobs'],
+        ['label' => 'Freelancers', 'href' => base_url('freelancer/dashboard.php'), 'anchor' => ''],
+        ['label' => 'About', 'href' => base_url('index.php'), 'anchor' => ''],
     ];
 } else {
     $home_links = [
@@ -41,11 +48,16 @@ if ($role === 'company') {
 
 // Fetch all skills for the Skills dropdown
 $nav_skills = [];
-$nav_skills_r = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
-if ($nav_skills_r) {
-    while ($row = $nav_skills_r->fetch_assoc()) {
-        $nav_skills[] = $row;
+if (!isset($_SESSION['nav_skills'])) {
+    $nav_skills_r = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
+    if ($nav_skills_r) {
+        while ($row = $nav_skills_r->fetch_assoc()) {
+            $nav_skills[] = $row;
+        }
     }
+    $_SESSION['nav_skills'] = $nav_skills;
+} else {
+    $nav_skills = $_SESSION['nav_skills'];
 }
 
 $role_links = [];
@@ -407,7 +419,7 @@ if ($is_logged_in) {
         <div class="flex items-center justify-between h-[60px]">
 
             <!-- Logo -->
-            <a href="<?= e($role === 'company' ? base_url('company/index.php') : base_url('index.php')) ?>" class="flex items-center gap-2.5 flex-shrink-0 group">
+            <a href="<?= e($role === 'company' ? base_url('index.php') : base_url('index.php')) ?>" class="flex items-center gap-2.5 flex-shrink-0 group">
                 <div class="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:scale-105 group-hover:shadow-lg group-hover:shadow-indigo-500/20" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
                     <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -624,7 +636,7 @@ if ($is_logged_in) {
 <div id="mobile-overlay" class="mo" onclick="closeMobileMenu()"></div>
 <div id="mobile-panel" class="mp">
     <div class="flex items-center justify-between p-4" style="border-bottom:1px solid rgba(0,0,0,.06)">
-        <a href="<?= e($role === 'company' ? base_url('company/index.php') : base_url('index.php')) ?>" class="flex items-center gap-2">
+        <a href="<?= e($role === 'company' ? base_url('index.php') : base_url('index.php')) ?>" class="flex items-center gap-2">
             <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)"><svg class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg></div>

@@ -1,6 +1,36 @@
 <?php
 $page_title = 'Dashboard';
 require __DIR__ . '/../includes/freelancer_layout.php';
+require_once __DIR__ . '/../includes/job_helpers.php';
+check_assignment_deadlines($conn);
+
+$fl_notif_count = $unread_count ?? 0;
+$fl_chat_unread = $chat_unread ?? 0;
+$fl_recent_notifs = $recent_notifications ?? [];
+
+// Fetch profile, skills, completion, and stats (moved from init to optimize other pages)
+$fl_stmt = $conn->prepare("SELECT f.*, u.email, u.profile_image, u.username, u.created_at FROM freelancers f JOIN users u ON u.id = f.user_id WHERE f.id = ?");
+$fl_stmt->bind_param('i', $fl_freelancer_id); $fl_stmt->execute();
+$fl_profile = $fl_stmt->get_result()->fetch_assoc(); $fl_stmt->close();
+
+$fl_skill_names = [];
+$r = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
+if ($r) while ($row = $r->fetch_assoc()) $fl_skill_names[$row['id']] = $row['skill_name'];
+$fl_profile_skills = [];
+$r = $conn->query("SELECT skill_id FROM freelancer_skills WHERE freelancer_id = $fl_freelancer_id");
+if ($r) while ($row = $r->fetch_assoc()) $fl_profile_skills[] = (int) $row['skill_id'];
+
+$fl_fields = [$fl_profile['full_name'], $fl_profile['title'], $fl_profile['phone'], $fl_profile['location'], $fl_profile['bio'], $fl_profile['hourly_rate'], $fl_profile['experience_years'], $fl_profile['profile_image']];
+$fl_filled = 0;
+foreach ($fl_fields as $f) if (!empty($f)) $fl_filled++;
+$fl_completion = min(100, round(($fl_filled / count($fl_fields)) * 80 + (count($fl_profile_skills) > 0 ? 20 : 0)));
+
+$fl_stats = ['pending' => 0, 'active' => 0, 'completed' => 0, 'earnings' => 0];
+try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM job_applications WHERE freelancer_id=? AND status='pending'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['pending'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status IN ('assigned','working','submitted')"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['active'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status='completed'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['completed'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT COALESCE(SUM(p.amount),0) AS t FROM payments p JOIN assignments a ON p.assignment_id=a.id WHERE a.freelancer_id=? AND p.status='paid'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['earnings'] = (float)$s->get_result()->fetch_assoc()['t']; $s->close(); } catch(Exception $e) {}
+
 
 // Ongoing tasks
 $ongoing_tasks = [];
@@ -546,7 +576,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                         <div class="flex-1 min-w-0"><p class="font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p></div>
                         <?= status_badge('completed') ?>
                     </div>
-                    <div class="flex items-center justify-between text-sm pt-3 border-t" style="border-color:var(--color-border)"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span><?php if ($task['paid_at']): ?><span class="flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Paid <?= date('M j', strtotime($task['paid_at'])) ?></span><?php endif; ?></div>
+                    <div class="flex items-center justify-between text-sm pt-3 border-t" style="border-color:var(--color-border)"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span><?php if ($task['paid_at']): ?><span class="flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Received <?= date('M j', strtotime($task['paid_at'])) ?></span><?php endif; ?></div>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -565,7 +595,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
         <div class="glass rounded-2xl overflow-x-auto">
             <table class="w-full text-sm">
                 <thead><tr class="border-b text-left" style="border-color:var(--color-border);color:var(--color-text-muted)"><th class="p-4">Job</th><th class="p-4">Company</th><th class="p-4">Amount</th><th class="p-4">Status</th><th class="p-4">Date</th></tr></thead>
-                <tbody><?php foreach ($earnings as $e): ?><tr class="border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border-color:var(--color-border)"><td class="p-4 font-medium" style="color:var(--color-text-primary)"><?= e($e['job_title']) ?></td><td class="p-4" style="color:var(--color-text-muted)"><?= e($e['company_name']) ?></td><td class="p-4 font-bold text-emerald-600"><?= number_format((float) $e['amount'], 2) ?> MMK</td><td class="p-4"><?= status_badge($e['status']) ?></td><td class="p-4" style="color:var(--color-text-placeholder)"><?= e($e['paid_at'] ?? '—') ?></td></tr><?php endforeach; ?></tbody>
+                <tbody><?php foreach ($earnings as $e): ?><tr class="border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border-color:var(--color-border)"><td class="p-4 font-medium" style="color:var(--color-text-primary)"><?= e($e['job_title']) ?></td><td class="p-4" style="color:var(--color-text-muted)"><?= e($e['company_name']) ?></td><td class="p-4 font-bold text-emerald-600"><?= number_format((float) $e['amount'], 2) ?> MMK</td><td class="p-4"><?= $e['status'] === 'paid' ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Received</span>' : status_badge($e['status']) ?></td><td class="p-4" style="color:var(--color-text-placeholder)"><?= e($e['paid_at'] ?? '—') ?></td></tr><?php endforeach; ?></tbody>
             </table>
         </div>
     <?php endif; ?>

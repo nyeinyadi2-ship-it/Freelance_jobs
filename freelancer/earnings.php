@@ -29,15 +29,6 @@ try {
     $s->close();
 } catch (Exception $e) {}
 
-$withdrawals = [];
-try {
-    $s = $conn->prepare("SELECT * FROM withdraw_requests WHERE freelancer_id = ? ORDER BY created_at DESC");
-    $s->bind_param('i', $fl_freelancer_id);
-    $s->execute();
-    $r = $s->get_result();
-    while ($row = $r->fetch_assoc()) $withdrawals[] = $row;
-    $s->close();
-} catch (Exception $e) {}
 
 $active_submissions = [];
 try {
@@ -53,17 +44,6 @@ try {
     $s->close();
 } catch (Exception $e) {}
 
-function withdraw_status_badge(string $status): string
-{
-    $map = [
-        'pending'   => ['bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300', 'Pending'],
-        'approved'  => ['bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300', 'Approved'],
-        'rejected'  => ['bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300', 'Rejected'],
-        'completed' => ['bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300', 'Completed'],
-    ];
-    $info = $map[$status] ?? ['bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300', ucfirst($status)];
-    return '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full ' . $info[0] . '">' . $info[1] . '</span>';
-}
 ?>
 
 <!-- Earnings Hero Card -->
@@ -85,35 +65,18 @@ function withdraw_status_badge(string $status): string
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Available Balance</p>
                     <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['available_balance'], 2) ?> MMK</p>
-                    <p class="text-[10px] text-white/40 mt-1">Ready to withdraw</p>
-                </div>
-                <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
-                    <p class="text-xs text-white/60 font-medium mb-1">Pending Balance</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['pending_balance'], 2) ?> MMK</p>
-                    <p class="text-[10px] text-white/40 mt-1">In withdrawal review</p>
+                    <p class="text-[10px] text-white/40 mt-1">Current balance</p>
                 </div>
                 <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
                     <p class="text-xs text-white/60 font-medium mb-1">Lifetime Earnings</p>
                     <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['total_earnings'], 2) ?> MMK</p>
                     <p class="text-[10px] text-white/40 mt-1">Total received</p>
                 </div>
-                <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
-                    <p class="text-xs text-white/60 font-medium mb-1">Total Withdrawn</p>
-                    <p class="text-2xl sm:text-3xl font-extrabold"><?= number_format($earnings_stats['total_withdrawn'], 2) ?> MMK</p>
-                    <p class="text-[10px] text-white/40 mt-1">Paid out</p>
-                </div>
             </div>
-
-            <?php if ($earnings_stats['available_balance'] > 0): ?>
-                <button onclick="openWithdrawModal()" class="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-xl bg-white text-indigo-700 hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                    Request Withdrawal
-                </button>
-            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -126,7 +89,6 @@ function withdraw_status_badge(string $status): string
             $earnings_tabs = [
                 ['id' => 'active', 'label' => 'Active Payments', 'icon' => 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', 'badge' => count($escrow_active), 'bc' => 'blue'],
                 ['id' => 'completed', 'label' => 'Completed Payments', 'icon' => 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'],
-                ['id' => 'withdrawals', 'label' => 'Withdrawal History', 'icon' => 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z'],
             ];
             $first = true;
             foreach ($earnings_tabs as $t): ?>
@@ -247,7 +209,7 @@ function withdraw_status_badge(string $status): string
                         <?= escrow_status_badge($cp['escrow_status']) ?>
                     </div>
                     <div class="flex items-center justify-between pt-3 border-t" style="border-color:var(--color-border)">
-                        <span class="text-xs" style="color:var(--color-text-placeholder)"><?= $cp['escrow_status'] === 'released' ? 'Paid' : 'Refunded' ?> <?= date('M j, Y', strtotime($cp['escrow_status'] === 'released' ? $cp['released_at'] : $cp['refunded_at'])) ?></span>
+                        <span class="text-xs" style="color:var(--color-text-placeholder)"><?= $cp['escrow_status'] === 'released' ? 'Received' : 'Refunded' ?> <?= date('M j, Y', strtotime($cp['escrow_status'] === 'released' ? $cp['released_at'] : $cp['refunded_at'])) ?></span>
                         <button onclick="openInvoiceModal(<?= e(json_encode(['id' => $cp['id'], 'amount' => $cp['amount'], 'job_title' => $cp['job_title'], 'company_name' => $cp['company_name'], 'escrow_status' => $cp['escrow_status'], 'date' => $cp['escrow_status'] === 'released' ? $cp['released_at'] : $cp['refunded_at'], 'assignment_id' => $cp['assignment_id']])) ?>)" class="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:text-primary-700 transition-colors">
                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                             View Invoice
@@ -259,127 +221,7 @@ function withdraw_status_badge(string $status): string
     <?php endif; ?>
 </div>
 
-<!-- Withdrawal History -->
-<div class="dash-section" id="tab-withdrawals">
-    <div class="flex items-center justify-between mb-5">
-        <h2 class="text-xl font-bold" style="color:var(--color-text-primary)">Withdrawal History</h2>
-        <?php if ($earnings_stats['available_balance'] > 0): ?>
-            <button onclick="openWithdrawModal()" class="btn-grad inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl text-white">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                New Withdrawal
-            </button>
-        <?php endif; ?>
-    </div>
-    <?php if (empty($withdrawals)): ?>
-        <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)">
-            <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-            <p class="mb-3">No withdrawal history yet.</p>
-            <?php if ($earnings_stats['available_balance'] > 0): ?>
-                <button onclick="openWithdrawModal()" class="btn-grad inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-xl text-white">Request Your First Withdrawal</button>
-            <?php endif; ?>
-        </div>
-    <?php else: ?>
-        <div class="glass rounded-2xl overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr class="border-b text-left" style="border-color:var(--color-border);color:var(--color-text-muted)">
-                        <th class="p-4 font-semibold">Amount</th>
-                        <th class="p-4 font-semibold">Method</th>
-                        <th class="p-4 font-semibold">Status</th>
-                        <th class="p-4 font-semibold hidden sm:table-cell">Requested</th>
-                        <th class="p-4 font-semibold hidden sm:table-cell">Processed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($withdrawals as $w): ?>
-                        <tr class="border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50" style="border-color:var(--color-border)">
-                            <td class="p-4 font-bold text-primary-600"><?= number_format((float) $w['amount'], 2) ?> MMK</td>
-                            <td class="p-4" style="color:var(--color-text-secondary)">
-                                <span class="flex items-center gap-1.5">
-                                    <?php if ($w['payment_method'] === 'Bank Transfer'): ?>
-                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v3m4-3v3m4-3v3"/></svg>
-                                    <?php elseif ($w['payment_method'] === 'PayPal'): ?>
-                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                                    <?php else: ?>
-                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                                    <?php endif; ?>
-                                    <?= e($w['payment_method'] ?? 'N/A') ?>
-                                </span>
-                            </td>
-                            <td class="p-4"><?= withdraw_status_badge($w['status']) ?></td>
-                            <td class="p-4 hidden sm:table-cell" style="color:var(--color-text-placeholder)"><?= date('M j, Y', strtotime($w['created_at'])) ?></td>
-                            <td class="p-4 hidden sm:table-cell" style="color:var(--color-text-placeholder)"><?= $w['processed_at'] ? date('M j, Y', strtotime($w['processed_at'])) : '<span class="text-xs italic">Pending</span>' ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
-</div>
 
-</div><!-- end tab content -->
-
-<!-- Withdrawal Modal -->
-<div id="withdraw-modal" class="fixed inset-0 z-[100] hidden">
-    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeWithdrawModal()"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="glass rounded-3xl w-full max-w-lg p-6 sm:p-8 relative shadow-2xl" style="background:var(--color-card)">
-            <button onclick="closeWithdrawModal()" class="absolute top-4 right-4 p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <svg class="w-5 h-5" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-            <div class="flex items-center gap-3 mb-6">
-                <div class="w-12 h-12 rounded-2xl flex items-center justify-center" style="background:rgba(99,102,241,0.1)">
-                    <svg class="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                </div>
-                <div>
-                    <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Request Withdrawal</h2>
-                    <p class="text-xs" style="color:var(--color-text-muted)">Available: <span class="font-bold text-emerald-600"><?= number_format($earnings_stats['available_balance'], 2) ?> MMK</span></p>
-                </div>
-            </div>
-
-            <form id="withdraw-form" onsubmit="submitWithdrawal(event)">
-                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-
-                <div class="mb-4">
-                    <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">Amount (MMK)</label>
-                    <input type="number" name="amount" step="0.01" min="1" max="<?= number_format($earnings_stats['available_balance'], 2, '.', '') ?>" required
-                           class="w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                           style="background:var(--color-bg);border-color:var(--color-border);color:var(--color-text-primary)"
-                           placeholder="0.00">
-                    <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Minimum: 1.00 MMK &middot; Maximum: <?= number_format($earnings_stats['available_balance'], 2) ?> MMK</p>
-                </div>
-
-                <?php if (empty($fl_profile['payment_method'])): ?>
-                    <div class="mb-6 p-4 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 rounded-xl text-sm border border-yellow-200 dark:border-yellow-800/40">
-                        You haven't configured a payment method yet.<br>
-                        <a href="profile.php?edit=1" class="font-bold underline text-indigo-600 dark:text-indigo-400 mt-2 inline-block">Configure Payment Settings</a>
-                    </div>
-                <?php else: ?>
-                    <div class="mb-6">
-                        <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">Saved Payment Method</label>
-                        <div class="w-full px-4 py-3 rounded-xl border text-sm font-medium bg-gray-50 dark:bg-gray-800/50" style="border-color:var(--color-border);color:var(--color-text-secondary)">
-                            <strong class="text-gray-900 dark:text-gray-100"><?= e(ucwords(str_replace('_', ' ', $fl_profile['payment_method']))) ?></strong><br>
-                            <?= e($fl_profile['payment_account_name']) ?> &bull; <?= e($fl_profile['payment_account_number']) ?>
-                            <?php if ($fl_profile['payment_method'] === 'bank_transfer' && !empty($fl_profile['payment_bank_name'])): ?>
-                                <br><?= e($fl_profile['payment_bank_name']) ?>
-                            <?php endif; ?>
-                        </div>
-                        <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Change this in your <a href="profile.php?edit=1" class="text-indigo-500 hover:underline">Profile Settings</a>.</p>
-                    </div>
-                <?php endif; ?>
-
-                <div id="withdraw-error" class="hidden mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-sm text-red-600 dark:text-red-400"></div>
-                <div id="withdraw-success" class="hidden mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 text-sm text-emerald-600 dark:text-emerald-400"></div>
-
-                <button type="submit" id="withdraw-submit-btn" <?= empty($fl_profile['payment_method']) ? 'disabled' : '' ?>
-                        class="w-full <?= empty($fl_profile['payment_method']) ? 'bg-gray-400 cursor-not-allowed' : 'btn-grad hover:-translate-y-0.5' ?> inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/25 transition-all">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                    Submit Withdrawal Request
-                </button>
-            </form>
-        </div>
-    </div>
-</div>
 
 <!-- Invoice Modal -->
 <div id="invoice-modal" class="fixed inset-0 z-[100] hidden">
@@ -438,60 +280,6 @@ document.querySelectorAll('.dash-tab').forEach(function(tab) {
     tab.addEventListener('click', function() { switchTab(this.getAttribute('data-tab')); });
 });
 
-function openWithdrawModal() {
-    document.getElementById('withdraw-modal').classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-}
-function closeWithdrawModal() {
-    document.getElementById('withdraw-modal').classList.add('hidden');
-    document.body.style.overflow = '';
-}
-
-function submitWithdrawal(e) {
-    e.preventDefault();
-    var form = document.getElementById('withdraw-form');
-    var errEl = document.getElementById('withdraw-error');
-    var successEl = document.getElementById('withdraw-success');
-    var btn = document.getElementById('withdraw-submit-btn');
-
-    errEl.classList.add('hidden');
-    successEl.classList.add('hidden');
-
-    var data = {
-        action: 'request_withdrawal',
-        csrf_token: form.csrf_token.value,
-        amount: parseFloat(form.amount.value)
-    };
-
-    btn.disabled = true;
-    btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Processing...';
-
-    fetch('<?= e(base_url('api/withdraw.php')) ?>', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify(data)
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-        if (d.success) {
-            successEl.textContent = 'Withdrawal request submitted successfully! It will be reviewed by an admin shortly.';
-            successEl.classList.remove('hidden');
-            form.reset();
-            setTimeout(function() { location.reload(); }, 2000);
-        } else {
-            errEl.textContent = d.error || 'Failed to submit withdrawal request.';
-            errEl.classList.remove('hidden');
-        }
-    })
-    .catch(function() {
-        errEl.textContent = 'Network error. Please try again.';
-        errEl.classList.remove('hidden');
-    })
-    .finally(function() {
-        btn.disabled = false;
-        btn.innerHTML = '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg> Submit Withdrawal Request';
-    });
-}
 
 function openInvoiceModal(data) {
     var invNum = 'INV-' + String(data.id).padStart(6, '0');
@@ -503,7 +291,7 @@ function openInvoiceModal(data) {
     document.getElementById('inv-amount').textContent = parseFloat(data.amount).toFixed(2) + ' MMK';
     var statusEl = document.getElementById('inv-status');
     if (data.escrow_status === 'released') {
-        statusEl.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Paid</span>';
+        statusEl.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Received</span>';
     } else {
         statusEl.innerHTML = '<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">Refunded</span>';
     }
@@ -517,7 +305,6 @@ function closeInvoiceModal() {
 
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-        closeWithdrawModal();
         closeInvoiceModal();
     }
 });

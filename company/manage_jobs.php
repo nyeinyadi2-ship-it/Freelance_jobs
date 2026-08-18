@@ -18,25 +18,21 @@ $closed_jobs = [];
 $stmt = $conn->prepare('
     SELECT j.id, j.title, j.category, j.experience_level, j.budget, j.status, j.created_at,
            j.deadline, j.freelancers_needed, j.visibility, j.attachment,
-           (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id) AS app_count
+           COUNT(DISTINCT ja.id) AS app_count,
+           GROUP_CONCAT(DISTINCT s.skill_name SEPARATOR \',\') AS skills_concat
     FROM jobs j
+    LEFT JOIN job_applications ja ON ja.job_id = j.id
+    LEFT JOIN job_skills js ON js.job_id = j.id
+    LEFT JOIN skills s ON s.id = js.skill_id
     WHERE j.company_id = ?
+    GROUP BY j.id
     ORDER BY j.created_at DESC
 ');
 $stmt->bind_param('i', $company_id);
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
-    // Fetch skills for this job
-    $skills_stmt = $conn->prepare('SELECT s.skill_name FROM job_skills js JOIN skills s ON js.skill_id = s.id WHERE js.job_id = ? ORDER BY s.skill_name');
-    $skills_stmt->bind_param('i', $row['id']);
-    $skills_stmt->execute();
-    $skills_result = $skills_stmt->get_result();
-    $row['skills'] = [];
-    while ($sk = $skills_result->fetch_assoc()) {
-        $row['skills'][] = $sk['skill_name'];
-    }
-    $skills_stmt->close();
+    $row['skills'] = !empty($row['skills_concat']) ? explode(',', $row['skills_concat']) : [];
     if ($row['status'] === 'expired') {
         $expired_jobs[] = $row;
     } elseif ($row['status'] === 'closed') {

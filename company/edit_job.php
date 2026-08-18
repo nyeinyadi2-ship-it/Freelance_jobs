@@ -193,7 +193,13 @@ require __DIR__ . '/../includes/header.php';
                         <select name="category" required class="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
                             <option value="">Select a category</option>
                             <?php
-                            $cats = ['Web Development','Mobile Development','UI/UX Design','Graphic Design','Content Writing','Digital Marketing','Data Science','DevOps','Blockchain','Video & Animation','Translation','Other'];
+                            $cats = [];
+                            $res = $conn->query("SELECT name FROM categories ORDER BY name ASC");
+                            if ($res) {
+                                while ($row = $res->fetch_assoc()) {
+                                    $cats[] = $row['name'];
+                                }
+                            }
                             $cur_cat = $_POST['category'] ?? $job['category'];
                             foreach ($cats as $cat):
                             ?>

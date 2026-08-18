@@ -37,8 +37,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             if ($already_applied) {
                 set_flash('error', 'You have already applied for this job.');
             } else {
-                $st = $conn->prepare('INSERT INTO job_applications (job_id, freelancer_id) VALUES (?, ?)');
-                $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute(); $st->close();
+                $cover_letter = trim($_POST['cover_letter'] ?? '');
+                $relevant_experience = trim($_POST['relevant_experience'] ?? '');
+                $estimated_time = trim($_POST['estimated_completion_time'] ?? '');
+                $additional_info = trim($_POST['additional_information'] ?? '');
+
+                $st = $conn->prepare('INSERT INTO job_applications (job_id, freelancer_id, cover_letter, relevant_experience, estimated_completion_time, additional_information) VALUES (?, ?, ?, ?, ?, ?)');
+                $st->bind_param('iissss', $job_id, $fl_freelancer_id, $cover_letter, $relevant_experience, $estimated_time, $additional_info); $st->execute(); $st->close();
 
                 $st = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.id = ?");
                 $st->bind_param('i', $job_id); $st->execute();
@@ -183,11 +188,25 @@ $stmt->execute();
 $client_hired = (int) $stmt->get_result()->fetch_assoc()['cnt'];
 $stmt->close();
 
-$stmt = $conn->prepare("SELECT COALESCE(SUM(j.budget), 0) AS total FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.status = 'completed'");
-$stmt->bind_param('i', $client_company_id);
+// Fetch applicants for this job (up to 6 for display)
+$applicants = [];
+$stmt = $conn->prepare("
+    SELECT f.full_name, u.profile_image, u.id AS user_id
+    FROM job_applications ja
+    JOIN freelancers f ON ja.freelancer_id = f.id
+    JOIN users u ON f.user_id = u.id
+    WHERE ja.job_id = ?
+    ORDER BY ja.applied_at ASC
+    LIMIT 6
+");
+$stmt->bind_param('i', $job_id);
 $stmt->execute();
-$client_paid = (float) $stmt->get_result()->fetch_assoc()['total'];
+$sr = $stmt->get_result();
+while ($row = $sr->fetch_assoc()) {
+    $applicants[] = $row;
+}
 $stmt->close();
+$applicant_count = count($applicants);
 
 require __DIR__ . '/../includes/freelancer_layout.php';
 ?>
@@ -314,6 +333,145 @@ require __DIR__ . '/../includes/freelancer_layout.php';
     transition: all 0.3s ease;
 }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
+
+.applicant-stack {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+}
+.applicant-stack .applicant-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2.5px solid var(--color-card, #fff);
+    object-fit: cover;
+    margin-left: -10px;
+    position: relative;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    z-index: 1;
+    flex-shrink: 0;
+}
+.applicant-stack .applicant-avatar:first-child {
+    margin-left: 0;
+}
+.applicant-stack .applicant-avatar:hover {
+    transform: translateY(-4px) scale(1.12);
+    z-index: 10;
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.25);
+    border-color: #6366f1;
+}
+.applicant-stack .applicant-initials {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2.5px solid var(--color-card, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
+    margin-left: -10px;
+    position: relative;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    z-index: 1;
+    flex-shrink: 0;
+}
+.applicant-stack .applicant-initials:first-child {
+    margin-left: 0;
+}
+.applicant-stack .applicant-initials:hover {
+    transform: translateY(-4px) scale(1.12);
+    z-index: 10;
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.25);
+    border-color: #6366f1;
+}
+.applicant-more {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2.5px solid var(--color-card, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: #6366f1;
+    background: rgba(99, 102, 241, 0.1);
+    margin-left: -10px;
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+    transition: all 0.25s ease;
+}
+.applicant-more:hover {
+    transform: translateY(-4px) scale(1.12);
+    z-index: 10;
+    background: rgba(99, 102, 241, 0.18);
+}
+.applicant-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e1b4b;
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 8px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translateX(-50%) translateY(4px);
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.applicant-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1e1b4b;
+}
+.applicant-avatar:hover + .applicant-tooltip,
+.applicant-initials:hover + .applicant-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.applicant-avatar-wrap {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+.applicant-avatar-wrap:hover .applicant-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.applicants-section-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.no-applicants-msg {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--color-card-hover, rgba(0,0,0,0.03));
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+}
 </style>
 
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -388,8 +546,8 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <!-- Budget -->
                 <div class="lg:text-right flex-shrink-0">
                     <div class="inline-flex flex-col items-center lg:items-end px-6 py-4 rounded-2xl" style="background:rgba(255,255,255,0.1);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12)">
-                        <span class="text-white/60 text-xs font-medium uppercase tracking-wider mb-1">Budget</span>
-                        <span class="text-4xl sm:text-5xl font-extrabold text-white">$<?= number_format((float) $job['budget'], 2) ?></span>
+                        <span class="text-white/60 text-xs font-medium uppercase tracking-wider mb-1">Budget (<?= e(ucfirst($job['payment_type'] ?? 'Fixed')) ?>)</span>
+                        <span class="text-4xl sm:text-5xl font-extrabold text-white"><?= number_format((float) $job['budget'], 2) ?> MMK</span>
                     </div>
                 </div>
             </div>
@@ -409,7 +567,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
             <div class="w-10 h-10 mx-auto mb-2 rounded-xl flex items-center justify-center" style="background:rgba(16,185,129,0.1)">
                 <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
             </div>
-            <p class="text-2xl font-bold" style="color:var(--color-text-primary)">$<?= number_format((float) $job['budget'], 0) ?></p>
+            <p class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= number_format((float) $job['budget'], 0) ?> MMK</p>
             <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Budget</p>
         </div>
         <div class="stat-card">
@@ -514,7 +672,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 </div>
 
                 <!-- Client Stats -->
-                <div class="grid grid-cols-3 gap-3 mb-5">
+                <div class="grid grid-cols-2 gap-3 mb-5">
                     <div class="relative overflow-hidden rounded-xl p-4 text-center" style="background:var(--color-card-hover,rgba(0,0,0,0.03))">
                         <div class="absolute top-0 right-0 w-12 h-12 rounded-bl-full opacity-[0.08] bg-indigo-500"></div>
                         <div class="relative">
@@ -535,16 +693,49 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Jobs Hired</p>
                         </div>
                     </div>
-                    <div class="relative overflow-hidden rounded-xl p-4 text-center" style="background:var(--color-card-hover,rgba(0,0,0,0.03))">
-                        <div class="absolute top-0 right-0 w-12 h-12 rounded-bl-full opacity-[0.08] bg-violet-500"></div>
-                        <div class="relative">
-                            <div class="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2" style="background:rgba(139,92,246,0.1)">
-                                <svg class="w-4 h-4 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
-                            </div>
-                            <p class="text-xl font-extrabold" style="color:var(--color-text-primary)">$<?= number_format($client_paid, 0) ?></p>
-                            <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Amount Paid</p>
+                </div>
+
+                <!-- Applications -->
+                <div class="mb-5">
+                    <p class="applicants-section-label">
+                        <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                        Applications
+                    </p>
+                    <?php if ($applicant_count > 0): ?>
+                        <div class="applicant-stack">
+                            <?php
+                            $max_display = 5;
+                            $display_count = min($applicant_count, $max_display);
+                            for ($i = 0; $i < $display_count; $i++):
+                                $app = $applicants[$i];
+                                $app_img = profile_image_url($app['profile_image']);
+                                $app_name = $app['full_name'] ?: 'Freelancer';
+                                $initials = strtoupper(mb_substr($app_name, 0, 1));
+                            ?>
+                                <div class="applicant-avatar-wrap">
+                                    <?php if ($app_img): ?>
+                                        <a href="<?= e(base_url('freelancer/profile.php?id=' . $app['user_id'])) ?>">
+                                            <img src="<?= e($app_img) ?>" alt="<?= e($app_name) ?>" class="applicant-avatar" loading="lazy">
+                                        </a>
+                                    <?php else: ?>
+                                        <a href="<?= e(base_url('freelancer/profile.php?id=' . $app['user_id'])) ?>" class="applicant-initials" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
+                                            <?= $initials ?>
+                                        </a>
+                                    <?php endif; ?>
+                                    <span class="applicant-tooltip"><?= e($app_name) ?></span>
+                                </div>
+                            <?php endfor; ?>
+                            <?php if ($applicant_count > $max_display): ?>
+                                <span class="applicant-more">+<?= $applicant_count - $max_display ?></span>
+                            <?php endif; ?>
                         </div>
-                    </div>
+                        <p class="text-xs mt-2" style="color:var(--color-text-muted)"><?= number_format($proposal_count) ?> total proposal<?= $proposal_count !== 1 ? 's' : '' ?> submitted</p>
+                    <?php else: ?>
+                        <div class="no-applicants-msg">
+                            <svg class="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                            No applications yet
+                        </div>
+                    <?php endif; ?>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -607,16 +798,58 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <div class="inline-flex"><?= status_badge($my_status) ?></div>
                     </div>
                 <?php else: ?>
-                    <form method="POST">
-                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                        <input type="hidden" name="action" value="apply">
-                        <button type="submit" class="btn-primary w-full text-base">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                            Apply Now
-                        </button>
-                    </form>
+                    <button type="button" onclick="document.getElementById('applyModal').classList.remove('hidden')" class="btn-primary w-full text-base">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                        Apply Now
+                    </button>
                     <p class="text-xs text-center mt-3" style="color:var(--color-text-muted)">Submit your proposal for this job</p>
                 <?php endif; ?>
+
+                <!-- Apply Modal -->
+                <div id="applyModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div class="px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
+                            <h3 class="text-lg font-bold" style="color:var(--color-text-primary)">Submit Application</h3>
+                            <button type="button" onclick="document.getElementById('applyModal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                        <div class="overflow-y-auto p-6">
+                            <form method="POST" id="applyForm">
+                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                <input type="hidden" name="action" value="apply">
+                                
+                                <div class="space-y-5">
+                                    <div>
+                                        <label class="block text-sm font-semibold mb-2" style="color:var(--color-text-primary)">Cover Letter / Proposal <span class="text-red-500">*</span></label>
+                                        <p class="text-xs mb-2" style="color:var(--color-text-muted)">Explain why you are the best fit for this project.</p>
+                                        <textarea name="cover_letter" rows="5" required class="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="Hi, I am interested in this job because..."></textarea>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-semibold mb-2" style="color:var(--color-text-primary)">Relevant Experience</label>
+                                        <p class="text-xs mb-2" style="color:var(--color-text-muted)">Highlight past projects or skills that relate directly to this job.</p>
+                                        <textarea name="relevant_experience" rows="3" class="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="In my previous role, I worked on..."></textarea>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-semibold mb-2" style="color:var(--color-text-primary)">Estimated Completion Time <span class="text-red-500">*</span></label>
+                                        <input type="text" name="estimated_completion_time" required class="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="e.g. 2 weeks, 10 days, etc.">
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-semibold mb-2" style="color:var(--color-text-primary)">Additional Information (Optional)</label>
+                                        <textarea name="additional_information" rows="2" class="w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow" placeholder="Links to portfolio, references, or specific questions for the client..."></textarea>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="px-6 py-4 border-t dark:border-gray-700 flex items-center justify-end gap-3 bg-gray-50 dark:bg-gray-800/50">
+                            <button type="button" onclick="document.getElementById('applyModal').classList.add('hidden')" class="px-5 py-2.5 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+                            <button type="submit" form="applyForm" class="px-6 py-2.5 rounded-lg text-sm font-bold text-white shadow-md transition-transform hover:-translate-y-0.5" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">Submit Application</button>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Job Details List -->
                 <div class="mt-6 pt-6 border-t" style="border-color:var(--color-border)">
@@ -722,7 +955,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     </div>
                 </div>
                 <div class="flex items-center justify-between mb-3">
-                    <span class="text-base font-bold text-indigo-600">$<?= number_format((float) $sj['budget'], 0) ?></span>
+                    <span class="text-base font-bold text-indigo-600"><?= number_format((float) $sj['budget'], 0) ?> MMK</span>
                     <span class="text-xs px-2 py-1 rounded-lg font-medium" style="background:rgba(99,102,241,0.08);color:#6366f1"><?= e(ucfirst($sj['experience_level'])) ?></span>
                 </div>
                 <?php if (!empty($sj['skills'])): ?>

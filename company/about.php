@@ -13,22 +13,6 @@ if (!$company_id) {
     redirect('auth/login.php');
 }
 
-// Fetch platform stats
-$stats = ['freelancers' => 0, 'jobs' => 0, 'completed' => 0, 'companies' => 0];
-try {
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM freelancers");
-    $stats['freelancers'] = (int) $r->fetch_assoc()['cnt'];
-
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs");
-    $stats['jobs'] = (int) $r->fetch_assoc()['cnt'];
-
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'completed'");
-    $stats['completed'] = (int) $r->fetch_assoc()['cnt'];
-
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM companies");
-    $stats['companies'] = (int) $r->fetch_assoc()['cnt'];
-} catch (Exception $e) {}
-
 $page_title = 'About Us';
 require __DIR__ . '/../includes/header.php';
 ?>
@@ -51,8 +35,6 @@ require __DIR__ . '/../includes/header.php';
 }
 .feature-card { transition: all 0.3s ease; }
 .feature-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(37, 99, 235, 0.12); }
-.stat-block { transition: all 0.3s ease; }
-.stat-block:hover { transform: translateY(-2px); }
 </style>
 
 <!-- Hero Section -->
@@ -64,28 +46,6 @@ require __DIR__ . '/../includes/header.php';
         <p class="text-blue-100 text-lg md:text-xl max-w-2xl mx-auto">
             Connecting businesses with world-class freelancers to deliver exceptional results on time and on budget.
         </p>
-    </div>
-</section>
-
-<!-- Platform Stats -->
-<section class="mb-12">
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="card stat-block text-center" style="border-top:3px solid #2563eb;">
-            <p class="text-3xl font-bold" style="color:#2563eb"><?= number_format($stats['freelancers']) ?></p>
-            <p class="text-sm mt-1" style="color:var(--color-text-muted)">Freelancers</p>
-        </div>
-        <div class="card stat-block text-center" style="border-top:3px solid #059669;">
-            <p class="text-3xl font-bold" style="color:#059669"><?= number_format($stats['jobs']) ?></p>
-            <p class="text-sm mt-1" style="color:var(--color-text-muted)">Jobs Posted</p>
-        </div>
-        <div class="card stat-block text-center" style="border-top:3px solid #7c3aed;">
-            <p class="text-3xl font-bold" style="color:#7c3aed"><?= number_format($stats['completed']) ?></p>
-            <p class="text-sm mt-1" style="color:var(--color-text-muted)">Projects Completed</p>
-        </div>
-        <div class="card stat-block text-center" style="border-top:3px solid #d97706;">
-            <p class="text-3xl font-bold" style="color:#d97706"><?= number_format($stats['companies']) ?></p>
-            <p class="text-sm mt-1" style="color:var(--color-text-muted)">Companies</p>
-        </div>
     </div>
 </section>
 
@@ -153,35 +113,6 @@ require __DIR__ . '/../includes/header.php';
     </div>
 </section>
 
-<!-- How It Works -->
-<section class="mb-12">
-    <div class="text-center mb-8">
-        <h2 class="text-2xl font-bold" style="color:var(--color-text-primary)">How It Works</h2>
-        <p class="text-sm mt-2 max-w-xl mx-auto" style="color:var(--color-text-muted)">Get started in four simple steps.</p>
-    </div>
-    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div class="text-center">
-            <div class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 text-white font-bold text-lg" style="background:linear-gradient(135deg,#2563eb,#3b82f6)">1</div>
-            <h4 class="font-semibold mb-1" style="color:var(--color-text-primary)">Create Account</h4>
-            <p class="text-sm" style="color:var(--color-text-muted)">Sign up as a company and complete your profile to get started.</p>
-        </div>
-        <div class="text-center">
-            <div class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 text-white font-bold text-lg" style="background:linear-gradient(135deg,#059669,#10b981)">2</div>
-            <h4 class="font-semibold mb-1" style="color:var(--color-text-primary)">Post a Job</h4>
-            <p class="text-sm" style="color:var(--color-text-muted)">Describe your project, set a budget, and publish your job listing.</p>
-        </div>
-        <div class="text-center">
-            <div class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 text-white font-bold text-lg" style="background:linear-gradient(135deg,#7c3aed,#a78bfa)">3</div>
-            <h4 class="font-semibold mb-1" style="color:var(--color-text-primary)">Review Proposals</h4>
-            <p class="text-sm" style="color:var(--color-text-muted)">Receive proposals from qualified freelancers and review their profiles.</p>
-        </div>
-        <div class="text-center">
-            <div class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 text-white font-bold text-lg" style="background:linear-gradient(135deg,#d97706,#f59e0b)">4</div>
-            <h4 class="font-semibold mb-1" style="color:var(--color-text-primary)">Hire & Collaborate</h4>
-            <p class="text-sm" style="color:var(--color-text-muted)">Hire the best freelancer and work together to deliver great results.</p>
-        </div>
-    </div>
-</section>
 
 <!-- Why Choose Us -->
 <section class="mb-12">

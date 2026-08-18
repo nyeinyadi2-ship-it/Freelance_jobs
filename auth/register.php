@@ -9,8 +9,8 @@ csrf_cookie();
 if (!empty($_SESSION['user_id'])) {
     $role = $_SESSION['role'];
     if ($role === 'admin') redirect('admin/admin_dashboard.php');
-    if ($role === 'company') redirect('company/index.php');
-    if ($role === 'freelancer') redirect('freelancer/dashboard.php');
+    if ($role === 'company') redirect('index.php');
+    if ($role === 'freelancer') redirect('index.php');
 }
 
 $error = '';
@@ -198,13 +198,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($role === 'company') {
                         $_SESSION['profile_id'] = get_company_id($conn, (int) $user_id);
                         $_SESSION['logo_image'] = $logo_image;
-                        set_flash('success', 'Registration successful! Welcome to HireWork.');
-                        redirect('company/index.php');
+                        set_flash('success', 'Registration successful! Welcome to FreelanceHub.');
+                        redirect('index.php');
                     } else {
                         $_SESSION['profile_id'] = get_freelancer_id($conn, (int) $user_id);
                         $_SESSION['logo_image'] = null;
-                        set_flash('success', 'Registration successful! Welcome to HireWork.');
-                        redirect('freelancer/dashboard.php');
+                        set_flash('success', 'Registration successful! Welcome to FreelanceHub.');
+                        redirect('index.php');
                     }
                 } catch (Exception $e) {
                     $conn->rollback();

@@ -18,7 +18,7 @@ if (!$company_id) {
 
 $error = '';
 $old = [
-    'title' => '', 'category' => '', 'budget' => '', 'experience_level' => 'intermediate',
+    'title' => '', 'category' => '', 'budget' => '', 'payment_type' => 'fixed', 'experience_level' => 'intermediate',
     'gender_requirement' => 'any', 'description' => '', 'requirements' => '',
     'deadline' => '', 'duration' => '', 'freelancers_needed' => '1', 'visibility' => 'public',
 ];
@@ -43,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $old['title'] = trim($_POST['title'] ?? '');
         $old['category'] = trim($_POST['category'] ?? '');
+        $old['payment_type'] = $_POST['payment_type'] ?? 'fixed';
         $old['budget'] = trim($_POST['budget'] ?? '');
         $old['experience_level'] = $_POST['experience_level'] ?? 'intermediate';
         $old['gender_requirement'] = $_POST['gender_requirement'] ?? 'any';
@@ -58,11 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Job title is required. Please enter a title for your job posting.';
         } elseif ($old['category'] === '') {
             $error = 'Category is required. Please select a category for your job.';
-        } elseif (!is_numeric($old['budget'])) {
+        } elseif ($old['payment_type'] === 'fixed' && !is_numeric($old['budget'])) {
             $error = 'Please enter a valid budget amount.';
-        } elseif ((float) $old['budget'] <= 0) {
+        } elseif ($old['payment_type'] === 'fixed' && (float) $old['budget'] <= 0) {
             $error = 'Budget must be greater than zero. Please enter a positive amount.';
-        } elseif ((float) $old['budget'] < 1) {
+        } elseif ($old['payment_type'] === 'fixed' && (float) $old['budget'] < 1) {
             $error = 'Budget must be at least 1.00 MMK.';
         } elseif ($old['description'] === '') {
             $error = 'Job description is required. Please describe your project.';
@@ -83,16 +84,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (!$error) {
-                $budget = (float) $old['budget'];
+                $budget = 0;
+                $payment_type = $old['payment_type'];
+                
+                if ($payment_type === 'milestone') {
+                    $ms_amounts = $_POST['ms_amount'] ?? [];
+                    foreach ($ms_amounts as $amt) {
+                        $budget += (float)$amt;
+                    }
+                } else {
+                    $budget = (float) $old['budget'];
+                }
+                
                 $deadline = $old['deadline'] !== '' ? $old['deadline'] : null;
                 $freelancers_needed = max(1, (int) $old['freelancers_needed']);
                 $status = 'open';
 
-                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, requirements, budget, deadline, duration, freelancers_needed, visibility, attachment, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param('issssssdssisss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $old['requirements'], $budget, $deadline, $old['duration'], $freelancers_needed, $old['visibility'], $attachment_name, $status);
+                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, requirements, budget, deadline, duration, freelancers_needed, visibility, attachment, status, payment_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('issssssdssissss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $old['requirements'], $budget, $deadline, $old['duration'], $freelancers_needed, $old['visibility'], $attachment_name, $status, $payment_type);
                 $stmt->execute();
                 $job_id = $stmt->insert_id;
                 $stmt->close();
+                
+                if ($payment_type === 'milestone' && !empty($_POST['ms_title'])) {
+                    $stmt_ms = $conn->prepare("INSERT INTO milestones (job_id, title, amount, status, sort_order) VALUES (?, ?, ?, 'draft', ?)");
+                    $titles = $_POST['ms_title'];
+                    $amounts = $_POST['ms_amount'];
+                    foreach ($titles as $idx => $mtitle) {
+                        $mamt = (float)$amounts[$idx];
+                        $ms_order = $idx + 1;
+                        if ($mamt > 0 && trim($mtitle) !== '') {
+                            $mtitle_clean = trim($mtitle);
+                            $stmt_ms->bind_param('isdi', $job_id, $mtitle_clean, $mamt, $ms_order);
+                            $stmt_ms->execute();
+                        }
+                    }
+                    $stmt_ms->close();
+                }
 
                 if (!empty($_POST['skills']) && is_array($_POST['skills'])) {
                     $stmt_skill = $conn->prepare("INSERT INTO job_skills (job_id, skill_id) VALUES (?, ?)");
@@ -281,7 +309,13 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 <select name="category" required class="form-input" onchange="clearFieldError(this); updatePreview()">
                                     <option value="">Select a category</option>
                                     <?php
-                                    $cats = ['Web Development','Mobile Development','UI/UX Design','Graphic Design','Content Writing','Digital Marketing','Data Science','DevOps','Blockchain','Video & Animation','Translation','Other'];
+                                    $cats = [];
+                                    $res = $conn->query("SELECT name FROM categories ORDER BY name ASC");
+                                    if ($res) {
+                                        while ($row = $res->fetch_assoc()) {
+                                            $cats[] = $row['name'];
+                                        }
+                                    }
                                     foreach ($cats as $cat):
                                     ?>
                                         <option value="<?= e($cat) ?>" <?= $old['category'] === $cat ? 'selected' : '' ?>><?= e($cat) ?></option>
@@ -294,20 +328,54 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div>
-                                    <label class="form-label">Budget (MMK) <span class="req">*</span></label>
-                                    <input type="number" name="budget" step="0.01" min="0.01" required placeholder="0.00" class="form-input" value="<?= e($old['budget']) ?>" oninput="clearFieldError(this); updateMilestoneTotal(); updatePreview()">
+                                    <label class="form-label">Payment Type</label>
+                                    <select name="payment_type" id="paymentTypeSelect" class="form-input" onchange="togglePaymentType(); updatePreview()">
+                                        <option value="fixed" <?= $old['payment_type'] === 'fixed' ? 'selected' : '' ?>>Fixed Payment</option>
+                                        <option value="milestone" <?= $old['payment_type'] === 'milestone' ? 'selected' : '' ?>>Milestone Payment</option>
+                                    </select>
+                                </div>
+                                <div id="fixedBudgetContainer" style="<?= $old['payment_type'] === 'milestone' ? 'display:none;' : '' ?>">
+                                    <label class="form-label">Total Budget (MMK) <span class="req">*</span></label>
+                                    <input type="number" name="budget" id="fixedBudgetInput" step="0.01" min="0.01" placeholder="0.00" class="form-input" value="<?= e($old['budget']) ?>" oninput="clearFieldError(this); updatePreview()">
                                     <div class="field-error" id="err-budget">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                                         <span></span>
                                     </div>
                                 </div>
-                                <div>
-                                    <label class="form-label">Visibility</label>
-                                    <select name="visibility" class="form-input" onchange="updatePreview()">
-                                        <option value="public" <?= $old['visibility'] === 'public' ? 'selected' : '' ?>>Public</option>
-                                        <option value="private" <?= $old['visibility'] === 'private' ? 'selected' : '' ?>>Private</option>
-                                    </select>
+                            </div>
+                            
+                            <div id="milestonesSection" style="<?= $old['payment_type'] === 'fixed' ? 'display:none;' : '' ?>" class="p-4 rounded-xl border border-gray-200 bg-gray-50 dark:bg-gray-800/50">
+                                <div class="flex justify-between items-center mb-4">
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Project Milestones</h3>
+                                        <p class="text-xs text-gray-500">Break down your project into deliverables.</p>
+                                    </div>
+                                    <button type="button" onclick="addMilestone()" class="text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+                                        + Add Milestone
+                                    </button>
                                 </div>
+                                <div id="milestonesContainer" class="space-y-3">
+                                    <div class="ms-item flex flex-col gap-3">
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-xs font-bold uppercase tracking-wider" style="color:var(--color-text-muted)">Milestone 1</span>
+                                        </div>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <input type="text" name="ms_title[]" required placeholder="e.g. UI Design" class="form-input milestone-title" oninput="updatePreview()">
+                                            <input type="number" name="ms_amount[]" step="0.01" min="0.01" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-4 flex justify-between items-center pt-4 border-t border-gray-200 dark:border-gray-700">
+                                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Total Milestone Amount:</span>
+                                    <span class="text-lg font-bold text-indigo-600" id="milestoneTotal">0.00 MMK</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="form-label">Visibility</label>
+                                <select name="visibility" class="form-input" onchange="updatePreview()">
+                                    <option value="public" <?= $old['visibility'] === 'public' ? 'selected' : '' ?>>Public</option>
+                                    <option value="private" <?= $old['visibility'] === 'private' ? 'selected' : '' ?>>Private</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -592,6 +660,18 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     var totalSteps = 4;
     var milestoneCount = 1;
 
+    window.togglePaymentType = function() {
+        var pt = document.getElementById('paymentTypeSelect').value;
+        if (pt === 'fixed') {
+            document.getElementById('fixedBudgetContainer').style.display = 'block';
+            document.getElementById('milestonesSection').style.display = 'none';
+        } else {
+            document.getElementById('fixedBudgetContainer').style.display = 'none';
+            document.getElementById('milestonesSection').style.display = 'block';
+        }
+        updatePreview();
+    };
+
     // ===== Error Display Helpers =====
     function showFieldError(fieldName, message) {
         var errEl = document.getElementById('err-' + fieldName);
@@ -652,6 +732,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         if (step === 1) {
             var title = document.querySelector('[name="title"]').value.trim();
             var cat = document.querySelector('[name="category"]').value;
+            var pt = document.getElementById('paymentTypeSelect').value;
             var budgetStr = document.querySelector('[name="budget"]').value.trim();
             var budget = parseFloat(budgetStr);
 
@@ -663,12 +744,21 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                 errors.push('Category is required.');
                 showFieldError('category', 'Please select a category.');
             }
-            if (!budgetStr || isNaN(budget)) {
-                errors.push('Budget is required.');
-                showFieldError('budget', 'Please enter a valid budget amount.');
-            } else if (budget <= 0) {
-                errors.push('Budget must be greater than zero.');
-                showFieldError('budget', 'Budget must be greater than zero.');
+            if (pt === 'fixed') {
+                if (!budgetStr || isNaN(budget)) {
+                    errors.push('Budget is required.');
+                    showFieldError('budget', 'Please enter a valid budget amount.');
+                } else if (budget <= 0) {
+                    errors.push('Budget must be greater than zero.');
+                    showFieldError('budget', 'Budget must be greater than zero.');
+                }
+            } else {
+                var msResult = validateMilestones();
+                if (msResult.errors.length > 0) {
+                    errors = errors.concat(msResult.errors);
+                } else if (msResult.total <= 0) {
+                    errors.push('Please add at least one milestone with a valid amount.');
+                }
             }
         } else if (step === 2) {
             var desc = document.querySelector('[name="description"]').value.trim();
@@ -699,7 +789,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     function validateMilestones() {
         var msTitles = document.querySelectorAll('[name="ms_title[]"]');
         var msAmounts = document.querySelectorAll('[name="ms_amount[]"]');
-        var budget = parseFloat(document.querySelector('[name="budget"]').value) || 0;
         var milestoneTotal = 0;
         var errors = [];
 
@@ -725,11 +814,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             }
         }
 
-        if (milestoneTotal > budget && budget > 0) {
-            errors.push('Total milestone amount ($' + milestoneTotal.toFixed(2) + ') cannot exceed the job budget ($' + budget.toFixed(2) + ').');
-        }
-
-        return { errors: errors, total: milestoneTotal, budget: budget };
+        return { errors: errors, total: milestoneTotal };
     }
 
     window.goStep = function(step) {
@@ -853,7 +938,14 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         catEl.textContent = cat || 'Category';
         catEl.style.opacity = cat ? '1' : '0.5';
 
-        var budget = parseFloat(g('budget'));
+        var pt = document.getElementById('paymentTypeSelect').value;
+        var budget = 0;
+        if (pt === 'fixed') {
+            budget = parseFloat(g('budget'));
+        } else {
+            var msResult = validateMilestones();
+            budget = msResult.total;
+        }
         document.getElementById('pvBudget').textContent = budget > 0 ? budget.toLocaleString('en') + ' MMK' : '0 MMK';
 
         document.getElementById('pvExperience').querySelector('span:last-child').textContent = g('experience_level') || 'Intermediate';
@@ -897,9 +989,18 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     function buildReview() {
         var f = document.getElementById('jobForm');
         var g = function(n){ var el=f.querySelector('[name="'+n+'"]'); return el?el.value:''; };
+        var pt = document.getElementById('paymentTypeSelect').value;
+        var budget = 0;
+        if (pt === 'fixed') {
+            budget = parseFloat(g('budget'));
+        } else {
+            var msResult = validateMilestones();
+            budget = msResult.total;
+        }
+
         document.getElementById('reviewTitle').textContent = g('title') || '-';
         document.getElementById('reviewCategory').textContent = g('category') || '-';
-        document.getElementById('reviewBudget').textContent = g('budget') ? parseFloat(g('budget')).toLocaleString('en',{minimumFractionDigits:2}) + ' MMK' : '-';
+        document.getElementById('reviewBudget').textContent = budget > 0 ? budget.toLocaleString('en',{minimumFractionDigits:2}) + ' MMK' : '-';
         document.getElementById('reviewExp').textContent = g('experience_level');
         document.getElementById('reviewGender').textContent = g('gender_requirement');
         document.getElementById('reviewDeadline').textContent = g('deadline') ? new Date(g('deadline')).toLocaleString() : 'Not set';

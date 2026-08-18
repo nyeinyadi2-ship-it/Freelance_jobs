@@ -115,6 +115,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
             }
             $stmt->close();
 
+            // Handle Transaction Slip Upload
+            $transaction_slip = null;
+            if (isset($_FILES['transaction_slip']) && $_FILES['transaction_slip']['error'] === UPLOAD_ERR_OK) {
+                $file = $_FILES['transaction_slip'];
+                $allowed_exts = ['jpg', 'jpeg', 'png', 'webp'];
+                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                
+                if (!in_array($ext, $allowed_exts)) {
+                    throw new Exception("Invalid transaction slip format. Only JPG, PNG, and WEBP are allowed.");
+                }
+                if ($file['size'] > 5 * 1024 * 1024) {
+                    throw new Exception("Transaction slip exceeds 5MB limit.");
+                }
+                
+                $slip_filename = uniqid('slip_', true) . '.' . $ext;
+                $dest = __DIR__ . '/../uploads/slips/' . $slip_filename;
+                
+                if (!move_uploaded_file($file['tmp_name'], $dest)) {
+                    throw new Exception("Failed to upload transaction slip.");
+                }
+                $transaction_slip = $slip_filename;
+            } else {
+                throw new Exception("Please attach the transaction slip before completing the payment.");
+            }
+
             $now = date('Y-m-d H:i:s');
 
             if ($is_milestone) {
@@ -131,8 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $assignment_id_for_payment = $assign ? $assign['id'] : null;
                 $stmt->close();
 
-                $stmt = $conn->prepare("INSERT INTO payments (assignment_id, milestone_id, company_id, freelancer_id, amount, payment_method, transaction_reference, status, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?)");
-                $stmt->bind_param('iiiidsss', $assignment_id_for_payment, $milestone_id, $company_id, $freelancer_id, $amount, $payment_method, $transaction_ref, $now);
+                $stmt = $conn->prepare("INSERT INTO payments (assignment_id, milestone_id, company_id, freelancer_id, amount, payment_method, transaction_reference, transaction_slip, status, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?)");
+                $stmt->bind_param('iiiidssss', $assignment_id_for_payment, $milestone_id, $company_id, $freelancer_id, $amount, $payment_method, $transaction_ref, $transaction_slip, $now);
                 $stmt->execute();
                 $stmt->close();
 
@@ -167,8 +192,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $stmt->execute();
                 $stmt->close();
 
-                $stmt = $conn->prepare("INSERT INTO payments (assignment_id, company_id, freelancer_id, amount, payment_method, transaction_reference, status, paid_at) VALUES (?, ?, ?, ?, ?, ?, 'paid', ?)");
-                $stmt->bind_param('iiidsss', $assignment_id, $company_id, $freelancer_id, $amount, $payment_method, $transaction_ref, $now);
+                $stmt = $conn->prepare("INSERT INTO payments (assignment_id, company_id, freelancer_id, amount, payment_method, transaction_reference, transaction_slip, status, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', ?)");
+                $stmt->bind_param('iiidssss', $assignment_id, $company_id, $freelancer_id, $amount, $payment_method, $transaction_ref, $transaction_slip, $now);
                 $stmt->execute();
                 $stmt->close();
 
@@ -245,7 +270,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <strong>Notice:</strong> The freelancer has not set up any payment methods. Please contact them via Messages to arrange payment.
             </div>
         <?php else: ?>
-            <form method="POST" action="">
+            <form method="POST" action="" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <?php if ($is_milestone): ?>
                     <input type="hidden" name="milestone_id" value="<?= $milestone_id ?>">
@@ -291,6 +316,27 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" name="transaction_ref" placeholder="e.g. Transaction ID from KPay" class="w-full rounded-lg border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm focus:ring-indigo-500 focus:border-indigo-500">
                 </div>
 
+                <div class="mb-8">
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Transaction Slip <span class="text-red-500">*</span></label>
+                    <div id="slipUploadContainer" class="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-500 transition-colors bg-slate-50 dark:bg-slate-800/50">
+                        <input type="file" name="transaction_slip" id="transaction_slip" accept=".jpg,.jpeg,.png,.webp" class="hidden" required>
+                        <div id="slipUploadPrompt">
+                            <svg class="mx-auto h-10 w-10 text-slate-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v13.5A1.5 1.5 0 003.75 21z" />
+                            </svg>
+                            <span class="block text-sm font-semibold text-indigo-600">Attach Transaction Slip</span>
+                            <span class="block text-xs text-slate-500 mt-1">JPG, PNG, WEBP (Max 5MB)</span>
+                        </div>
+                        <div id="slipPreviewContainer" class="hidden">
+                            <img id="slipPreview" src="" alt="Slip Preview" class="mx-auto h-32 object-contain rounded border border-slate-200 dark:border-slate-700 mb-3">
+                            <span id="slipFileName" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"></span>
+                            <button type="button" id="removeSlipBtn" class="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded-lg transition-colors">
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="pt-4 border-t border-slate-200 dark:border-slate-700">
                     <button type="submit" onclick="return confirm('Are you sure you have transferred the funds to the freelancer outside the platform? This action cannot be undone.')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl transition-colors shadow-lg shadow-indigo-600/20">
                         I Have Transferred the Payment
@@ -301,5 +347,47 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const slipInput = document.getElementById('transaction_slip');
+    const uploadContainer = document.getElementById('slipUploadContainer');
+    const uploadPrompt = document.getElementById('slipUploadPrompt');
+    const previewContainer = document.getElementById('slipPreviewContainer');
+    const slipPreview = document.getElementById('slipPreview');
+    const slipFileName = document.getElementById('slipFileName');
+    const removeBtn = document.getElementById('removeSlipBtn');
+
+    uploadContainer.addEventListener('click', function(e) {
+        if (e.target !== removeBtn) {
+            slipInput.click();
+        }
+    });
+
+    slipInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            const file = this.files[0];
+            slipFileName.textContent = file.name;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                slipPreview.src = e.target.result;
+                uploadPrompt.classList.add('hidden');
+                previewContainer.classList.remove('hidden');
+            }
+            reader.readAsDataURL(file);
+        }
+    });
+
+    removeBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        slipInput.value = '';
+        slipPreview.src = '';
+        slipFileName.textContent = '';
+        previewContainer.classList.add('hidden');
+        uploadPrompt.classList.remove('hidden');
+    });
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

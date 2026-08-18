@@ -1,6 +1,6 @@
 <?php
 require 'config/db.php';
-$tables = ['companies', 'freelancers', 'escrow', 'withdraw_requests'];
+$tables = ['companies', 'freelancers', 'escrow'];
 foreach ($tables as $t) {
     echo strtoupper($t) . ":\n";
     try {

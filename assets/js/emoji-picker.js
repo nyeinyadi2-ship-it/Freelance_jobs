@@ -1,5 +1,5 @@
 /**
- * Lightweight Emoji Picker for HireWork Chat
+ * Lightweight Emoji Picker for FreelanceHub Chat
  * No external dependencies
  */
 var EmojiPicker = (function() {

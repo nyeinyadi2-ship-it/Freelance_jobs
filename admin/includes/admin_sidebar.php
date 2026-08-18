@@ -7,8 +7,7 @@ $admin_page = match (true) {
     $admin_script === 'approve_jobs.php' => 'approve',
     $admin_script === 'manage_users.php' || $admin_script === 'view_user.php' => 'users',
     $admin_script === 'manage_skills.php' => 'skills',
-    $admin_script === 'withdrawals.php' => 'withdrawals',
-    $admin_script === 'verify_deposits.php' => 'deposits',
+    $admin_script === 'categories.php' => 'categories',
     $admin_script === 'notifications.php' => 'notifications',
     default => '',
 };
@@ -21,6 +20,19 @@ try {
 } catch (mysqli_sql_exception $e) {
 }
 
+// Get unread messages count
+$admin_unread_count = 0;
+try {
+    if (function_exists('get_unread_count') && isset($admin_user['id'])) {
+        $admin_unread_count = get_unread_count($conn, (int)$admin_user['id']);
+    } else {
+        $uid = (int)($admin_user['id'] ?? 0);
+        $r = $conn->query("SELECT COUNT(*) AS cnt FROM messages WHERE receiver_id = $uid AND status = 'unread'");
+        if ($r) $admin_unread_count = (int) $r->fetch_assoc()['cnt'];
+    }
+} catch (Throwable $e) {
+}
+
 $admin_nav = [
     [
         'id' => 'dashboard',
@@ -29,10 +41,18 @@ $admin_nav = [
         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>',
     ],
     [
+        'id' => 'messages',
+        'label' => 'Messages',
+        'url' => 'chat/index.php',
+        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>',
+        'badge' => $admin_unread_count > 0 ? $admin_unread_count : null,
+        'badge_color' => 'indigo',
+    ],
+    [
         'id' => 'approve',
         'label' => 'Moderate Jobs',
         'url' => 'admin/approve_jobs.php',
-        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>',
+        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>',
         'badge' => $admin_hidden_count > 0 ? $admin_hidden_count : null,
         'badge_color' => 'red',
     ],
@@ -49,53 +69,29 @@ $admin_nav = [
         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>',
     ],
     [
+        'id' => 'categories',
+        'label' => 'Manage Categories',
+        'url' => 'admin/categories.php',
+        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>',
+    ],
+    [
         'id' => 'notifications',
         'label' => 'Notifications',
         'url' => 'admin/notifications.php',
         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>',
     ],
-    [
-        'id' => 'withdrawals',
-        'label' => 'Withdrawals',
-        'url' => 'admin/withdrawals.php',
-        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
-    ],
-    [
-        'id' => 'deposits',
-        'label' => 'Deposits',
-        'url' => 'admin/verify_deposits.php',
-        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
-    ],
 ];
 ?>
 
-<!-- Profile Section -->
-<!-- <div class="p-4 border-b" style="border-color:var(--color-border)">
-    <div class="sidebar-profile flex items-center gap-3">
-        <?php $admin_img = profile_image_url($admin_user['profile_image'] ?? ''); ?>
-        <?php if ($admin_img): ?>
-            <img src="<?= e($admin_img) ?>" alt="" class="sidebar-profile-avatar w-10 h-10 rounded-full object-cover ring-2 ring-indigo-100 dark:ring-indigo-900 flex-shrink-0">
-        <?php else: ?>
-            <div class="sidebar-profile-avatar w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ring-2 ring-indigo-100 dark:ring-indigo-900">
-                <?= e(_first_char($admin_user['username'] ?? 'A')) ?>
-            </div>
-        <?php endif; ?>
-        <div class="sidebar-profile-text min-w-0 flex-1">
-            <p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($admin_user['username'] ?? '') ?></p>
-            <p class="text-xs font-medium text-indigo-600 dark:text-indigo-400"><?= e('Admin') ?></p>
-        </div>
-    </div>
-</div> -->
-
 <!-- Navigation -->
 <nav class="py-3 flex-1">
-    <p class="sidebar-section-title px-5 mb-2 text-[10px] font-bold uppercase tracking-widest" style="color:var(--color-text-placeholder)">Navigation</p>
+    <p class="sidebar-section-title px-5 mb-1.5 text-[10px] font-bold uppercase tracking-widest" style="color:var(--color-text-placeholder)">Navigation</p>
     <?php foreach ($admin_nav as $item):
         $is_active = $admin_page === $item['id'];
     ?>
         <a href="<?= e(base_url($item['url'])) ?>"
             class="sidebar-link <?= $is_active ? 'active' : '' ?>">
-            <svg class="w-5 h-5 flex-shrink-0 <?= $is_active ? 'text-white' : '' ?>" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg class="w-[18px] h-[18px] flex-shrink-0 <?= $is_active ? 'text-indigo-600 dark:text-indigo-400' : '' ?>" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
                 <?= $item['icon'] ?>
             </svg>
             <span class="sidebar-label flex-1 truncate"><?= e($item['label']) ?></span>
@@ -115,10 +111,10 @@ $admin_nav = [
 </nav>
 
 <!-- Logout -->
-<div class="mt-auto p-3 border-t" style="border-color:var(--color-border)">
+<div class="mt-auto p-2 border-t" style="border-color:var(--color-border)">
     <a href="<?= e(base_url('auth/logout.php')) ?>"
         class="sidebar-link text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
         </svg>
         <span class="sidebar-label sidebar-footer-text"><?= e('Logout') ?></span>

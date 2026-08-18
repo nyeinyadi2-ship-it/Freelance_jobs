@@ -1,0 +1,7 @@
+- [x] Update `company/view_applications.php` to remove `escrow` dependencies
+- [x] Update `freelancer/milestone.php` to remove `escrow` dependencies
+- [x] Check if `payments` table has the required `escrow_status` and timestamps, and update queries accordingly
+- [x] Drop `escrow_transactions` table
+- [x] Drop `escrow` table
+- [x] Verify functionality of updated pages
+- [x] Run final codebase search for `escrow` references

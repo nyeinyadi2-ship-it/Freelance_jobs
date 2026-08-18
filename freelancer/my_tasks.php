@@ -57,10 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($ms_action === 'submit' && $milestone_id > 0) {
         // In Progress / Revision Requested → Submitted
         $st = $conn->prepare("
-            SELECT m.id, m.job_id, m.status
+            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, j.deadline as job_deadline
             FROM milestones m
             JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
-            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested')
+            JOIN jobs j ON j.id = m.job_id
+            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested', 'overdue')
         ");
         $st->bind_param('ii', $fl_freelancer_id, $milestone_id);
         $st->execute();
@@ -68,6 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st->close();
 
         if ($ms) {
+            $now_dt = new DateTime();
+            $ms_dl = !empty($ms['ms_deadline']) ? new DateTime($ms['ms_deadline']) : null;
+            if ($ms_dl && $ms_dl <= $now_dt) {
+                set_flash('error', 'Submission blocked: Deadline has passed.');
+                redirect('freelancer/my_tasks.php');
+            }
+
             foreach (['submission_file', 'submission_note'] as $col) {
                 $chk = $conn->query("SHOW COLUMNS FROM milestones LIKE '$col'");
                 if (!$chk || $chk->num_rows === 0) {
@@ -142,10 +150,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($ms_action === 'quick_submit' && $milestone_id > 0) {
         // Quick submit: change status to submitted without requiring link/file
         $st = $conn->prepare("
-            SELECT m.id, m.job_id, m.status
+            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, j.deadline as job_deadline
             FROM milestones m
             JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
-            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested')
+            JOIN jobs j ON j.id = m.job_id
+            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested', 'overdue')
               AND (m.freelancer_id = ? OR m.freelancer_id IS NULL)
         ");
         $st->bind_param('iii', $fl_freelancer_id, $milestone_id, $fl_freelancer_id);
@@ -154,6 +163,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st->close();
 
         if ($ms) {
+            $now_dt = new DateTime();
+            $ms_dl = !empty($ms['ms_deadline']) ? new DateTime($ms['ms_deadline']) : null;
+            if ($ms_dl && $ms_dl <= $now_dt) {
+                set_flash('error', 'Submission blocked: Deadline has passed.');
+                redirect('freelancer/my_tasks.php');
+            }
+
             $conn->begin_transaction();
             try {
                 $now = date('Y-m-d H:i:s');
@@ -197,13 +213,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($ms_action === 'submit_fixed_task') {
         $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
-        $st = $conn->prepare("SELECT id, job_id, status FROM assignments WHERE id = ? AND freelancer_id = ? AND status IN ('assigned', 'working')");
+        $st = $conn->prepare("SELECT id, job_id, status, deadline FROM assignments WHERE id = ? AND freelancer_id = ? AND status IN ('assigned', 'working', 'overdue')");
         $st->bind_param('ii', $assignment_id, $fl_freelancer_id);
         $st->execute();
         $assignment = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($assignment) {
+            if (!empty($assignment['deadline']) && new DateTime($assignment['deadline']) <= new DateTime()) {
+                set_flash('error', 'Submission blocked: Deadline has passed.');
+                redirect('freelancer/my_tasks.php');
+            }
+
             $submission_note = trim($_POST['submission_note'] ?? '');
             $submission_file = null;
 
@@ -275,8 +296,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Fetch assigned jobs with milestones
 $tasks = [];
 $st = $conn->prepare("
-    SELECT a.id AS assignment_id, a.status AS assignment_status, a.assigned_at,
-           j.id AS job_id, j.title, j.description, j.budget, j.status AS job_status,
+    SELECT a.id AS assignment_id, a.status AS assignment_status, a.assigned_at, a.deadline,
+           a.budget, a.payment_type,
+           j.id AS job_id, j.title, j.description, j.status AS job_status,
            c.company_name, c.logo_image
     FROM assignments a
     JOIN jobs j ON a.job_id = j.id
@@ -365,6 +387,10 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                             Project Completed
                         </span>
+                    <?php elseif (!empty($task['deadline']) && new DateTime($task['deadline']) <= new DateTime() && in_array($task['assignment_status'], ['working', 'assigned'])): ?>
+                        <span class="ms-status ms-revision_requested">
+                            Deadline Passed
+                        </span>
                     <?php else: ?>
                         <?= status_badge($task['assignment_status']) ?>
                     <?php endif; ?>
@@ -385,9 +411,18 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 </div>
                 <?php endif; ?>
 
-                <div class="flex items-center gap-4 text-sm mb-4">
-                    <span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span>
+                <div class="flex flex-wrap items-center gap-4 text-sm mb-4">
+                    <span style="color:var(--color-text-muted)">Budget (<?= ucfirst(e($task['payment_type'] ?? 'fixed')) ?>): <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span>
                     <span style="color:var(--color-text-placeholder)">Assigned <?= date('M j, Y', strtotime($task['assigned_at'])) ?></span>
+                    <?php if (!empty($task['deadline'])): ?>
+                        <?php 
+                        $dl_date = new DateTime($task['deadline']);
+                        $now = new DateTime();
+                        $is_overdue = $dl_date <= $now;
+                        $dl_class = $is_overdue ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-700 dark:text-gray-300 font-semibold';
+                        ?>
+                        <span style="color:var(--color-text-muted)">Deadline: <span class="<?= $dl_class ?>"><?= date('M j, Y', strtotime($task['deadline'])) ?></span></span>
+                    <?php endif; ?>
                 </div>
 
                 <!-- Milestones -->
@@ -396,7 +431,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <h3 class="text-sm font-bold mb-4" style="color:var(--color-text-primary)">Milestones</h3>
                     <div class="space-y-4">
                         <?php foreach ($task['milestones'] as $ms):
-                            $status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved', 'payment_pending'=>'Payment Pending', 'paid'=>'Paid', 'revision_requested'=>'Revision Requested'];
+                            $status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved', 'payment_pending'=>'Payment Pending', 'paid'=>'Received', 'revision_requested'=>'Revision Requested'];
                             $status_class = 'ms-' . $ms['status'];
                         ?>
                         <div class="rounded-xl overflow-hidden transition-all hover:shadow-md" style="border:1px solid var(--color-border)">
@@ -428,7 +463,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <div class="ms-timeline mt-3">
                                     <?php
                                     $steps = ['funded', 'in_progress', 'submitted', 'payment_pending', 'paid'];
-                                    $step_labels = ['Funded', 'Working', 'Submitted', 'Pending Pay', 'Paid'];
+                                    $step_labels = ['Funded', 'Working', 'Submitted', 'Pending Pay', 'Received'];
                                     $current_idx = array_search($ms['status'], $steps);
                                     if ($ms['status'] === 'revision_requested') $current_idx = 1;
                                     if ($ms['status'] === 'draft') $current_idx = -1;
@@ -461,6 +496,16 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <div class="p-3 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
                                     <span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= $ms['status'] === 'revision_requested' ? 'Revision needed — resubmit work' : 'Working on this milestone' ?></span>
                                     <div class="flex items-center gap-2">
+                                        <?php 
+                                        $ms_dl = !empty($ms['deadline']) ? new DateTime($ms['deadline']) : null;
+                                        $job_dl = !empty($task['deadline']) ? new DateTime($task['deadline']) : null;
+                                        $now = new DateTime();
+                                        $can_submit = true;
+                                        if (($ms_dl && $ms_dl <= $now) || ($job_dl && $job_dl <= $now)) {
+                                            $can_submit = false;
+                                        }
+                                        ?>
+                                        <?php if ($can_submit): ?>
                                         <form method="POST" style="display:inline" onsubmit="return confirm('Submit this milestone for review?')">
                                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                             <input type="hidden" name="ms_action" value="quick_submit">
@@ -470,6 +515,9 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                                 Submit Milestone
                                             </button>
                                         </form>
+                                        <?php else: ?>
+                                        <span class="text-xs font-bold text-red-500">Deadline Passed</span>
+                                        <?php endif; ?>
                                         <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)">Details</a>
                                     </div>
                                 </div>
@@ -498,6 +546,14 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <h3 class="text-sm font-bold mb-4" style="color:var(--color-text-primary)">Assignment Delivery</h3>
                     
                     <?php if ($task['assignment_status'] === 'working' || $task['assignment_status'] === 'assigned'): ?>
+                        <?php 
+                        $can_submit_fixed = true;
+                        $job_dl = !empty($task['deadline']) ? new DateTime($task['deadline']) : null;
+                        if ($job_dl && $job_dl <= new DateTime()) {
+                            $can_submit_fixed = false;
+                        }
+                        ?>
+                        <?php if ($can_submit_fixed): ?>
                         <div class="p-5 rounded-xl border" style="background:var(--color-bg);border-color:var(--color-border)">
                             <h4 class="text-sm font-semibold mb-2" style="color:var(--color-text-primary)">Submit Your Work</h4>
                             <p class="text-xs mb-4" style="color:var(--color-text-secondary)">Please provide your completed work or a link to the project files. Add a note explaining what you have done.</p>
@@ -523,6 +579,12 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 </button>
                             </form>
                         </div>
+                        <?php else: ?>
+                        <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(239,68,68,0.05);border-color:rgba(239,68,68,0.2)">
+                            <svg class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            <span class="text-sm font-semibold text-red-600">The deadline for this assignment has passed. Submission is no longer allowed.</span>
+                        </div>
+                        <?php endif; ?>
                     <?php elseif ($task['assignment_status'] === 'submitted'): ?>
                         <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(139,92,246,0.05);border-color:rgba(139,92,246,0.2)">
                             <div class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>

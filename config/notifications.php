@@ -2,12 +2,7 @@
 
 function notifications_table_exists(mysqli $conn): bool
 {
-    static $exists = null;
-    if ($exists === null) {
-        $result = $conn->query("SHOW TABLES LIKE 'notifications'");
-        $exists = $result && $result->num_rows > 0;
-    }
-    return $exists;
+    return true;
 }
 
 function create_notification(mysqli $conn, int $user_id, string $type, string $message, ?string $link = null, ?int $from_user_id = null): void

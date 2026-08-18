@@ -21,11 +21,13 @@ if ($freelancer_id === 0) {
 // Fetch payments
 $transactions = [];
 $stmt = $conn->prepare("
-    SELECT wt.*, u.username as company_name, u.profile_image, j.title as job_title, m.title as ms_title
+    SELECT wt.*, u.username as company_name, u.profile_image, j.title as job_title, m.title as ms_title,
+           p.id as payment_id, p.transaction_slip
     FROM wallet_transactions wt
     LEFT JOIN users u ON wt.sender_id = u.id
     LEFT JOIN jobs j ON wt.job_id = j.id
     LEFT JOIN milestones m ON wt.milestone_id = m.id
+    LEFT JOIN payments p ON p.paid_at = wt.created_at AND p.amount = wt.amount
     WHERE wt.receiver_id = ? AND wt.type = 'payment'
     ORDER BY wt.created_at DESC
 ");
@@ -86,6 +88,15 @@ require_once __DIR__ . '/../includes/header.php';
                                     <span class="px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">Completed</span>
                                 <?php else: ?>
                                     <span class="px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"><?= e(ucfirst($t['status'])) ?></span>
+                                <?php endif; ?>
+                                
+                                <?php if (!empty($t['transaction_slip']) && !empty($t['payment_id'])): ?>
+                                    <div class="mt-2">
+                                        <a href="<?= base_url('api/view_slip.php?payment_id=' . $t['payment_id']) ?>" target="_blank" class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                            View Slip
+                                        </a>
+                                    </div>
                                 <?php endif; ?>
                             </td>
                         </tr>

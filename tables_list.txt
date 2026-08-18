@@ -22,4 +22,3 @@ skills
 submissions
 typing_status
 users
-withdraw_requests

@@ -1,16 +1,16 @@
 :root {
-    --color-bg: #f9fafb;
+    --color-bg: #f8fafc;
     --color-card: #ffffff;
-    --color-card-hover: #f3f4f6;
-    --color-border: #e5e7eb;
-    --color-text-primary: #111827;
-    --color-text-secondary: #4b5563;
-    --color-text-muted: #6b7280;
-    --color-text-placeholder: #9ca3af;
+    --color-card-hover: #f1f5f9;
+    --color-border: #e2e8f0;
+    --color-text-primary: #0f172a;
+    --color-text-secondary: #475569;
+    --color-text-muted: #64748b;
+    --color-text-placeholder: #94a3b8;
     --color-nav: #ffffff;
     --color-footer: #ffffff;
     --color-input-bg: #ffffff;
-    --color-input-border: #d1d5db;
+    --color-input-border: #e2e8f0;
     --color-flash-error-bg: #fef2f2;
     --color-flash-error-text: #991b1b;
     --color-flash-error-border: #fecaca;
@@ -48,33 +48,39 @@ html.dark {
     transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
+html, body { overflow-x: hidden; }
+
 body {
-    font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: var(--color-bg);
     color: var(--color-text-primary);
 }
 
+/* ===== Card Component ===== */
 .card {
     background: var(--color-card);
-    border-radius: 0.75rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    padding: 1.25rem;
     border: 1px solid var(--color-border);
 }
 
 .card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
+/* ===== Button System ===== */
 .btn-primary {
     background-color: #4f46e5;
     color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
+    padding: 0.4375rem 0.875rem;
+    border-radius: 6px;
+    font-size: 13px;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
-    gap: .375rem;
+    gap: 0.375rem;
+    transition: background-color 0.15s ease;
 }
 
 .btn-primary:hover {
@@ -84,13 +90,15 @@ body {
 .btn-secondary {
     background-color: var(--color-card);
     color: var(--color-text-primary);
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
+    padding: 0.4375rem 0.875rem;
+    border-radius: 6px;
+    font-size: 13px;
     font-weight: 500;
     border: 1px solid var(--color-border);
     display: inline-flex;
     align-items: center;
-    gap: .375rem;
+    gap: 0.375rem;
+    transition: all 0.15s ease;
 }
 
 .btn-secondary:hover {
@@ -100,31 +108,35 @@ body {
 .btn-danger {
     background-color: #dc2626;
     color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
+    padding: 0.4375rem 0.875rem;
+    border-radius: 6px;
+    font-size: 13px;
     font-weight: 500;
     display: inline-flex;
     align-items: center;
-    gap: .375rem;
+    gap: 0.375rem;
+    transition: background-color 0.15s ease;
 }
 
 .btn-danger:hover {
     background-color: #b91c1c;
 }
 
+/* ===== Form Inputs ===== */
 .form-input {
     width: 100%;
     border: 1px solid var(--color-input-border);
-    border-radius: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    padding: 0.4375rem 0.75rem;
     background-color: var(--color-input-bg);
     color: var(--color-text-primary);
+    font-size: 13px;
 }
 
 .form-input:focus {
     outline: none;
     border-color: #6366f1;
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .form-input:read-only,
@@ -138,6 +150,7 @@ select.form-input option {
     color: var(--color-text-primary);
 }
 
+/* ===== Notification Dropdown ===== */
 .notification-dropdown {
     background-color: var(--color-card);
     border-color: var(--color-border);
@@ -155,6 +168,7 @@ select.form-input option {
     background-color: rgba(99, 102, 241, 0.1);
 }
 
+/* ===== Transitions ===== */
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
 }
@@ -168,9 +182,48 @@ select.form-input option {
     animation: fadeIn .2s ease;
 }
 
-/* ===== PREMIUM UI COMPONENTS ===== */
+/* ===== Admin Scrollbar ===== */
+#admin-sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-text-placeholder) transparent;
+}
 
-/* Hero gradient */
+#admin-sidebar::-webkit-scrollbar { width: 3px; }
+#admin-sidebar::-webkit-scrollbar-track { background: transparent; }
+#admin-sidebar::-webkit-scrollbar-thumb { background-color: var(--color-text-placeholder); border-radius: 3px; }
+
+@media (min-width: 1024px) {
+    #admin-sidebar-overlay { display: none !important; }
+}
+
+/* ===== Admin Fade Animation ===== */
+.admin-fade {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.admin-fade.animate {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.admin-fade.animate.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.admin-fade.delay-1 { transition-delay: 0.05s; }
+.admin-fade.delay-2 { transition-delay: 0.1s; }
+.admin-fade.delay-3 { transition-delay: 0.15s; }
+.admin-fade.delay-4 { transition-delay: 0.2s; }
+
+/* ===== Admin Fade-In ===== */
+.animate-fadeIn {
+    animation: fadeIn 0.3s ease;
+}
+
+/* ===== Premium UI Components (kept for non-admin pages) ===== */
 .hero-gradient {
     background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #6366f1 100%);
     position: relative;
@@ -192,27 +245,19 @@ select.form-input option {
     66% { transform: translate(-20px, 20px) rotate(-3deg); }
 }
 
-/* Scroll animations */
 .fade-up {
     opacity: 0;
     transform: translateY(30px);
     transition: opacity 0.6s ease, transform 0.6s ease;
 }
-.fade-up.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
+.fade-up.visible { opacity: 1; transform: translateY(0); }
 .fade-up.delay-1 { transition-delay: 0.1s; }
 .fade-up.delay-2 { transition-delay: 0.2s; }
 .fade-up.delay-3 { transition-delay: 0.3s; }
 .fade-up.delay-4 { transition-delay: 0.4s; }
 
-/* Counter animation */
-.counter-num {
-    display: inline-block;
-}
+.counter-num { display: inline-block; }
 
-/* Category card hover */
 .category-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
@@ -221,7 +266,6 @@ select.form-input option {
     box-shadow: 0 20px 40px rgba(79, 70, 229, 0.15);
 }
 
-/* Job card hover */
 .job-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
 }
@@ -231,7 +275,6 @@ select.form-input option {
     border-color: #6366f1;
 }
 
-/* Testimonial card */
 .testimonial-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
@@ -240,23 +283,15 @@ select.form-input option {
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.1);
 }
 
-/* FAQ accordion */
 .faq-answer {
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.35s ease, padding 0.35s ease;
 }
-.faq-answer.open {
-    max-height: 500px;
-}
-.faq-item.active .faq-icon {
-    transform: rotate(45deg);
-}
-.faq-icon {
-    transition: transform 0.3s ease;
-}
+.faq-answer.open { max-height: 500px; }
+.faq-item.active .faq-icon { transform: rotate(45deg); }
+.faq-icon { transition: transform 0.3s ease; }
 
-/* Stat card pulse */
 .stat-glow {
     position: relative;
 }
@@ -271,28 +306,8 @@ select.form-input option {
     transition: opacity 0.3s ease;
     filter: blur(8px);
 }
-.stat-glow:hover::after {
-    opacity: 0.3;
-}
+.stat-glow:hover::after { opacity: 0.3; }
 
-/* Step connector line */
-.step-line {
-    position: relative;
-}
-.step-line::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    right: -50%;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, #6366f1, transparent);
-}
-.step-line:last-child::after {
-    display: none;
-}
-
-/* Gradient text */
 .gradient-text {
     background: linear-gradient(135deg, #4f46e5, #7c3aed);
     -webkit-background-clip: text;
@@ -300,19 +315,13 @@ select.form-input option {
     background-clip: text;
 }
 
-/* Floating shapes */
 @keyframes float {
     0%, 100% { transform: translateY(0px) rotate(0deg); }
     50% { transform: translateY(-20px) rotate(10deg); }
 }
-.float-anim {
-    animation: float 6s ease-in-out infinite;
-}
-.float-anim-delay {
-    animation: float 6s ease-in-out 2s infinite;
-}
+.float-anim { animation: float 6s ease-in-out infinite; }
+.float-anim-delay { animation: float 6s ease-in-out 2s infinite; }
 
-/* Premium button shine */
 .btn-shine {
     position: relative;
     overflow: hidden;
@@ -324,32 +333,19 @@ select.form-input option {
     left: -50%;
     width: 200%;
     height: 200%;
-    background: linear-gradient(
-        to right,
-        transparent 0%,
-        rgba(255,255,255,0.15) 50%,
-        transparent 100%
-    );
+    background: linear-gradient(to right, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
     transform: rotate(45deg) translateX(-150%);
     transition: transform 0.6s ease;
 }
-.btn-shine:hover::after {
-    transform: rotate(45deg) translateX(150%);
-}
+.btn-shine:hover::after { transform: rotate(45deg) translateX(150%); }
 
-/* Trusted logos scroll */
 @keyframes scroll {
     0% { transform: translateX(0); }
     100% { transform: translateX(-50%); }
 }
-.trusted-scroll {
-    animation: scroll 20s linear infinite;
-}
-.trusted-scroll:hover {
-    animation-play-state: paused;
-}
+.trusted-scroll { animation: scroll 20s linear infinite; }
+.trusted-scroll:hover { animation-play-state: paused; }
 
-/* Line clamp utility */
 .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -357,140 +353,7 @@ select.form-input option {
     overflow: hidden;
 }
 
-/* ===== ADMIN SIDEBAR ===== */
-
-#admin-sidebar {
-    scrollbar-width: thin;
-    scrollbar-color: var(--color-text-placeholder) transparent;
-}
-
-#admin-sidebar::-webkit-scrollbar {
-    width: 4px;
-}
-
-#admin-sidebar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-#admin-sidebar::-webkit-scrollbar-thumb {
-    background-color: var(--color-text-placeholder);
-    border-radius: 4px;
-}
-
-@media (min-width: 1024px) {
-    #admin-sidebar-overlay {
-        display: none !important;
-    }
-}
-
-/* Sidebar nav link hover effect */
+/* ===== Admin Sidebar nav link hover ===== */
 #admin-sidebar nav a {
     position: relative;
 }
-
-/* ===== ADMIN COMPONENT STYLES ===== */
-
-.admin-stat-card {
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.admin-stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-}
-
-.admin-stat-card .stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.admin-stat-card .stat-glow-effect {
-    position: absolute;
-    top: -50%;
-    right: -50%;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    opacity: 0.05;
-}
-
-.activity-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid var(--color-border);
-    transition: background-color 0.15s ease;
-}
-
-.activity-item:last-child {
-    border-bottom: none;
-}
-
-.activity-item:hover {
-    background-color: var(--color-card-hover);
-    margin: 0 -0.5rem;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-    border-radius: 0.5rem;
-}
-
-.quick-action-card {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem;
-    border-radius: 0.75rem;
-    border: 1px solid var(--color-border);
-    background: var(--color-card);
-    transition: all 0.2s ease;
-    text-decoration: none;
-    color: inherit;
-}
-
-.quick-action-card:hover {
-    border-color: #6366f1;
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.1);
-    transform: translateY(-1px);
-}
-
-.admin-fade {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.admin-fade.animate {
-    opacity: 0;
-    transform: translateY(16px);
-    transition: opacity 0.4s ease, transform 0.4s ease;
-}
-
-.admin-fade.animate.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.admin-fade.delay-1 { transition-delay: 0.05s; }
-.admin-fade.delay-2 { transition-delay: 0.1s; }
-.admin-fade.delay-3 { transition-delay: 0.15s; }
-.admin-fade.delay-4 { transition-delay: 0.2s; }
-
-/* ===== ADMIN LAYOUT ===== */
-
-.animate-fadeIn {
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-8px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* ===== NAVBAR (managed in includes/navbar.php) ===== */

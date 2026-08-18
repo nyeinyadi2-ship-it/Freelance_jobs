@@ -1,7 +1,5 @@
 <?php
-require config('db.php');
-
-$conn = getDB();
+require_once __DIR__ . '/../config/db.php';
 
 echo "<!DOCTYPE html>
 <html lang='en'>
@@ -35,15 +33,21 @@ echo "<!DOCTYPE html>
 <h1>Escrow Payment System Migration</h1>";
 
 function columnExists($conn, $table, $column) {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
-    $stmt->execute([$table, $column]);
-    return $stmt->fetchColumn() > 0;
+    $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+    $stmt->bind_param("ss", $table, $column);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $res['cnt'] > 0;
 }
 
 function tableExists($conn, $table) {
-    $stmt = $conn->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
-    $stmt->execute([$table]);
-    return $stmt->fetchColumn() > 0;
+    $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+    $stmt->bind_param("s", $table);
+    $stmt->execute();
+    $res = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $res['cnt'] > 0;
 }
 
 function addColumnIfNotExists($conn, $table, $column, $definition) {
@@ -52,10 +56,10 @@ function addColumnIfNotExists($conn, $table, $column, $definition) {
         return false;
     }
     try {
-        $conn->exec("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+        $conn->query("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
         echo "<div class='step'><span class='success'>✔ Added:</span> <span class='info'>{$table}.{$column}</span></div>";
         return true;
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         echo "<div class='step'><span class='error'>✘ Failed:</span> {$table}.{$column} — {$e->getMessage()}</div>";
         return false;
     }
@@ -88,9 +92,9 @@ $fks = [
 ];
 foreach ($fks as [$tbl, $fk, $col, $ref]) {
     try {
-        $conn->exec("ALTER TABLE `{$tbl}` ADD CONSTRAINT `{$fk}` FOREIGN KEY (`{$col}`) REFERENCES `{$ref}` ON DELETE SET NULL");
+        $conn->query("ALTER TABLE `{$tbl}` ADD CONSTRAINT `{$fk}` FOREIGN KEY (`{$col}`) REFERENCES `{$ref}` ON DELETE SET NULL");
         echo "<div class='step'><span class='success'>✔ Added FK:</span> <span class='info'>{$fk}</span></div>";
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         if ($e->getCode() == '42S02' || str_contains($e->getMessage(), 'Duplicate') || str_contains($e->getMessage(), 'already exists') || str_contains($e->getMessage(), 'does not exist')) {
             echo "<div class='step'><span class='warning'>⏭ FK:</span> <span class='info'>{$fk}</span> skipped (table or constraint issue).</div>";
         } else {
@@ -109,7 +113,7 @@ if (tableExists($conn, 'submissions')) {
     $stats['tables_skipped']++;
 } else {
     try {
-        $conn->exec("CREATE TABLE `submissions` (
+        $conn->query("CREATE TABLE `submissions` (
             `id` INT PRIMARY KEY AUTO_INCREMENT,
             `assignment_id` INT NOT NULL,
             `freelancer_id` INT NOT NULL,
@@ -126,41 +130,14 @@ if (tableExists($conn, 'submissions')) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         echo "<div class='step'><span class='success'>✔ Created:</span> <span class='info'>submissions</span> table with indexes and foreign keys.</div>";
         $stats['tables_created']++;
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         echo "<div class='step'><span class='error'>✘ Failed:</span> submissions — {$e->getMessage()}</div>";
     }
 }
 
 echo "</div>";
 
-// ─── STEP 3: Create withdraw_requests table ─────────────────────────────────
-echo "<div class='card'><h2>Step 3: Create withdraw_requests Table</h2>";
 
-if (tableExists($conn, 'withdraw_requests')) {
-    echo "<div class='step'><span class='warning'>⏭ Skipped:</span> <span class='info'>withdraw_requests</span> table already exists.</div>";
-    $stats['tables_skipped']++;
-} else {
-    try {
-        $conn->exec("CREATE TABLE `withdraw_requests` (
-            `id` INT PRIMARY KEY AUTO_INCREMENT,
-            `freelancer_id` INT NOT NULL,
-            `amount` DECIMAL(10,2) NOT NULL,
-            `status` ENUM('pending','approved','rejected','completed') DEFAULT 'pending',
-            `payment_method` VARCHAR(50) DEFAULT NULL,
-            `payment_details` TEXT DEFAULT NULL,
-            `admin_notes` TEXT DEFAULT NULL,
-            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            `processed_at` TIMESTAMP NULL DEFAULT NULL,
-            FOREIGN KEY (`freelancer_id`) REFERENCES `freelancers`(`id`) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        echo "<div class='step'><span class='success'>✔ Created:</span> <span class='info'>withdraw_requests</span> table with foreign key.</div>";
-        $stats['tables_created']++;
-    } catch (PDOException $e) {
-        echo "<div class='step'><span class='error'>✘ Failed:</span> withdraw_requests — {$e->getMessage()}</div>";
-    }
-}
-
-echo "</div>";
 
 // ─── STEP 4: Create payment_history table ────────────────────────────────────
 echo "<div class='card'><h2>Step 4: Create payment_history Table</h2>";
@@ -170,7 +147,7 @@ if (tableExists($conn, 'payment_history')) {
     $stats['tables_skipped']++;
 } else {
     try {
-        $conn->exec("CREATE TABLE `payment_history` (
+        $conn->query("CREATE TABLE `payment_history` (
             `id` INT PRIMARY KEY AUTO_INCREMENT,
             `user_id` INT NOT NULL,
             `related_payment_id` INT DEFAULT NULL,
@@ -185,7 +162,7 @@ if (tableExists($conn, 'payment_history')) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         echo "<div class='step'><span class='success'>✔ Created:</span> <span class='info'>payment_history</span> table with indexes and foreign keys.</div>";
         $stats['tables_created']++;
-    } catch (PDOException $e) {
+    } catch (Exception $e) {
         echo "<div class='step'><span class='error'>✘ Failed:</span> payment_history — {$e->getMessage()}</div>";
     }
 }

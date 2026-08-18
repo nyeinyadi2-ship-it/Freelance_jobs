@@ -12,7 +12,7 @@ $company_id = get_company_id($conn, (int) $user['user_id']);
 if (!$company_id) { set_flash('error', 'Company profile not found.'); redirect('auth/login.php'); }
 
 $job_id = (int) ($_GET['id'] ?? 0);
-if ($job_id <= 0) { set_flash('error', 'Invalid job ID.'); redirect('company/index.php'); }
+if ($job_id <= 0) { set_flash('error', 'Invalid job ID.'); redirect('index.php'); }
 
 // Fetch job (must belong to this company)
 $stmt = $conn->prepare("
@@ -27,7 +27,7 @@ $stmt->close();
 
 if (!$job) {
     set_flash('error', 'Job not found.');
-    redirect('company/index.php');
+    redirect('index.php');
 }
 
 // Skills
@@ -176,7 +176,7 @@ require __DIR__ . '/../includes/header.php';
     <!-- Quick Info -->
     <div class="grid sm:grid-cols-4 gap-4 mb-6">
         <div class="vj-section" style="text-align:center;margin-bottom:0">
-            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Budget</p>
+            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Budget (<?= ucfirst(e($job['payment_type'] ?? 'fixed')) ?>)</p>
             <p style="font-size:1.5rem;font-weight:800;color:#2563eb"><?= e(number_format((float) $job['budget'], 2)) ?> MMK</p>
         </div>
         <div class="vj-section" style="text-align:center;margin-bottom:0">
@@ -358,7 +358,7 @@ require __DIR__ . '/../includes/header.php';
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             View Applications
         </a>
-        <a href="<?= e(base_url('company/index.php')) ?>" class="vj-btn vj-btn-outline">
+        <a href="<?= e(base_url('index.php')) ?>" class="vj-btn vj-btn-outline">
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
             Back to Home
         </a>

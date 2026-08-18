@@ -1,4 +1,6 @@
+<?php if (!isset($admin_no_padding) || !$admin_no_padding): ?>
     </div>
+<?php endif; ?>
 </main>
 
 </div><!-- /admin-layout -->
@@ -90,7 +92,7 @@
                         var msg = item.querySelector('p');
                         if (msg) { msg.classList.remove('font-medium'); msg.style.color = ''; }
                     });
-                    var badge = document.querySelector('.notification-badge');
+                    var badge = document.querySelector('.notif-badge');
                     if (badge) { badge.style.display = 'none'; }
                     var markAllBtn = document.querySelector('.notification-mark-all');
                     if (markAllBtn) { markAllBtn.style.display = 'none'; }
@@ -121,7 +123,7 @@
                     item.style.maxHeight = '0';
                     item.style.overflow = 'hidden';
                     setTimeout(function() { item.remove(); }, 200);
-                    var badge = document.querySelector('.notification-badge');
+                    var badge = document.querySelector('.notif-badge');
                     if (badge) {
                         badge.textContent = data.count > 99 ? '99+' : data.count;
                         badge.style.display = data.count > 0 ? 'flex' : 'none';
@@ -144,7 +146,7 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            var badge = document.querySelector('.notification-badge');
+            var badge = document.querySelector('.notif-badge');
             if (badge) {
                 badge.textContent = data.count > 99 ? '99+' : data.count;
                 badge.style.display = data.count > 0 ? 'flex' : 'none';
@@ -196,7 +198,6 @@
             return;
         }
 
-        // Group by type
         var groups = {};
         var typeLabels = {
             job: 'Jobs', company: 'Clients', freelancer: 'Freelancers', category: 'Skills',
@@ -240,7 +241,6 @@
         searchResults.innerHTML = html;
         searchResults.classList.add('show');
 
-        // Bind click handlers
         searchResults.querySelectorAll('.admin-search-item').forEach(function(el) {
             el.addEventListener('mousedown', function(e) {
                 e.preventDefault();
@@ -292,7 +292,6 @@
             }
         });
 
-        // Keyboard navigation
         searchInput.addEventListener('keydown', function(e) {
             var items = searchResults.querySelectorAll('.admin-search-item');
             if (!items.length) return;
@@ -344,7 +343,7 @@
             searchKbd.style.display = this.value ? 'none' : '';
         });
         searchInput.addEventListener('focus', function() {
-            searchKbd.style.display = this.value ? 'none' : 'none';
+            searchKbd.style.display = 'none';
         });
         searchInput.addEventListener('blur', function() {
             if (!this.value) searchKbd.style.display = '';

@@ -166,7 +166,11 @@ CREATE TABLE `job_applications` (
   `id` int NOT NULL AUTO_INCREMENT,
   `job_id` int DEFAULT NULL,
   `freelancer_id` int DEFAULT NULL,
-  `status` enum('pending','accepted','rejected') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
+  `cover_letter` text COLLATE utf8mb4_unicode_ci,
+  `relevant_experience` text COLLATE utf8mb4_unicode_ci,
+  `estimated_completion_time` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `additional_information` text COLLATE utf8mb4_unicode_ci,
+  `status` enum('pending','accepted','rejected','withdrawn','hired') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
   `applied_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `job_id` (`job_id`),
@@ -466,6 +470,13 @@ CREATE TABLE `users` (
   `account_status` enum('active','suspended','blocked') COLLATE utf8mb4_unicode_ci DEFAULT 'active',
   `available_balance` decimal(10,2) DEFAULT '0.00',
   `demo_funds` decimal(10,2) DEFAULT '0.00',
+  `suspension_reason` text COLLATE utf8mb4_unicode_ci,
+  `suspension_start_date` date DEFAULT NULL,
+  `suspension_end_date` date DEFAULT NULL,
+  `suspended_by` int DEFAULT NULL,
+  `block_reason` text COLLATE utf8mb4_unicode_ci,
+  `blocked_at` datetime DEFAULT NULL,
+  `blocked_by` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -496,26 +507,7 @@ CREATE TABLE `wallet_transactions` (
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `withdraw_requests`
---
 
-DROP TABLE IF EXISTS `withdraw_requests`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `withdraw_requests` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `freelancer_id` int NOT NULL,
-  `amount` decimal(10,2) NOT NULL,
-  `status` enum('pending','approved','rejected','completed') DEFAULT 'pending',
-  `payment_method` varchar(50) DEFAULT NULL,
-  `payment_details` text,
-  `admin_notes` text,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `processed_at` timestamp NULL DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

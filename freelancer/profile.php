@@ -3,6 +3,29 @@ $page_title = 'My Profile';
 require __DIR__ . '/../includes/freelancer_layout.php';
 require_once __DIR__ . '/../config/upload.php';
 
+$target_uid = isset($_GET['id']) ? (int) $_GET['id'] : $fl_uid;
+$is_own_profile = ($target_uid === $fl_uid);
+$is_edit = isset($_GET['edit']) && $is_own_profile;
+
+// Fetch profile and skills (moved from init to optimize other pages)
+$fl_stmt = $conn->prepare("SELECT f.*, u.email, u.profile_image, u.username, u.created_at FROM freelancers f JOIN users u ON u.id = f.user_id WHERE u.id = ?");
+$fl_stmt->bind_param('i', $target_uid); $fl_stmt->execute();
+$fl_profile = $fl_stmt->get_result()->fetch_assoc(); $fl_stmt->close();
+
+if (!$fl_profile) {
+    set_flash('error', 'Freelancer profile not found.');
+    redirect('freelancer/dashboard.php');
+}
+
+$target_freelancer_id = $fl_profile['id'];
+
+$fl_skill_names = [];
+$r = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
+if ($r) while ($row = $r->fetch_assoc()) $fl_skill_names[$row['id']] = $row['skill_name'];
+$fl_profile_skills = [];
+$r = $conn->query("SELECT skill_id FROM freelancer_skills WHERE freelancer_id = $target_freelancer_id");
+if ($r) while ($row = $r->fetch_assoc()) $fl_profile_skills[] = (int) $row['skill_id'];
+
 $all_skills = [];
 $r = $conn->query('SELECT id, skill_name FROM skills ORDER BY skill_name');
 if ($r) while ($row = $r->fetch_assoc()) $all_skills[] = $row;
@@ -10,7 +33,7 @@ if ($r) while ($row = $r->fetch_assoc()) $all_skills[] = $row;
 $error = '';
 $success = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $is_edit) {
     if (!verify_csrf()) { $error = 'Invalid request. Please try again.'; }
     else {
         $full_name = trim($_POST['full_name'] ?? '');
@@ -39,17 +62,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                 $conn->begin_transaction();
                 try {
                     $st = $conn->prepare("UPDATE users SET profile_image=? WHERE id=?");
-                    $st->bind_param('si', $new_img, $fl_uid); $st->execute(); $st->close();
+                    $st->bind_param('si', $new_img, $target_uid); $st->execute(); $st->close();
                     $ey = $experience_years > 0 ? $experience_years : null;
                     $hr = $hourly_rate > 0 ? $hourly_rate : null;
                     $st = $conn->prepare("UPDATE freelancers SET full_name=?,title=?,phone=?,location=?,bio=?,experience_years=?,hourly_rate=?,payment_method=?,payment_account_name=?,payment_account_number=?,payment_bank_name=? WHERE id=?");
-                    $st->bind_param('sssssidssssi', $full_name, $title, $phone, $location, $bio, $ey, $hr, $payment_method, $payment_account_name, $payment_account_number, $payment_bank_name, $fl_freelancer_id);
+                    $st->bind_param('sssssidssssi', $full_name, $title, $phone, $location, $bio, $ey, $hr, $payment_method, $payment_account_name, $payment_account_number, $payment_bank_name, $target_freelancer_id);
                     $st->execute(); $st->close();
                     $st = $conn->prepare("DELETE FROM freelancer_skills WHERE freelancer_id=?");
-                    $st->bind_param('i', $fl_freelancer_id); $st->execute(); $st->close();
+                    $st->bind_param('i', $target_freelancer_id); $st->execute(); $st->close();
                     if (!empty($selected_skills)) {
                         $ss = $conn->prepare('INSERT INTO freelancer_skills (freelancer_id, skill_id) VALUES (?, ?)');
-                        foreach ($selected_skills as $sid) { $sid = (int) $sid; $ss->bind_param('ii', $fl_freelancer_id, $sid); $ss->execute(); }
+                        foreach ($selected_skills as $sid) { $sid = (int) $sid; $ss->bind_param('ii', $target_freelancer_id, $sid); $ss->execute(); }
                         $ss->close();
                     }
                     $conn->commit();
@@ -68,14 +91,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
     }
 }
 
-$is_edit = isset($_GET['edit']);
 $profileImgUrl = profile_image_url($fl_profile['profile_image']);
 
 // Fetch rating stats
 $fl_avg_rating = 0;
 $fl_total_reviews = 0;
 $r = $conn->prepare("SELECT COALESCE(AVG(rating), 0) AS avg_rating, COUNT(*) AS total FROM reviews WHERE freelancer_id = ?");
-$r->bind_param('i', $fl_freelancer_id);
+$r->bind_param('i', $target_freelancer_id);
 $r->execute();
 $rating_data = $r->get_result()->fetch_assoc();
 $r->close();
@@ -93,12 +115,11 @@ $r = $conn->prepare("
     ORDER BY r.created_at DESC
     LIMIT 5
 ");
-$r->bind_param('i', $fl_freelancer_id);
+$r->bind_param('i', $target_freelancer_id);
 $r->execute();
 $rr = $r->get_result();
 while ($row = $rr->fetch_assoc()) { $fl_reviews[] = $row; }
 $r->close();
-
 
 ?>
 
@@ -131,7 +152,9 @@ $r->close();
         </div>
         <div class="flex gap-2">
 
-            <?php if ($is_edit): ?><a href="javascript:history.back()" class="px-5 py-2.5 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)">Back</a><?php else: ?><a href="<?= e(base_url('freelancer/profile.php?edit=1')) ?>" class="btn-grad px-5 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Edit Profile</a><?php endif; ?>
+            <?php if ($is_own_profile): ?>
+                <?php if ($is_edit): ?><a href="javascript:history.back()" class="px-5 py-2.5 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)">Back</a><?php else: ?><a href="<?= e(base_url('freelancer/profile.php?edit=1')) ?>" class="btn-grad px-5 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Edit Profile</a><?php endif; ?>
+            <?php endif; ?>
         </div>
     </div>
 </div>

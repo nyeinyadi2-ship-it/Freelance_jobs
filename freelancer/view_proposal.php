@@ -81,6 +81,13 @@ require __DIR__ . '/../includes/header.php';
             </div>
             
             <?php if ($proposal['status'] === 'accepted'): ?>
+                <?php
+                $can_submit = true;
+                if (!empty($proposal['deadline']) && new DateTime($proposal['deadline']) <= new DateTime()) {
+                    $can_submit = false;
+                }
+                ?>
+                <?php if ($can_submit): ?>
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 border-t-4 border-t-indigo-500">
                     <h3 class="text-xl font-bold mb-4">Submit Your Work</h3>
                     <form action="<?= e(base_url('api/submit_proposal.php')) ?>" method="POST" enctype="multipart/form-data">
@@ -105,6 +112,12 @@ require __DIR__ . '/../includes/header.php';
                         <button type="submit" class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 py-3 rounded-xl font-bold shadow-lg text-white text-center inline-block transition-all">Submit Assignment</button>
                     </form>
                 </div>
+                <?php else: ?>
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-red-200 dark:border-red-800 p-6 border-t-4 border-t-red-500">
+                    <h3 class="text-xl font-bold mb-2 text-red-600">Deadline Passed</h3>
+                    <p class="text-gray-600 dark:text-gray-400">The deadline for this test assignment has passed and you can no longer submit your work.</p>
+                </div>
+                <?php endif; ?>
             <?php elseif ($submission): ?>
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <h3 class="text-xl font-bold mb-4">Your Submission</h3>

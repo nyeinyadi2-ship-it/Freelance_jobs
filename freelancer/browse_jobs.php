@@ -45,19 +45,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     redirect('freelancer/browse_jobs.php' . (!empty($_GET['q']) ? '?q=' . urlencode($_GET['q']) : ''));
 }
 
-$search = trim($_GET['q'] ?? '');
-$filter_cat = $_GET['category'] ?? '';
-$filter_exp = $_GET['experience'] ?? '';
+$search = trim(urldecode($_GET['q'] ?? ''));
+$filter_cat = trim(urldecode($_GET['category'] ?? ''));
+$filter_exp = trim(urldecode($_GET['experience'] ?? ''));
+$filter_skill = trim(urldecode($_GET['skill'] ?? ''));
 
-$where = "j.status IN ('open', 'position_filled') AND j.category != 'Direct Hire'";
-$params = [];
-$types = '';
+$where = "j.status IN ('open', 'position_filled') AND (j.category != 'Direct Hire' OR j.category IS NULL)";
+$params = [$fl_freelancer_id];
+$types = 'i';
 
 if ($search !== '') {
-    $where .= " AND (j.title LIKE ? OR j.description LIKE ? OR j.category LIKE ?)";
+    $where .= " AND (j.title LIKE ? OR j.description LIKE ? OR j.category LIKE ? OR EXISTS (SELECT 1 FROM job_skills js_s JOIN skills s_s ON js_s.skill_id = s_s.id WHERE js_s.job_id = j.id AND s_s.skill_name LIKE ?))";
     $like = '%' . $search . '%';
-    $params[] = $like; $params[] = $like; $params[] = $like;
-    $types .= 'sss';
+    $params[] = $like; $params[] = $like; $params[] = $like; $params[] = $like;
+    $types .= 'ssss';
 }
 if ($filter_cat !== '') {
     $where .= " AND j.category = ?";
@@ -69,16 +70,21 @@ if ($filter_exp !== '') {
     $params[] = $filter_exp;
     $types .= 's';
 }
+if ($filter_skill !== '') {
+    $where .= " AND EXISTS (SELECT 1 FROM job_skills js_filter JOIN skills s_filter ON js_filter.skill_id = s_filter.id WHERE js_filter.job_id = j.id AND s_filter.skill_name = ?)";
+    $params[] = $filter_skill;
+    $types .= 's';
+}
 
-// Freelancer ID param for subqueries
-$params[] = $fl_freelancer_id;
-$types .= 'i';
 
 $sql = "SELECT j.id,j.title,j.description,j.budget,j.created_at,j.category,j.experience_level,j.gender_requirement,j.deadline,j.duration,j.freelancers_needed,j.visibility,j.attachment,j.status,
         c.company_name,c.logo_image,
-        (SELECT ja.status FROM job_applications ja WHERE ja.job_id=j.id AND ja.freelancer_id=?) AS my_status,
-        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id) AS assigned_count
-        FROM jobs j JOIN companies c ON j.company_id=c.id
+        ja.status AS my_status,
+        (SELECT COUNT(*) FROM assignments a WHERE a.job_id = j.id) AS assigned_count,
+        (SELECT GROUP_CONCAT(s.skill_name SEPARATOR ',') FROM job_skills js JOIN skills s ON js.skill_id = s.id WHERE js.job_id = j.id) AS skills_concat
+        FROM jobs j 
+        LEFT JOIN companies c ON j.company_id=c.id
+        LEFT JOIN job_applications ja ON ja.job_id = j.id AND ja.freelancer_id = ?
         WHERE {$where}
         ORDER BY j.created_at DESC";
 
@@ -87,13 +93,7 @@ $st->bind_param($types, ...$params);
 $st->execute(); $r = $st->get_result();
 $jobs = [];
 while ($row = $r->fetch_assoc()) {
-    // Fetch skills
-    $ss = $conn->prepare('SELECT s.skill_name FROM job_skills js JOIN skills s ON js.skill_id = s.id WHERE js.job_id = ?');
-    $ss->bind_param('i', $row['id']); $ss->execute();
-    $sr2 = $ss->get_result();
-    $row['skills'] = [];
-    while ($sk = $sr2->fetch_assoc()) { $row['skills'][] = $sk['skill_name']; }
-    $ss->close();
+    $row['skills'] = !empty($row['skills_concat']) ? explode(',', $row['skills_concat']) : [];
     $jobs[] = $row;
 }
 $st->close();
@@ -344,49 +344,69 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 </style>
 
 <!-- Search & Filters -->
+<div id="browse-wrapper">
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 mb-8">
-    <form method="GET" class="space-y-4">
+    <form method="GET" class="space-y-4" id="filter-form">
         <!-- Search Bar -->
         <div class="flex gap-3">
             <div class="relative flex-1">
                 <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                <input type="text" name="q" placeholder="Search jobs by title, description, or category..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($search) ?>">
+                <input type="text" name="q" placeholder="Search jobs by title, description, category, or skill..." class="w-full pl-12 pr-4 py-3.5 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($search) ?>">
             </div>
             <button type="submit" class="px-6 py-3.5 text-sm font-semibold rounded-2xl text-white transition-all" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);box-shadow:0 4px 12px rgba(99,102,241,0.25)">Search</button>
-            <?php if ($search !== '' || $filter_cat !== '' || $filter_exp !== ''): ?>
+            <?php if ($search !== '' || $filter_cat !== '' || $filter_exp !== '' || $filter_skill !== ''): ?>
                 <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="px-5 py-3.5 text-sm font-semibold rounded-2xl border transition-all hover:bg-gray-50" style="border-color:var(--color-border);color:var(--color-text-primary)">Clear</a>
             <?php endif; ?>
         </div>
 
+        <!-- Skill Filter -->
+        <div class="relative max-w-sm">
+            <select name="skill" id="skill-filter" class="w-full pl-4 pr-10 py-3 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer appearance-none" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)">
+                <option value="">All Skills</option>
+                <?php foreach ($all_skills as $sk): ?>
+                    <option value="<?= e($sk['skill_name']) ?>" <?= $filter_skill === $sk['skill_name'] ? 'selected' : '' ?>><?= e($sk['skill_name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+
         <!-- Category Filter -->
         <div class="flex flex-wrap gap-2">
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'experience'=>$filter_exp])))) ?>" class="filter-chip <?= $filter_cat === '' ? 'active' : '' ?>">All Categories</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'experience'=>$filter_exp,'skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_cat === '' ? 'active' : '' ?>">All Categories</a>
             <?php
-            $cats = ['Web Development','Mobile Development','UI/UX Design','Graphic Design','Content Writing','Digital Marketing','Data Science','DevOps','Other'];
+            $cats = [];
+            $res = $conn->query("SELECT name FROM categories ORDER BY name ASC");
+            if ($res) {
+                while ($row = $res->fetch_assoc()) {
+                    $cats[] = $row['name'];
+                }
+            }
             foreach ($cats as $cat):
             ?>
-                <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$cat,'experience'=>$filter_exp])))) ?>" class="filter-chip <?= $filter_cat === $cat ? 'active' : '' ?>"><?= e($cat) ?></a>
+                <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$cat,'experience'=>$filter_exp,'skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_cat === $cat ? 'active' : '' ?>"><?= e($cat) ?></a>
             <?php endforeach; ?>
         </div>
 
         <!-- Experience Filter -->
         <div class="flex flex-wrap gap-2">
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat])))) ?>" class="filter-chip <?= $filter_exp === '' ? 'active' : '' ?>">All Levels</a>
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'beginner'])))) ?>" class="filter-chip <?= $filter_exp === 'beginner' ? 'active' : '' ?>">Beginner</a>
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'intermediate'])))) ?>" class="filter-chip <?= $filter_exp === 'intermediate' ? 'active' : '' ?>">Intermediate</a>
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'expert'])))) ?>" class="filter-chip <?= $filter_exp === 'expert' ? 'active' : '' ?>">Expert</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === '' ? 'active' : '' ?>">All Levels</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'beginner','skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === 'beginner' ? 'active' : '' ?>">Beginner</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'intermediate','skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === 'intermediate' ? 'active' : '' ?>">Intermediate</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'expert','skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === 'expert' ? 'active' : '' ?>">Expert</a>
         </div>
     </form>
 </div>
 
 <!-- Job Cards Grid -->
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-12" id="jobs-container">
 <?php if (empty($jobs)): ?>
     <div class="rounded-2xl text-center py-20" style="background:var(--color-card);border:1px solid var(--color-border)">
         <svg class="w-20 h-20 mx-auto mb-6 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        <p class="text-xl font-semibold mb-2" style="color:var(--color-text-primary)"><?= ($search !== '' || $filter_cat !== '' || $filter_exp !== '') ? 'No jobs match your filters.' : 'No approved jobs available at the moment.' ?></p>
+        <p class="text-xl font-semibold mb-2" style="color:var(--color-text-primary)"><?= ($search !== '' || $filter_cat !== '' || $filter_exp !== '' || $filter_skill !== '') ? 'No jobs match your filters.' : 'No approved jobs available at the moment.' ?></p>
         <p class="text-sm mb-6" style="color:var(--color-text-muted)">Try adjusting your search or filters</p>
-        <?php if ($search !== '' || $filter_cat !== '' || $filter_exp !== ''): ?>
+        <?php if ($search !== '' || $filter_cat !== '' || $filter_exp !== '' || $filter_skill !== ''): ?>
             <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">Clear Filters</a>
         <?php endif; ?>
     </div>
@@ -395,7 +415,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
         <p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= count($jobs) ?> job<?= count($jobs) !== 1 ? 's' : '' ?> found</p>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <?php foreach ($jobs as $i => $job): ?>
             <?php
             $is_image = false;
@@ -526,5 +546,73 @@ require __DIR__ . '/../includes/freelancer_layout.php';
     </div>
 <?php endif; ?>
 </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const wrapper = document.getElementById('browse-wrapper');
+    if (!wrapper) return;
+
+    let fetchController = null;
+
+    function fetchJobs(url) {
+        if (fetchController) fetchController.abort();
+        fetchController = new AbortController();
+        
+        wrapper.style.opacity = '0.5';
+        wrapper.style.pointerEvents = 'none';
+
+        fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            signal: fetchController.signal
+        })
+        .then(r => r.text())
+        .then(html => {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const newWrapper = doc.getElementById('browse-wrapper');
+            if (newWrapper) {
+                wrapper.innerHTML = newWrapper.innerHTML;
+            }
+            wrapper.style.opacity = '1';
+            wrapper.style.pointerEvents = 'auto';
+            window.history.pushState({}, '', url);
+        })
+        .catch(err => {
+            if (err.name === 'AbortError') return;
+            wrapper.style.opacity = '1';
+            wrapper.style.pointerEvents = 'auto';
+            console.error(err);
+        });
+    }
+
+    wrapper.addEventListener('change', function(e) {
+        if (e.target.closest('#filter-form')) {
+            const form = document.getElementById('filter-form');
+            if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }
+    });
+
+    wrapper.addEventListener('submit', function(e) {
+        if (e.target.id === 'filter-form') {
+            e.preventDefault();
+            const url = new URL(window.location.href);
+            const formData = new FormData(e.target);
+            for (const [key, value] of formData.entries()) {
+                if (value) url.searchParams.set(key, value);
+                else url.searchParams.delete(key);
+            }
+            fetchJobs(url.toString());
+        }
+    });
+
+    wrapper.addEventListener('click', function(e) {
+        const link = e.target.closest('a');
+        if (link && link.href.includes('browse_jobs.php') && !link.href.includes('view_job.php')) {
+            e.preventDefault();
+            fetchJobs(link.href);
+        }
+    });
+});
+</script>
 
 <?php require __DIR__ . '/../includes/freelancer_footer.php'; ?>

@@ -9,8 +9,8 @@ csrf_cookie();
 if (!empty($_SESSION['user_id'])) {
   $role = $_SESSION['role'];
   if ($role === 'admin') redirect('admin/admin_dashboard.php');
-  if ($role === 'company') redirect('company/index.php');
-  if ($role === 'freelancer') redirect('freelancer/dashboard.php');
+  if ($role === 'company') redirect('index.php');
+  if ($role === 'freelancer') redirect('index.php');
 }
 
 $error = '';
@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $has_status_col = has_account_status_column();
             $sql = $has_status_col
-                ? 'SELECT id, username, email, password, role, profile_image, account_status FROM users WHERE email = ?'
+                ? 'SELECT id, username, email, password, role, profile_image, account_status, suspension_reason, suspension_end_date, block_reason FROM users WHERE email = ?'
                 : 'SELECT id, username, email, password, role, profile_image FROM users WHERE email = ?';
             $stmt = $conn->prepare($sql);
             $stmt->bind_param('s', $email);
@@ -37,10 +37,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($user && password_verify($password, $user['password'])) {
                 $account_status = $has_status_col ? ($user['account_status'] ?? 'active') : 'active';
+                $end_date = $user['suspension_end_date'] ?? null;
+                
+                if ($has_status_col) {
+                    $account_status = check_and_update_suspension_status($conn, (int)$user['id'], $account_status, $end_date);
+                }
+
                 if ($account_status === 'suspended') {
-                    $error = 'Your account has been suspended. Please contact support.';
+                    $reason = e($user['suspension_reason'] ?: 'No reason provided.');
+                    $end_date_str = e(date('d M Y', strtotime($end_date)));
+                    $error = "⚠️ Your account has been suspended until {$end_date_str}.<br>Reason: {$reason}";
+                    $error_type = 'warning'; // Custom flag for styling
                 } elseif ($account_status === 'blocked') {
-                    $error = 'Your account has been blocked. Please contact support.';
+                    $reason = e($user['block_reason'] ?: 'No reason provided.');
+                    $error = "⚠️ Your account has been blocked.<br>Reason: {$reason}";
+                    $error_type = 'error';
                 } else {
                     $_SESSION['user_id'] = (int) $user['id'];
                     $_SESSION['username'] = $user['username'];
@@ -65,11 +76,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $company = $stmt->get_result()->fetch_assoc();
                         $_SESSION['logo_image'] = $company['logo_image'] ?? null;
                         $stmt->close();
-                        redirect('company/index.php');
+                        redirect('index.php');
                     } elseif ($user['role'] === 'freelancer') {
                         $_SESSION['profile_id'] = get_freelancer_id($conn, (int) $user['id']);
                         $_SESSION['logo_image'] = null;
-                        redirect('freelancer/dashboard.php');
+                        redirect('index.php');
                     } else {
                         $_SESSION['profile_id'] = null;
                         $_SESSION['logo_image'] = null;
@@ -243,9 +254,24 @@ require __DIR__ . '/../includes/header.php';
 
       <!-- Error -->
       <?php if ($error): ?>
-        <div class="shake mb-5 p-3.5 rounded-xl flex items-center gap-2.5 text-sm font-medium" style="background:rgba(239,68,68,0.08);color:#dc2626;border:1px solid rgba(239,68,68,0.15);">
-          <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          <span><?= e($error) ?></span>
+        <?php 
+          $err_bg = 'rgba(239,68,68,0.08)';
+          $err_text = '#dc2626';
+          $err_border = 'rgba(239,68,68,0.15)';
+          $err_type = $error_type ?? 'error';
+          if ($err_type === 'warning') {
+              $err_bg = 'rgba(245,158,11,0.08)'; // Amber
+              $err_text = '#d97706';
+              $err_border = 'rgba(245,158,11,0.2)';
+          }
+        ?>
+        <div class="shake mb-5 p-3.5 rounded-xl flex items-start gap-2.5 text-sm font-medium" style="background:<?= $err_bg ?>;color:<?= $err_text ?>;border:1px solid <?= $err_border ?>;">
+          <?php if ($err_type === 'warning'): ?>
+            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <?php else: ?>
+            <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <?php endif; ?>
+          <div class="flex-1"><?= $error ?></div>
         </div>
       <?php endif; ?>
 

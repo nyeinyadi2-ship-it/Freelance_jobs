@@ -28,9 +28,15 @@
                 <div class="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-lg flex items-center justify-center">
                     <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 </div>
-                <span class="text-sm font-semibold" style="color:var(--color-text-primary)">HireWork</span>
+                <span class="text-sm font-semibold" style="color:var(--color-text-primary)">FreelanceHub</span>
             </div>
-            <p class="text-xs" style="color:var(--color-text-placeholder)">&copy; <?= date('Y') ?> HireWork. All rights reserved.</p>
+            <div class="flex items-center gap-6">
+                <?php $admin_chat_id = get_admin_user_id($conn); ?>
+                <?php if ($admin_chat_id): ?>
+                <a href="<?= e(base_url('chat/index.php?user_id=' . $admin_chat_id)) ?>" class="text-xs font-medium hover:text-primary-500 transition-colors" style="color:var(--color-text-placeholder)">Contact Us</a>
+                <?php endif; ?>
+                <p class="text-xs" style="color:var(--color-text-placeholder)">&copy; <?= date('Y') ?> FreelanceHub. All rights reserved.</p>
+            </div>
         </div>
     </div>
 </footer>

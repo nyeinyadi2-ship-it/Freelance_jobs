@@ -1,6 +1,6 @@
 <?php
 /**
- * Ratchet WebSocket Chat Server for HireWork
+ * Ratchet WebSocket Chat Server for FreelanceHub
  * 
  * To run: php server/start_server.php
  * Requires: composer install (cboden/ratchet, react/event-loop)

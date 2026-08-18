@@ -8,7 +8,7 @@ csrf_cookie();
 if (!empty($_SESSION['user_id'])) {
   $role = $_SESSION['role'];
   if ($role === 'admin') redirect('admin/admin_dashboard.php');
-  if ($role === 'company') redirect('company/index.php');
+  if ($role === 'company') redirect('index.php');
   if ($role === 'freelancer') redirect('freelancer/dashboard.php');
 }
 

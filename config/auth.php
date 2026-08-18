@@ -40,6 +40,21 @@ function redirect(string $path): void
     exit;
 }
 
+function check_and_update_suspension_status($conn, int $user_id, string $status, ?string $end_date): string
+{
+    if ($status === 'suspended' && $end_date) {
+        $today = date('Y-m-d');
+        if ($today > $end_date) {
+            $stmt = $conn->prepare("UPDATE users SET account_status = 'active' WHERE id = ?");
+            $stmt->bind_param('i', $user_id);
+            $stmt->execute();
+            $stmt->close();
+            return 'active';
+        }
+    }
+    return $status;
+}
+
 function require_login(): void
 {
     if (empty($_SESSION['user_id'])) {
@@ -53,26 +68,29 @@ function require_login(): void
     }
 
     $status = $_SESSION['account_status'] ?? null;
-    if ($status === null) {
-        // Fetch from DB if not cached in session
-        global $conn;
-        $stmt = $conn->prepare('SELECT account_status FROM users WHERE id = ?');
-        $uid = (int) $_SESSION['user_id'];
-        $stmt->bind_param('i', $uid);
-        $stmt->execute();
-        $row = $stmt->get_result()->fetch_assoc();
-        $stmt->close();
-        $status = $row ? ($row['account_status'] ?? 'active') : 'active';
-        $_SESSION['account_status'] = $status;
-    }
+    $uid = (int) $_SESSION['user_id'];
+    
+    // Always fetch fresh status to catch mid-session suspensions/expirations
+    global $conn;
+    $stmt = $conn->prepare('SELECT account_status, suspension_end_date FROM users WHERE id = ?');
+    $stmt->bind_param('i', $uid);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    
+    $status = $row ? ($row['account_status'] ?? 'active') : 'active';
+    $end_date = $row['suspension_end_date'] ?? null;
+    
+    $status = check_and_update_suspension_status($conn, $uid, $status, $end_date);
+    $_SESSION['account_status'] = $status;
 
     if ($status === 'suspended') {
         session_destroy();
-        set_flash('error', 'Your account has been suspended. Please contact support.');
+        set_flash('error', 'Your account is suspended.');
         redirect('auth/login.php');
     } elseif ($status === 'blocked') {
         session_destroy();
-        set_flash('error', 'Your account has been blocked. Please contact support.');
+        set_flash('error', 'Your account has been blocked.');
         redirect('auth/login.php');
     }
 }
@@ -353,6 +371,9 @@ function status_badge(string $status): string
         'closed' => 'bg-gray-300 dark:bg-gray-800 text-gray-900 dark:text-gray-400',
         'reviewed' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
         'hired' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+        'overdue' => 'bg-red-600/10 text-red-700 dark:text-red-400',
+        'extended' => 'bg-blue-600/10 text-blue-700 dark:text-blue-400',
+        'cancelled' => 'bg-gray-600/10 text-gray-700 dark:text-gray-400',
     ];
 
     $class = $classes[$status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';

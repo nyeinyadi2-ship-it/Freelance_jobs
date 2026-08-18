@@ -2,6 +2,8 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';
+require_once __DIR__ . '/../includes/job_helpers.php';
+check_assignment_deadlines($conn);
 
 require_role('company');
 
@@ -26,7 +28,7 @@ $company = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 // Stats
-$stats = ['pending' => 0, 'approved' => 0, 'completed' => 0, 'total' => 0];
+$stats = ['open' => 0, 'completed' => 0, 'expired' => 0, 'total' => 0];
 $stmt = $conn->prepare('SELECT status, COUNT(*) AS cnt FROM jobs WHERE company_id = ? GROUP BY status');
 $stmt->bind_param('i', $company_id);
 $stmt->execute();
@@ -348,15 +350,15 @@ require __DIR__ . '/../includes/header.php';
       <div class="absolute top-0 right-0 w-24 h-24 opacity-10">
         <svg class="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
       </div>
-      <p class="text-sm opacity-80 font-medium"><?= 'Pending Jobs' ?></p>
-      <p class="text-3xl font-bold mt-1"><?= $stats['pending'] ?? 0 ?></p>
+      <p class="text-sm opacity-80 font-medium"><?= 'Active Jobs' ?></p>
+      <p class="text-3xl font-bold mt-1"><?= $stats['open'] ?? 0 ?></p>
     </div>
     <div class="card stat-card relative overflow-hidden" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#fff;border:none;">
       <div class="absolute top-0 right-0 w-24 h-24 opacity-10">
         <svg class="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       </div>
-      <p class="text-sm opacity-80 font-medium"><?= 'Approved Jobs' ?></p>
-      <p class="text-3xl font-bold mt-1"><?= $stats['approved'] ?? 0 ?></p>
+      <p class="text-sm opacity-80 font-medium"><?= 'Completed Jobs' ?></p>
+      <p class="text-3xl font-bold mt-1"><?= $stats['completed'] ?? 0 ?></p>
     </div>
     <div class="card stat-card relative overflow-hidden" style="background:linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);color:#fff;border:none;">
       <div class="absolute top-0 right-0 w-24 h-24 opacity-10">

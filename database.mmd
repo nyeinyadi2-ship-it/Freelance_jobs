@@ -242,18 +242,6 @@ erDiagram
         TIMESTAMP created_at
     }
 
-    WITHDRAW_REQUESTS {
-        INT id PK
-        INT freelancer_id FK
-        DECIMAL amount
-        ENUM status
-        VARCHAR payment_method
-        TEXT payment_details
-        TEXT admin_notes
-        TIMESTAMP created_at
-        TIMESTAMP processed_at
-    }
-
 
     %% USER PROFILES
     USERS ||--o| COMPANIES : "has"
@@ -316,6 +304,4 @@ erDiagram
 
     %% WALLET
     USERS ||--o{ WALLET_TRANSACTIONS : "has"
-
-    %% WITHDRAWAL
-    FREELANCERS ||--o{ WITHDRAW_REQUESTS : "requests"
+

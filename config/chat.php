@@ -6,12 +6,7 @@
 
 function messages_table_exists(mysqli $conn): bool
 {
-    static $exists = null;
-    if ($exists === null) {
-        $result = $conn->query("SHOW TABLES LIKE 'messages'");
-        $exists = $result && $result->num_rows > 0;
-    }
-    return $exists;
+    return true;
 }
 
 function can_chat(mysqli $conn, int $user_id, int $other_user_id): bool
@@ -21,6 +16,14 @@ function can_chat(mysqli $conn, int $user_id, int $other_user_id): bool
     // Admin can chat with anyone who has sent/received messages
     $role = $_SESSION['role'] ?? '';
     if ($role === 'admin') return true;
+
+    // Anyone can chat with the admin
+    $stmt_admin = $conn->prepare("SELECT role FROM users WHERE id = ?");
+    $stmt_admin->bind_param('i', $other_user_id);
+    $stmt_admin->execute();
+    $other_role = $stmt_admin->get_result()->fetch_row()[0] ?? '';
+    $stmt_admin->close();
+    if ($other_role === 'admin') return true;
 
     $stmt = $conn->prepare("
         SELECT 1 FROM assignments a
@@ -69,9 +72,11 @@ function get_conversations(mysqli $conn, int $user_id, ?string $search = null): 
         $user_id, $str_user_id,           // unread_count (2)
         $user_id,                         // u.id != ? (1)
         $user_id,                         // company user_id = ? (1)
-        $user_id                          // freelancer user_id = ? (1)
+        $user_id,                         // freelancer user_id = ? (1)
+        $user_id,                         // m.sender_id = ? (1)
+        $user_id                          // m.receiver_id = ? (1)
     ];
-    $types = 'iisiisiisisiii';
+    $types = 'iisiisiisisiiiii';
 
     if ($search && trim($search) !== '') {
         $search_term = '%' . trim($search) . '%';
@@ -96,14 +101,21 @@ function get_conversations(mysqli $conn, int $user_id, ?string $search = null): 
         LEFT JOIN freelancers f ON f.user_id = u.id
         LEFT JOIN companies comp ON comp.user_id = u.id
         WHERE u.id != ?
-        AND EXISTS (
-            SELECT 1 FROM assignments a
-            JOIN jobs j ON a.job_id = j.id
-            WHERE a.status IN ('assigned', 'working', 'submitted', 'completed')
-            AND (
-                (j.company_id = (SELECT id FROM companies WHERE user_id = ?) AND a.freelancer_id = (SELECT id FROM freelancers WHERE user_id = u.id))
-                OR
-                (j.company_id = (SELECT id FROM companies WHERE user_id = u.id) AND a.freelancer_id = (SELECT id FROM freelancers WHERE user_id = ?))
+        AND (
+            u.role = 'admin'
+            OR EXISTS (
+                SELECT 1 FROM assignments a
+                JOIN jobs j ON a.job_id = j.id
+                WHERE a.status IN ('assigned', 'working', 'submitted', 'completed')
+                AND (
+                    (j.company_id = (SELECT id FROM companies WHERE user_id = ?) AND a.freelancer_id = (SELECT id FROM freelancers WHERE user_id = u.id))
+                    OR
+                    (j.company_id = (SELECT id FROM companies WHERE user_id = u.id) AND a.freelancer_id = (SELECT id FROM freelancers WHERE user_id = ?))
+                )
+            )
+            OR EXISTS (
+                SELECT 1 FROM messages m
+                WHERE (m.sender_id = ? AND m.receiver_id = u.id) OR (m.sender_id = u.id AND m.receiver_id = ?)
             )
         )
         {$search_filter}
@@ -133,30 +145,40 @@ function get_admin_conversations(mysqli $conn, ?string $search = null): array
     $admin_id = (int) ($_SESSION['user_id'] ?? 0);
     if ($admin_id <= 0) return [];
 
-    $params = [$admin_id];
-    $types = 'i';
+    $params = [
+        $admin_id, $admin_id, // last_message
+        $admin_id, $admin_id, // last_message_is_deleted
+        $admin_id, $admin_id, // last_message_time
+        $admin_id, // unread_count
+        $admin_id, $admin_id, // JOIN messages
+        $admin_id  // WHERE u.id != ?
+    ];
+    $types = 'iiiiiiiiii';
     $search_filter = '';
 
     if ($search && trim($search) !== '') {
         $search_term = '%' . trim($search) . '%';
-        $search_filter = "WHERE (COALESCE(f.full_name, comp.company_name, u.username) LIKE ? OR (SELECT message FROM messages WHERE (sender_id = u.id OR receiver_id = u.id) ORDER BY created_at DESC LIMIT 1) LIKE ?)";
+        $search_filter = "AND (COALESCE(f.full_name, comp.company_name, u.username) LIKE ? OR (SELECT message FROM messages WHERE ((sender_id = u.id AND receiver_id = ?) OR (sender_id = ? AND receiver_id = u.id)) ORDER BY created_at DESC LIMIT 1) LIKE ?)";
         $params[] = $search_term;
+        $params[] = $admin_id;
+        $params[] = $admin_id;
         $params[] = $search_term;
-        $types .= 'ss';
+        $types .= 'siis';
     }
 
     $stmt = $conn->prepare("
         SELECT DISTINCT u.id AS other_user_id, u.username AS other_username,
                u.profile_image AS other_profile_image, u.last_activity AS other_last_activity, u.role AS other_role,
                COALESCE(f.full_name, comp.company_name) AS other_display_name,
-               (SELECT message FROM messages WHERE (sender_id = u.id OR receiver_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_message,
-               (SELECT is_deleted FROM messages WHERE (sender_id = u.id OR receiver_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_message_is_deleted,
-               (SELECT created_at FROM messages WHERE (sender_id = u.id OR receiver_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_message_time,
+               (SELECT message FROM messages WHERE ((sender_id = u.id AND receiver_id = ?) OR (sender_id = ? AND receiver_id = u.id)) ORDER BY created_at DESC LIMIT 1) AS last_message,
+               (SELECT is_deleted FROM messages WHERE ((sender_id = u.id AND receiver_id = ?) OR (sender_id = ? AND receiver_id = u.id)) ORDER BY created_at DESC LIMIT 1) AS last_message_is_deleted,
+               (SELECT created_at FROM messages WHERE ((sender_id = u.id AND receiver_id = ?) OR (sender_id = ? AND receiver_id = u.id)) ORDER BY created_at DESC LIMIT 1) AS last_message_time,
                (SELECT COUNT(*) FROM messages WHERE receiver_id = ? AND sender_id = u.id AND status = 'unread') AS unread_count
         FROM users u
         LEFT JOIN freelancers f ON f.user_id = u.id
         LEFT JOIN companies comp ON comp.user_id = u.id
-        JOIN messages m ON m.sender_id = u.id OR m.receiver_id = u.id
+        JOIN messages m ON (m.sender_id = u.id AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = u.id)
+        WHERE u.id != ?
         {$search_filter}
         ORDER BY last_message_time DESC
     ");

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../config/auth.php';
 
 header('Content-Type: application/json');
 
-$skill_name = trim($_GET['skill'] ?? '');
+$skill_name = trim(urldecode($_GET['skill'] ?? ''));
 $limit = min(max((int) ($_GET['limit'] ?? 6), 1), 24);
 
 if ($skill_name === '') {
@@ -19,7 +19,7 @@ $sql = "SELECT j.id, j.title, j.description, j.budget, j.created_at, j.experienc
         JOIN companies c ON j.company_id = c.id
         JOIN job_skills js ON js.job_id = j.id
         JOIN skills s ON js.skill_id = s.id
-        WHERE s.skill_name = ? AND j.status = 'approved' AND j.category != 'Direct Hire'
+        WHERE s.skill_name = ? AND j.status IN ('open', 'position_filled') AND j.category != 'Direct Hire'
         ORDER BY j.created_at DESC
         LIMIT ?";
 $stmt = $conn->prepare($sql);

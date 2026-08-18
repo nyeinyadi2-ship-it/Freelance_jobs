@@ -1,6 +1,6 @@
 <?php
 require 'config/db.php';
-$res = $conn->query("DESCRIBE escrow");
-while ($row = $res->fetch_assoc()) {
-    echo $row['Field'] . " - " . $row['Type'] . "\n";
-}
+
+$stmt = $conn->prepare("UPDATE users SET available_balance = 5000000 WHERE id = 12");
+$stmt->execute();
+echo "User 12 balance updated.\n";

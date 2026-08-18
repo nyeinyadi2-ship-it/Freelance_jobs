@@ -44,17 +44,14 @@ require __DIR__ . '/includes/admin_header.php';
 ?>
 
 <!-- Page Header -->
-<div class="mb-6 admin-fade">
-    <div class="flex items-center gap-3 mb-1">
-        <a href="<?= e(base_url('admin/admin_dashboard.php')) ?>" class="text-sm hover:underline" style="color:var(--color-text-muted)"><?= e('Admin Dashboard') ?></a>
-        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" style="color:var(--color-text-placeholder)"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        <span class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e('Notifications') ?></span>
-    </div>
-    <div class="flex flex-wrap justify-between items-center gap-4">
+<div class="mb-5 admin-fade">
+    <div class="flex flex-wrap justify-between items-center gap-3">
         <div>
-            <h1 class="text-2xl font-bold" style="color:var(--color-text-primary)"><?= 'Notifications' ?></h1>
+            <h1 class="text-xl font-bold" style="color:var(--color-text-primary)"><?= 'Notifications' ?></h1>
             <?php if ($unread_count > 0): ?>
-                <p class="text-sm mt-1" style="color:var(--color-text-muted)"><?= $unread_count ?> unread notification<?= $unread_count !== 1 ? 's' : '' ?></p>
+                <p class="text-sm mt-0.5" style="color:var(--color-text-muted)"><?= $unread_count ?> unread notification<?= $unread_count !== 1 ? 's' : '' ?></p>
+            <?php else: ?>
+                <p class="text-sm mt-0.5" style="color:var(--color-text-muted)">You're all caught up.</p>
             <?php endif; ?>
         </div>
         <div class="flex items-center gap-2">
@@ -62,16 +59,16 @@ require __DIR__ . '/includes/admin_header.php';
                 <form method="POST" class="inline">
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="mark_all_read">
-                    <button type="submit" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                    <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
                         <?= 'Mark all as read' ?>
                     </button>
                 </form>
             <?php endif; ?>
             <?php if (!empty($notifications)): ?>
-                <form method="POST" class="inline" onsubmit="return confirm('<?= e('Delete all notifications? This cannot be undone.') ?>')">
+                <form method="POST" class="inline" onsubmit="return confirm('Delete all notifications? This cannot be undone.')">
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                     <input type="hidden" name="action" value="delete_all">
-                    <button type="submit" class="text-sm text-red-500 hover:text-red-700 font-medium">
+                    <button type="submit" class="text-xs text-red-500 hover:text-red-700 font-medium">
                         <?= 'Delete all' ?>
                     </button>
                 </form>
@@ -81,7 +78,7 @@ require __DIR__ . '/includes/admin_header.php';
 </div>
 
 <!-- Filter Tabs -->
-<div class="flex gap-1 mb-6 p-1 rounded-lg w-fit admin-fade" style="background:var(--color-card-hover)">
+<div class="flex gap-1 mb-5 p-1 rounded-lg w-fit admin-fade" style="background:var(--color-card-hover)">
     <?php
     $filters = [
         'all' => 'All',
@@ -92,12 +89,12 @@ require __DIR__ . '/includes/admin_header.php';
         $count = $key === 'unread' ? $unread_count : ($key === 'all' ? array_sum($type_counts) : null);
     ?>
         <a href="<?= e(base_url('admin/notifications.php?filter=' . $key)) ?>"
-           class="px-4 py-2 text-sm font-medium rounded-md transition-colors
+           class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors
                    <?= $filter === $key ? 'text-indigo-600 shadow-sm' : '' ?>"
            style="<?= $filter === $key ? 'background:var(--color-card)' : 'color:var(--color-text-muted)' ?>">
             <?= $label ?>
             <?php if ($count !== null && $count > 0): ?>
-                <span class="ml-1 px-1.5 py-0.5 text-xs rounded-full <?= $filter === $key ? 'text-indigo-600' : '' ?>"
+                <span class="ml-1 px-1 py-0.5 text-[10px] rounded-full <?= $filter === $key ? 'text-indigo-600' : '' ?>"
                       style="<?= $filter === $key ? 'background:rgba(99,102,241,0.15)' : 'background:var(--color-card-hover);color:var(--color-text-muted)' ?>">
                     <?= $count ?>
                 </span>
@@ -107,50 +104,43 @@ require __DIR__ . '/includes/admin_header.php';
 </div>
 
 <?php if (empty($notifications)): ?>
-    <div class="card text-center py-12 admin-fade">
-        <div class="mb-4">
-            <svg class="w-16 h-16 mx-auto text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+    <div class="card text-center py-10 admin-fade">
+        <div class="mb-3">
+            <svg class="w-12 h-12 mx-auto text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
             </svg>
         </div>
-        <p class="text-lg" style="color:var(--color-text-muted)"><?= $filter === 'unread' ? e('You\'re all caught up!') : e('No notifications to show.') ?></p>
+        <p class="text-sm" style="color:var(--color-text-muted)"><?= $filter === 'unread' ? e('You\'re all caught up!') : e('No notifications to show.') ?></p>
     </div>
 <?php else: ?>
-    <div class="space-y-2">
+    <div class="space-y-1.5">
         <?php foreach ($notifications as $n): ?>
-            <div class="card flex items-start gap-3 transition-all duration-200 admin-fade <?= $n['is_read'] ? '' : 'border-l-4 border-l-indigo-500' ?>"
+            <div class="card flex items-start gap-2.5 transition-all duration-200 admin-fade <?= $n['is_read'] ? '' : 'border-l-[3px] border-l-indigo-500' ?>"
                  id="notif-<?= (int) $n['id'] ?>"
-                 style="<?= $n['is_read'] ? '' : 'background:rgba(99,102,241,0.1)' ?>">
+                 style="<?= $n['is_read'] ? '' : 'background:rgba(99,102,241,0.04)' ?>">
                 <!-- Notification Icon -->
-                <div class="mt-1 flex-shrink-0">
+                <div class="mt-0.5 flex-shrink-0">
                     <?= notification_icon($n['type']) ?>
                 </div>
 
-                <!-- Unread dot -->
-                <?php if (!$n['is_read']): ?>
-                    <div class="mt-2 w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></div>
-                <?php else: ?>
-                    <div class="mt-2 w-2 h-2 flex-shrink-0"></div>
-                <?php endif; ?>
-
                 <!-- Content -->
                 <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 mb-0.5">
-                        <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full <?= $n['is_read'] ? '' : 'text-indigo-700' ?>"
-                              style="<?= $n['is_read'] ? 'background:var(--color-card-hover);color:var(--color-text-muted)' : 'background:rgba(99,102,241,0.15)' ?>">
+                    <div class="flex items-center gap-1.5 mb-0.5">
+                        <span class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded <?= $n['is_read'] ? '' : 'text-indigo-700' ?>"
+                              style="<?= $n['is_read'] ? 'background:var(--color-card-hover);color:var(--color-text-muted)' : 'background:rgba(99,102,241,0.12)' ?>">
                             <?= e(notification_type_label($n['type'])) ?>
                         </span>
                     </div>
                     <p class="text-sm <?= $n['is_read'] ? '' : 'font-medium' ?>"
                        style="<?= $n['is_read'] ? 'color:var(--color-text-muted)' : 'color:var(--color-text-primary)' ?>"><?= e($n['message']) ?></p>
-                    <p class="text-xs mt-1" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
+                    <p class="text-[10px] mt-0.5" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
                 </div>
 
                 <!-- Actions -->
-                <div class="flex items-center gap-2 flex-shrink-0">
+                <div class="flex items-center gap-1 flex-shrink-0">
                     <?php if ($n['link']): ?>
-                        <a href="<?= e(base_url($n['link'])) ?>" class="text-sm text-indigo-600 hover:underline whitespace-nowrap">
-                            <?= 'View all' ?>
+                        <a href="<?= e(base_url($n['link'])) ?>" class="text-xs text-indigo-600 hover:underline whitespace-nowrap">
+                            <?= 'View' ?>
                         </a>
                     <?php endif; ?>
                     <?php if (!$n['is_read']): ?>
@@ -158,8 +148,8 @@ require __DIR__ . '/includes/admin_header.php';
                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="action" value="mark_read">
                             <input type="hidden" name="notification_id" value="<?= (int) $n['id'] ?>">
-                            <button type="submit" class="text-sm whitespace-nowrap" style="color:var(--color-text-muted)" title="<?= e(__('notif.dismiss')) ?>">
-                                <?= __('notif.dismiss') ?>
+                            <button type="submit" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" style="color:var(--color-text-muted)" title="<?= e(__('notif.dismiss')) ?>">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                             </button>
                         </form>
                     <?php endif; ?>
@@ -167,8 +157,8 @@ require __DIR__ . '/includes/admin_header.php';
                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="delete">
                         <input type="hidden" name="notification_id" value="<?= (int) $n['id'] ?>">
-                        <button type="submit" class="text-sm text-red-400 hover:text-red-600 whitespace-nowrap" title="<?= e('Delete') ?>">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <button type="submit" class="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" style="color:var(--color-text-placeholder)" title="<?= e('Delete') ?>">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                             </svg>
                         </button>

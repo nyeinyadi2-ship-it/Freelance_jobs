@@ -19,7 +19,7 @@ csrf_cookie();
 
 $fid = (int) ($_GET['id'] ?? 0);
 $viewer_role = $_SESSION['role'] ?? null;
-$fallback_url = ($viewer_role === 'company') ? 'company/index.php' : (($viewer_role === 'freelancer') ? 'freelancer/dashboard.php' : 'index.php');
+$fallback_url = ($viewer_role === 'company') ? 'index.php' : (($viewer_role === 'freelancer') ? 'freelancer/dashboard.php' : 'index.php');
 
 if ($fid <= 0) { redirect($fallback_url); }
 
@@ -46,7 +46,7 @@ $r->close();
 
 // Completed projects
 $completed_projects = [];
-$r = $conn->prepare("SELECT a.id, a.assigned_at, j.title, j.budget, p.amount, p.paid_at, c.company_name
+$r = $conn->prepare("SELECT a.id, a.assigned_at, j.title, j.budget, p.amount, p.paid_at, c.id AS company_id, c.company_name, c.logo_image
     FROM assignments a JOIN jobs j ON a.job_id = j.id JOIN companies c ON j.company_id = c.id
     LEFT JOIN payments p ON p.assignment_id = a.id AND p.status = 'paid'
     WHERE a.freelancer_id = ? AND a.status = 'completed' ORDER BY a.assigned_at DESC");
@@ -60,24 +60,12 @@ $completed_count = count($completed_projects);
 $companies_worked = [];
 $company_ids_seen = [];
 foreach ($completed_projects as $cp) {
-    $cj = $conn->prepare("SELECT j.company_id FROM jobs j JOIN assignments a ON a.job_id = j.id WHERE a.id = ?");
-    $cj->bind_param('i', $cp['id']);
-    $cj->execute();
-    $cj_row = $cj->get_result()->fetch_assoc();
-    $cj->close();
-    if ($cj_row && !in_array($cj_row['company_id'], $company_ids_seen)) {
-        $company_ids_seen[] = $cj_row['company_id'];
-        $cl = $conn->prepare("SELECT company_name, logo_image FROM companies WHERE id = ?");
-        $cl->bind_param('i', $cj_row['company_id']);
-        $cl->execute();
-        $cl_row = $cl->get_result()->fetch_assoc();
-        $cl->close();
-        if ($cl_row) {
-            $companies_worked[] = [
-                'name' => $cl_row['company_name'],
-                'logo' => $cl_row['logo_image'] ? base_url('uploads/images/' . $cl_row['logo_image']) : null,
-            ];
-        }
+    if (!in_array($cp['company_id'], $company_ids_seen)) {
+        $company_ids_seen[] = $cp['company_id'];
+        $companies_worked[] = [
+            'name' => $cp['company_name'],
+            'logo' => $cp['logo_image'] ? base_url('uploads/images/' . $cp['logo_image']) : null,
+        ];
     }
 }
 
@@ -260,7 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($freelancer['full_name'] ?? 'Freelancer') ?> - Freelancer Profile - HireWork</title>
+    <title><?= e($freelancer['full_name'] ?? 'Freelancer') ?> - Freelancer Profile - FreelanceHub</title>
     <script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();</script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>

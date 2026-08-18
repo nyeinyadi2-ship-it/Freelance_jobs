@@ -27,6 +27,12 @@ if ($other_id > 0) {
 $page_title = 'Messages';
 $unread_total = get_unread_count($conn, $user_id);
 ?>
+<?php if ($role === 'admin'): ?>
+<?php 
+    $admin_no_padding = true;
+    require __DIR__ . '/../admin/includes/admin_header.php';
+?>
+<?php else: ?>
 <!DOCTYPE html>
 <html lang="<?= e('en') ?>" data-theme>
 <head>
@@ -54,6 +60,7 @@ $unread_total = get_unread_count($conn, $user_id);
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
+<?php endif; ?>
     <script src="<?= e(base_url('assets/js/emoji-picker.js')) ?>"></script>
     <script src="<?= e(base_url('assets/js/chat-websocket.js')) ?>"></script>
     <style>
@@ -61,7 +68,7 @@ $unread_total = get_unread_count($conn, $user_id);
         html { overflow: hidden; }
         body { margin: 0; }
 
-        .chat-layout { height: calc(100vh - 4rem); display: flex; }
+        .chat-layout { height: <?= $role === 'admin' ? 'calc(100vh - 56px)' : 'calc(100vh - 4rem)' ?>; display: flex; }
 
         /* ===== SIDEBAR ===== */
         .chat-sidebar {
@@ -299,11 +306,14 @@ $unread_total = get_unread_count($conn, $user_id);
         
         .msg-bubble-sent-interactive { cursor: pointer; }
         .msg-deleted-text { font-style: italic; opacity: 0.6; }
+<?php if ($role !== 'admin'): ?>
     </style>
 </head>
-<body class="bg-gray-50 dark:bg-slate-900">
-<?php require __DIR__ . '/../includes/navbar.php'; ?>
-
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+<?php else: ?>
+    </style>
+<?php endif; ?>
+<?php if ($role !== 'admin') { require __DIR__ . '/../includes/navbar.php'; } ?>
 <div class="chat-layout">
     <!-- ===== SIDEBAR ===== -->
     <div class="chat-sidebar <?= $other_id > 0 ? 'hidden-mobile' : '' ?>" id="convSidebar">
@@ -1193,5 +1203,9 @@ $unread_total = get_unread_count($conn, $user_id);
     };
 })();
 </script>
+<?php if ($role !== 'admin'): ?>
 </body>
 </html>
+<?php else: ?>
+<?php require __DIR__ . '/../admin/includes/admin_footer.php'; ?>
+<?php endif; ?>
