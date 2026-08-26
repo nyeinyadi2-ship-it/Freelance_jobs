@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     if ($job_id > 0 && in_array($action, ['hide', 'restore', 'remove'], true)) {
         try {
             if ($action === 'hide') {
-                $stmt = $conn->prepare("UPDATE jobs SET status = 'rejected' WHERE id = ? AND status = 'open'");
+                $stmt = $conn->prepare("UPDATE jobs SET status = 'closed' WHERE id = ? AND status IN ('open', 'in_review', 'in_progress', 'hired')");
                 $stmt->bind_param('i', $job_id);
                 $stmt->execute();
 
@@ -26,8 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 
                     if ($job_info) {
                         create_notification($conn, (int) $job_info['user_id'], 'job_hidden',
-                            "Your job \"{$job_info['title']}\" has been hidden by an admin for policy violation.",
-                            'company/manage_jobs.php');
+                            "Hidden your job \"{$job_info['title']}\" for policy violation.",
+                            'company/manage_jobs.php', $_SESSION['user_id'] ?? null);
                     }
                     set_flash('success', 'Job has been hidden successfully.');
                 } else {
@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                 $stmt->close();
 
             } elseif ($action === 'restore') {
-                $stmt = $conn->prepare("UPDATE jobs SET status = 'open' WHERE id = ? AND status = 'rejected'");
+                $stmt = $conn->prepare("UPDATE jobs SET status = 'open' WHERE id = ? AND status = 'closed'");
                 $stmt->bind_param('i', $job_id);
                 $stmt->execute();
 
@@ -49,8 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 
                     if ($job_info) {
                         create_notification($conn, (int) $job_info['user_id'], 'job_restored',
-                            "Your job \"{$job_info['title']}\" has been restored and is now visible again.",
-                            'company/manage_jobs.php');
+                            "Restored your job \"{$job_info['title']}\". It is now visible again.",
+                            'company/manage_jobs.php', $_SESSION['user_id'] ?? null);
                     }
                     set_flash('success', 'Job has been restored successfully.');
                 } else {
@@ -79,16 +79,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 }
 
 // Filter
-$filter = $_GET['filter'] ?? 'active';
+$filter = $_GET['filter'] ?? 'all';
 if (!in_array($filter, ['all', 'active', 'hidden'], true)) {
-    $filter = 'active';
+    $filter = 'all';
 }
 
 // Build query based on filter
 $where = match($filter) {
-    'active' => "j.status = 'open'",
-    'hidden' => "j.status = 'rejected'",
-    default => "j.status IN ('open', 'rejected')",
+    'active' => "j.status NOT IN ('closed', 'cancelled')",
+    'hidden' => "j.status IN ('closed', 'cancelled')",
+    default => "1=1",
 };
 
 $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -140,7 +140,7 @@ try {
     $jobs = [];
 }
 
-$page_title = 'Moderate Jobs';
+$page_title = 'Manage Jobs';
 require __DIR__ . '/includes/admin_header.php';
 ?>
 
@@ -148,8 +148,8 @@ require __DIR__ . '/includes/admin_header.php';
 <div class="mb-5 admin-fade">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-            <h1 class="text-xl font-bold" style="color:var(--color-text-primary)"><?= e('Moderate Jobs') ?></h1>
-            <p class="text-sm mt-0.5" style="color:var(--color-text-muted)"><?= e('Review and moderate jobs posted on the platform.') ?></p>
+            <h1 class="text-xl font-bold" style="color:var(--color-text-primary)"><?= e('Manage Jobs') ?></h1>
+            <p class="text-sm mt-0.5" style="color:var(--color-text-muted)"><?= e('Review and manage jobs posted on the platform.') ?></p>
         </div>
         <span class="text-xs" style="color:var(--color-text-muted)"><?= $total ?> job<?= $total !== 1 ? 's' : '' ?></span>
     </div>
@@ -182,7 +182,7 @@ require __DIR__ . '/includes/admin_header.php';
 <?php else: ?>
     <div class="space-y-3">
         <?php foreach ($jobs as $idx => $job): ?>
-            <div class="card admin-fade" style="transition-delay:<?= ($idx * 0.03) ?>s; <?= $job['status'] === 'rejected' ? 'border-left:3px solid #ef4444;' : '' ?>">
+            <div class="card admin-fade" style="transition-delay:<?= ($idx * 0.03) ?>s; <?= ($job['status'] === 'closed' || $job['status'] === 'cancelled') ? 'border-left:3px solid #ef4444;' : '' ?>">
                 <div class="flex flex-col sm:flex-row sm:items-start gap-3">
                     <div class="flex-1 min-w-0">
                         <!-- Company + Status -->
@@ -195,9 +195,7 @@ require __DIR__ . '/includes/admin_header.php';
                                 </div>
                             <?php endif; ?>
                             <span class="text-xs" style="color:var(--color-text-muted)"><?= e($job['company_name']) ?></span>
-                            <?php if ($job['status'] === 'rejected'): ?>
-                                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">Hidden</span>
-                            <?php endif; ?>
+                            <?= status_badge($job['status']) ?>
                         </div>
 
                         <!-- Job Title -->
@@ -238,8 +236,8 @@ require __DIR__ . '/includes/admin_header.php';
                             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                             View Details
                         </a>
-                        <?php if ($job['status'] === 'open' || $job['status'] === 'approved'): ?>
-                            <form method="POST" onsubmit="return confirm('Are you sure you want to hide this job?')">
+                        <?php if (in_array($job['status'], ['open', 'in_review', 'hired', 'in_progress'])): ?>
+                            <form method="POST" onsubmit="return confirm('Are you sure you want to close this job?')">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="job_id" value="<?= (int) $job['id'] ?>">
                                 <input type="hidden" name="action" value="hide">
@@ -248,7 +246,7 @@ require __DIR__ . '/includes/admin_header.php';
                                     Hide
                                 </button>
                             </form>
-                        <?php elseif ($job['status'] === 'rejected'): ?>
+                        <?php elseif (in_array($job['status'], ['closed', 'cancelled'])): ?>
                             <form method="POST">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="job_id" value="<?= (int) $job['id'] ?>">

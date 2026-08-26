@@ -64,6 +64,13 @@ function require_login(): void
         redirect('auth/login.php');
     }
 
+    if (!empty($_SESSION['must_change_password'])) {
+        $script = $_SERVER['SCRIPT_NAME'] ?? '';
+        if (strpos($script, 'change_password.php') === false && strpos($script, 'logout.php') === false) {
+            redirect('auth/change_password.php');
+        }
+    }
+
     // Check if account is suspended or blocked (only if column exists)
     if (!has_account_status_column()) {
         return;
@@ -385,6 +392,9 @@ function has_account_status_column(): bool
 function status_badge(string $status): string
 {
     $classes = [
+        'open' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
+        'in_review' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
+        'hired' => 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300',
         'pending' => 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
         'approved' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
         'rejected' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
@@ -393,6 +403,7 @@ function status_badge(string $status): string
         'accepted' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
         'assigned' => 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300',
         'working' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
+        'in_progress' => 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300',
         'submitted' => 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300',
         'payment_pending' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
         'paid' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
@@ -401,8 +412,6 @@ function status_badge(string $status): string
         'blocked' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
         'expired' => 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300',
         'closed' => 'bg-gray-300 dark:bg-gray-800 text-gray-900 dark:text-gray-400',
-        'reviewed' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
-        'hired' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
         'overdue' => 'bg-red-600/10 text-red-700 dark:text-red-400',
         'extended' => 'bg-blue-600/10 text-blue-700 dark:text-blue-400',
         'cancelled' => 'bg-gray-600/10 text-gray-700 dark:text-gray-400',
@@ -411,6 +420,8 @@ function status_badge(string $status): string
     $class = $classes[$status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';
 
     $display = match($status) {
+        'in_review' => 'In Review',
+        'in_progress' => 'In Progress',
         'position_filled' => 'Position Filled',
         'payment_pending' => 'Payment Pending',
         default => ucwords(str_replace('_', ' ', $status))

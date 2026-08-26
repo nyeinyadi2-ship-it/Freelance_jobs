@@ -52,7 +52,7 @@ if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ER
 
 $stmt = $conn->prepare("
     INSERT INTO proposal_projects (job_id, company_id, freelancer_id, title, description, instructions, attachment, deadline, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'assigned')
 ");
 $stmt->bind_param('iiisssss', $job_id, $company_id, $freelancer_id, $title, $description, $instructions, $attachment_path, $deadline);
 

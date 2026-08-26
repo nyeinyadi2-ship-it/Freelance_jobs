@@ -20,7 +20,7 @@ if (!$freelancer_id || $proposal_id <= 0 || !in_array($action, ['accept', 'rejec
     redirect('freelancer/dashboard.php');
 }
 
-$stmt = $conn->prepare("SELECT p.id, p.company_id, j.title FROM proposal_projects p JOIN jobs j ON p.job_id = j.id WHERE p.id = ? AND p.freelancer_id = ? AND p.status = 'pending'");
+$stmt = $conn->prepare("SELECT p.id, p.company_id, j.title FROM proposal_projects p JOIN jobs j ON p.job_id = j.id WHERE p.id = ? AND p.freelancer_id = ? AND p.status = 'assigned'");
 $stmt->bind_param('ii', $proposal_id, $freelancer_id);
 $stmt->execute();
 $proposal = $stmt->get_result()->fetch_assoc();
@@ -31,7 +31,7 @@ if (!$proposal) {
     redirect('freelancer/dashboard.php');
 }
 
-$new_status = ($action === 'accept') ? 'accepted' : 'rejected';
+$new_status = ($action === 'accept') ? 'in_progress' : 'rejected';
 
 $stmt = $conn->prepare("UPDATE proposal_projects SET status = ? WHERE id = ?");
 $stmt->bind_param('si', $new_status, $proposal_id);

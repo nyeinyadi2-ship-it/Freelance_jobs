@@ -1,6 +1,19 @@
 <?php
 $page_title = 'Job Details';
-require __DIR__ . '/../includes/freelancer_init.php';
+$public_access = true;
+
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/notifications.php';
+
+$user = current_user();
+$fl_user = null;
+$fl_freelancer_id = 0;
+if ($user && ($user['role'] ?? '') === 'freelancer') {
+    $fl_user = $user;
+    $fl_freelancer_id = get_freelancer_id($conn, (int)$user['user_id']);
+}
 
 $job_id = (int) ($_GET['id'] ?? 0);
 if ($job_id <= 0) {
@@ -10,47 +23,39 @@ if ($job_id <= 0) {
 
 // Handle Apply
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'apply' && verify_csrf()) {
-    $st = $conn->prepare("SELECT id, company_id FROM jobs WHERE id = ? AND status IN ('open', 'position_filled')");
+    if (!$fl_freelancer_id) {
+        set_flash('error', 'Please login as a freelancer to apply for jobs.');
+        redirect('auth/login.php');
+    }
+
+    $st = $conn->prepare("SELECT id, company_id FROM jobs WHERE id = ? AND status = 'open'");
     $st->bind_param('i', $job_id); $st->execute();
     $job_check = $st->get_result()->fetch_assoc(); $st->close();
 
     if (!$job_check) {
         set_flash('error', 'Job is not available for application.');
     } else {
-        // Check position limit
-        $st = $conn->prepare("SELECT freelancers_needed FROM jobs WHERE id = ?");
-        $st->bind_param('i', $job_id); $st->execute();
-        $job_meta = $st->get_result()->fetch_assoc(); $st->close();
-        $needed = (int) ($job_meta['freelancers_needed'] ?? 1);
+        $st = $conn->prepare('SELECT id FROM job_applications WHERE job_id = ? AND freelancer_id = ?');
+        $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute();
+        $already_applied = $st->get_result()->num_rows > 0; $st->close();
 
-        $st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?");
-        $st->bind_param('i', $job_id); $st->execute();
-        $filled = (int) $st->get_result()->fetch_assoc()['cnt']; $st->close();
-
-        if ($filled >= $needed) {
-            set_flash('error', 'All positions for this job have been filled.');
+        if ($already_applied) {
+            set_flash('error', 'You have already applied for this job.');
         } else {
-            $st = $conn->prepare('SELECT id FROM job_applications WHERE job_id = ? AND freelancer_id = ?');
-            $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute();
-            $already_applied = $st->get_result()->num_rows > 0; $st->close();
+            $cover_letter = trim($_POST['cover_letter'] ?? '');
+            $relevant_experience = trim($_POST['relevant_experience'] ?? '');
+            $estimated_time = trim($_POST['estimated_completion_time'] ?? '');
+            $additional_info = trim($_POST['additional_information'] ?? '');
 
-            if ($already_applied) {
-                set_flash('error', 'You have already applied for this job.');
-            } else {
-                $cover_letter = trim($_POST['cover_letter'] ?? '');
-                $relevant_experience = trim($_POST['relevant_experience'] ?? '');
-                $estimated_time = trim($_POST['estimated_completion_time'] ?? '');
-                $additional_info = trim($_POST['additional_information'] ?? '');
+            $st = $conn->prepare('INSERT INTO job_applications (job_id, freelancer_id, cover_letter, relevant_experience, estimated_completion_time, additional_information) VALUES (?, ?, ?, ?, ?, ?)');
+            $st->bind_param('iissss', $job_id, $fl_freelancer_id, $cover_letter, $relevant_experience, $estimated_time, $additional_info); $st->execute(); $st->close();
 
-                $st = $conn->prepare('INSERT INTO job_applications (job_id, freelancer_id, cover_letter, relevant_experience, estimated_completion_time, additional_information) VALUES (?, ?, ?, ?, ?, ?)');
-                $st->bind_param('iissss', $job_id, $fl_freelancer_id, $cover_letter, $relevant_experience, $estimated_time, $additional_info); $st->execute(); $st->close();
-
-                $st = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.id = ?");
-                $st->bind_param('i', $job_id); $st->execute();
-                $ji = $st->get_result()->fetch_assoc(); $st->close();
-                if ($ji) {
-                    create_notification($conn, (int) $ji['user_id'], 'new_application', $fl_user['username'] . " applied for your job \"{$ji['title']}\".", 'company/view_applications.php?id=' . $job_id);
-                }
+            $st = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.id = ?");
+            $st->bind_param('i', $job_id); $st->execute();
+            $ji = $st->get_result()->fetch_assoc(); $st->close();
+            if ($ji) {
+                $fl_user = $conn->query("SELECT username FROM users WHERE id = $user_id")->fetch_assoc();
+                create_notification($conn, (int) $ji['user_id'], 'new_application', "Applied for your job \"{$ji['title']}\".", 'company/view_applications.php?id=' . $job_id, $user_id);
                 set_flash('success', 'Application submitted successfully.');
             }
         }
@@ -60,13 +65,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // Fetch job details
 $stmt = $conn->prepare("
-    SELECT j.*, c.company_name, c.logo_image, c.location AS company_location, c.website, c.industry, c.company_size, c.description AS company_description,
-           u.id AS client_user_id, u.username AS client_username, u.profile_image AS client_profile_image,
+    SELECT j.*, c.company_name, c.logo_image, c.location AS company_location, c.website, c.industry, c.company_size, c.description AS company_description, c.phone AS client_phone,
+           u.id AS client_user_id, u.username AS client_username, u.profile_image AS client_profile_image, u.email AS client_email,
            COALESCE(c.company_name, u.username) AS client_display_name
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
     JOIN users u ON c.user_id = u.id
-    WHERE j.id = ? AND j.status IN ('open', 'completed', 'position_filled')
+    WHERE j.id = ? AND j.status IN ('open', 'in_review', 'hired', 'in_progress', 'completed', 'cancelled', 'closed')
 ");
 $stmt->bind_param('i', $job_id);
 $stmt->execute();
@@ -113,16 +118,7 @@ $app = $st->get_result()->fetch_assoc();
 $my_status = $app ? $app['status'] : null;
 $st->close();
 
-// Check if job is already fully filled
-$is_assigned = false;
-$positions_filled = 0;
-$freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
-$st = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?");
-$st->bind_param('i', $job_id);
-$st->execute();
-$positions_filled = (int) $st->get_result()->fetch_assoc()['cnt'];
-$st->close();
-$is_assigned = $positions_filled >= $freelancers_needed;
+// No longer check positions_filled for $is_assigned, as we use actual job status
 
 // Total proposals
 $proposal_count = 0;
@@ -176,13 +172,13 @@ $is_urgent = $job['deadline'] && strtotime($job['deadline']) < strtotime('+7 day
 // Client stats
 $client_company_id = (int) $job['company_id'];
 
-$stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM jobs WHERE company_id = ?");
+$stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM jobs WHERE company_id = ? AND status IN ('open', 'in_review', 'hired', 'in_progress', 'completed', 'closed')");
 $stmt->bind_param('i', $client_company_id);
 $stmt->execute();
 $client_total_jobs = (int) $stmt->get_result()->fetch_assoc()['cnt'];
 $stmt->close();
 
-$stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.status = 'completed'");
+$stmt = $conn->prepare("SELECT COUNT(DISTINCT a.job_id) AS cnt FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.status NOT IN ('cancelled', 'rejected')");
 $stmt->bind_param('i', $client_company_id);
 $stmt->execute();
 $client_hired = (int) $stmt->get_result()->fetch_assoc()['cnt'];
@@ -489,11 +485,6 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <div class="flex-1 min-w-0">
                     <!-- Badges -->
                     <div class="flex items-center gap-2 flex-wrap mb-4">
-                        <?php $freelancers_needed = (int)($job['freelancers_needed'] ?? 1); ?>
-                        <span class="hero-badge" style="background:rgba(59,130,246,0.3);border-color:rgba(59,130,246,0.3)">
-                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                            Hiring: <?= $freelancers_needed ?> <?= $freelancers_needed === 1 ? 'person' : 'people' ?>
-                        </span>
                         <span class="hero-badge">
                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                             <?= e($job['category'] ?: 'General') ?>
@@ -504,16 +495,10 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <?= e(ucfirst($job['experience_level'])) ?>
                             </span>
                         <?php endif; ?>
-                        <?php if ($is_urgent): ?>
-                            <span class="hero-badge" style="background:rgba(239,68,68,0.3);border-color:rgba(239,68,68,0.3);animation:pulse 2s infinite">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                Urgent
-                            </span>
-                        <?php endif; ?>
-                        <?php if ($is_assigned): ?>
+                        <?php if ($job['status'] !== 'open'): ?>
                             <span class="hero-badge" style="background:rgba(245,158,11,0.3);border-color:rgba(245,158,11,0.3)">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                Filled
+                                <?= e(str_replace('_', ' ', ucfirst($job['status']))) ?>
                             </span>
                         <?php endif; ?>
                     </div>
@@ -689,53 +674,12 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </div>
                             <p class="text-xl font-extrabold" style="color:var(--color-text-primary)"><?= number_format($client_hired) ?></p>
-                            <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Jobs Hired</p>
+                            <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Freelancer Hired</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Applications -->
-                <div class="mb-5">
-                    <p class="applicants-section-label">
-                        <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                        Applications
-                    </p>
-                    <?php if ($applicant_count > 0): ?>
-                        <div class="applicant-stack">
-                            <?php
-                            $max_display = 5;
-                            $display_count = min($applicant_count, $max_display);
-                            for ($i = 0; $i < $display_count; $i++):
-                                $app = $applicants[$i];
-                                $app_img = profile_image_url($app['profile_image']);
-                                $app_name = $app['full_name'] ?: 'Freelancer';
-                                $initials = strtoupper(mb_substr($app_name, 0, 1));
-                            ?>
-                                <div class="applicant-avatar-wrap">
-                                    <?php if ($app_img): ?>
-                                        <a href="<?= e(base_url('freelancer/profile.php?id=' . $app['user_id'])) ?>">
-                                            <img src="<?= e($app_img) ?>" alt="<?= e($app_name) ?>" class="applicant-avatar" loading="lazy">
-                                        </a>
-                                    <?php else: ?>
-                                        <a href="<?= e(base_url('freelancer/profile.php?id=' . $app['user_id'])) ?>" class="applicant-initials" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
-                                            <?= $initials ?>
-                                        </a>
-                                    <?php endif; ?>
-                                    <span class="applicant-tooltip"><?= e($app_name) ?></span>
-                                </div>
-                            <?php endfor; ?>
-                            <?php if ($applicant_count > $max_display): ?>
-                                <span class="applicant-more">+<?= $applicant_count - $max_display ?></span>
-                            <?php endif; ?>
-                        </div>
-                        <p class="text-xs mt-2" style="color:var(--color-text-muted)"><?= number_format($proposal_count) ?> total post<?= $proposal_count !== 1 ? 's' : '' ?> submitted</p>
-                    <?php else: ?>
-                        <div class="no-applicants-msg">
-                            <svg class="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
-                            No applications yet
-                        </div>
-                    <?php endif; ?>
-                </div>
+
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <?php if ($job['company_location']): ?>
@@ -762,12 +706,39 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <span class="text-sm" style="color:var(--color-text-secondary)"><?= e($job['industry']) ?></span>
                         </div>
                     <?php endif; ?>
-                    <?php if ($job['company_size']): ?>
+                    <?php if ($job['client_email']): ?>
                         <div class="flex items-center gap-3 p-3 rounded-xl" style="background:var(--color-card-hover,rgba(0,0,0,0.03))">
                             <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background:rgba(99,102,241,0.1)">
-                                <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                                <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                             </div>
-                            <span class="text-sm" style="color:var(--color-text-secondary)"><?= e($job['company_size']) ?></span>
+                            <div>
+                                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-500 block mb-0.5">Email</span>
+                                <span class="text-sm" style="color:var(--color-text-secondary)"><?= e($job['client_email']) ?></span>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($job['client_phone'])): ?>
+                        <div class="flex items-center gap-3 p-3 rounded-xl col-span-1 sm:col-span-2" style="background:var(--color-card-hover,rgba(0,0,0,0.03))">
+                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(99,102,241,0.1)">
+                                <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-4 w-full">
+                                <div>
+                                    <span class="text-xs font-semibold uppercase tracking-wider text-indigo-500 block mb-0.5">Phone</span>
+                                    <span class="text-sm" style="color:var(--color-text-secondary)"><?= e($job['client_phone']) ?></span>
+                                </div>
+                                <a href="<?= e(base_url('chat/index.php?user_id=' . $job['client_user_id'])) ?>" class="btn-primary flex-shrink-0 text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer text-center" style="text-decoration:none; padding:6px 14px; border-radius: 8px;">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                                    Send Message
+                                </a>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <div class="col-span-1 sm:col-span-2 pt-2">
+                            <a href="<?= e(base_url('chat/index.php?user_id=' . $job['client_user_id'])) ?>" class="btn-primary text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer text-center" style="text-decoration:none; padding:8px 16px; border-radius: 8px;">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                                Send Message
+                            </a>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -779,29 +750,38 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 
             <!-- Apply Card -->
             <div class="glass-card p-6 sticky top-24">
-                <?php if ($is_assigned): ?>
-                    <div class="text-center py-6">
-                        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                            <svg class="w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                        </div>
-                        <p class="font-bold text-lg" style="color:var(--color-text-primary)">All Positions Filled</p>
-                        <p class="text-sm mt-1" style="color:var(--color-text-muted)">All <?= $freelancers_needed ?> position(s) for this job have been filled.</p>
-                    </div>
-                <?php elseif ($my_status): ?>
+                <?php if ($my_status): ?>
                     <div class="text-center py-6">
                         <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
                             <svg class="w-8 h-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         </div>
                         <p class="font-bold text-lg" style="color:var(--color-text-primary)">Applied!</p>
                         <p class="text-sm mt-1 mb-3" style="color:var(--color-text-muted)">You have already applied for this job.</p>
-                        <div class="inline-flex"><?= status_badge($my_status) ?></div>
+                        <div class="inline-flex gap-2"><?= status_badge($my_status) ?><?php if ($job['status'] !== 'open') echo status_badge($job['status']); ?></div>
+                    </div>
+                <?php elseif ($job['status'] !== 'open'): ?>
+                    <div class="text-center py-6">
+                        <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                            <svg class="w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 00-2-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        </div>
+                        <p class="font-bold text-lg capitalize" style="color:var(--color-text-primary)"><?= str_replace('_', ' ', $job['status']) ?></p>
+                        <p class="text-sm mt-1 mb-3" style="color:var(--color-text-muted)">This job is no longer accepting new applications.</p>
+                        <div class="inline-flex"><?= status_badge($job['status']) ?></div>
                     </div>
                 <?php else: ?>
-                    <button type="button" onclick="document.getElementById('applyModal').classList.remove('hidden')" class="btn-primary w-full text-base">
-                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                        Apply Now
-                    </button>
-                    <p class="text-xs text-center mt-3" style="color:var(--color-text-muted)">Submit your post for this job</p>
+                    <?php if (!$fl_freelancer_id): ?>
+                        <a href="<?= e(base_url('auth/login.php')) ?>" class="btn-primary w-full text-base inline-flex items-center justify-center gap-2 cursor-pointer text-center" style="text-decoration:none;">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+                            Login to Apply
+                        </a>
+                        <p class="text-xs text-center mt-3" style="color:var(--color-text-muted)">Please log in to submit your application</p>
+                    <?php else: ?>
+                        <button type="button" onclick="document.getElementById('applyModal').classList.remove('hidden')" class="btn-primary w-full text-base">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                            Apply Now
+                        </button>
+                        <p class="text-xs text-center mt-3" style="color:var(--color-text-muted)">Submit your post for this job</p>
+                    <?php endif; ?>
                 <?php endif; ?>
 
                 <!-- Apply Modal -->
@@ -895,15 +875,6 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             </div>
                         </div>
                         <?php endif; ?>
-                        <div class="detail-row">
-                            <div class="detail-icon" style="background:rgba(245,158,11,0.08)">
-                                <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="text-xs" style="color:var(--color-text-muted)">Positions</p>
-                                <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= $positions_filled ?>/<?= $freelancers_needed ?> filled</p>
-                            </div>
-                        </div>
                         <div class="detail-row">
                             <div class="detail-icon" style="background:rgba(99,102,241,0.08)">
                                 <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>

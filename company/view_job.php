@@ -48,17 +48,18 @@ while ($row = $sr->fetch_assoc()) { $apps[] = $row; $app_count++; }
 $st->close();
 
 // Assignment info
-$assignment = null;
+$assignments = [];
 $st = $conn->prepare("
     SELECT a.*, f.full_name, u.profile_image
     FROM assignments a
     JOIN freelancers f ON a.freelancer_id = f.id
     JOIN users u ON f.user_id = u.id
-    WHERE a.job_id = ?
+    WHERE a.job_id = ? AND a.status NOT IN ('rejected', 'cancelled')
 ");
 $st->bind_param('i', $job_id);
 $st->execute();
-$assignment = $st->get_result()->fetch_assoc();
+$assgn_r = $st->get_result();
+while ($row = $assgn_r->fetch_assoc()) { $assignments[] = $row; }
 $st->close();
 
 // Milestones
@@ -67,7 +68,9 @@ $ms_st = $conn->prepare("SELECT m.*, f.full_name AS assigned_freelancer FROM mil
 $ms_st->bind_param('i', $job_id);
 $ms_st->execute();
 $ms_r = $ms_st->get_result();
-while ($row = $ms_r->fetch_assoc()) { $milestones[] = $row; }
+while ($row = $ms_r->fetch_assoc()) { 
+    $milestones[] = $row;
+}
 $ms_st->close();
 
 // Company info
@@ -137,21 +140,17 @@ require __DIR__ . '/../includes/header.php';
             <div class="flex flex-wrap items-center gap-3">
                 <span class="vj-status vj-status-<?= $job['status'] ?>"><?= ucfirst(e($job['status'])) ?></span>
                 <?php
-                $freelancers_needed = (int) ($job['freelancers_needed'] ?? 1);
-                $hired_count = 0;
                 $active_count = 0;
-                $hc_st = $conn->prepare("SELECT COUNT(*) AS cnt, SUM(CASE WHEN status != 'completed' THEN 1 ELSE 0 END) AS active FROM assignments WHERE job_id = ?");
+                $hc_st = $conn->prepare("SELECT SUM(CASE WHEN status NOT IN ('completed', 'rejected', 'cancelled') THEN 1 ELSE 0 END) AS active FROM assignments WHERE job_id = ? AND status NOT IN ('rejected', 'cancelled')");
                 $hc_st->bind_param('i', $job_id);
                 $hc_st->execute();
                 $hc_row = $hc_st->get_result()->fetch_assoc();
-                $hired_count = (int) ($hc_row['cnt'] ?? 0);
                 $active_count = (int) ($hc_row['active'] ?? 0);
                 $hc_st->close();
-                $is_filled = $active_count >= $freelancers_needed;
+                $is_filled = $active_count >= 1;
                 ?>
                 <?php if ($job['status'] === 'approved'): ?>
                     <span style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:999px;font-size:0.75rem;font-weight:700;background:<?= $is_filled ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)' ?>;border:1px solid <?= $is_filled ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.15)' ?>"><?= $is_filled ? 'Filled' : 'Open' ?></span>
-                    <span style="font-size:0.75rem;color:rgba(255,255,255,0.6)"><?= $hired_count ?>/<?= $freelancers_needed ?> hired</span>
                 <?php endif; ?>
                 <?php if ($job['category']): ?>
                     <span style="background:rgba(255,255,255,0.15);padding:5px 14px;border-radius:999px;font-size:0.75rem;font-weight:600;"><?= e($job['category']) ?></span>
@@ -169,10 +168,7 @@ require __DIR__ . '/../includes/header.php';
             <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Budget (<?= ($job['payment_type'] ?? 'fixed') === 'fixed' ? 'Project Payment' : ucfirst(e($job['payment_type'] ?? 'fixed')) ?>)</p>
             <p style="font-size:1.5rem;font-weight:800;color:#2563eb"><?= e(number_format((float) $job['budget'], 2)) ?> MMK</p>
         </div>
-        <div class="vj-section" style="text-align:center;margin-bottom:0">
-            <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Positions</p>
-            <p style="font-size:1.5rem;font-weight:800;color:var(--color-text-primary)"><?= $hired_count ?>/<?= $freelancers_needed ?></p>
-        </div>
+
         <div class="vj-section" style="text-align:center;margin-bottom:0">
             <p style="font-size:0.75rem;color:var(--color-text-placeholder);margin-bottom:4px">Posts</p>
             <p style="font-size:1.5rem;font-weight:800;color:var(--color-text-primary)"><?= $app_count ?></p>
@@ -206,16 +202,28 @@ require __DIR__ . '/../includes/header.php';
             <p style="font-size:0.75rem;color:var(--color-text-muted);margin-bottom:0.75rem"><?= count($milestones) ?> milestone<?= count($milestones) !== 1 ? 's' : '' ?></p>
             <div class="space-y-2">
                 <?php foreach ($milestones as $ms): ?>
-                    <div class="preview-ms-item">
+                    <div class="preview-ms-item flex flex-col sm:flex-row gap-2 items-center">
                         <div class="flex-1 min-w-0">
                             <p style="font-size:0.8125rem;font-weight:600;color:var(--color-text-primary)"><?= e($ms['title']) ?></p>
-                            <?php if ($ms['assigned_freelancer']): ?>
-                                <p style="font-size:0.7rem;color:var(--color-text-muted)">Assigned to: <?= e($ms['assigned_freelancer']) ?></p>
+                            <?php if (!empty($ms['description'])): ?>
+                                <p style="font-size:0.75rem;color:var(--color-text-secondary);margin-top:2px;"><?= e($ms['description']) ?></p>
                             <?php endif; ?>
+                            <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                <?php if (!empty($ms['deadline'])): ?>
+                                    <p style="font-size:0.7rem;color:var(--color-text-muted);font-weight:600;">Deadline: <?= date('M j, Y, g:i A', strtotime($ms['deadline'])) ?></p>
+                                <?php endif; ?>
+                                <?php if (!empty($ms['assigned_freelancer'])): ?>
+                                    <p style="font-size:0.7rem;color:var(--color-text-muted)">Assigned to: <strong><?= e($ms['assigned_freelancer']) ?></strong></p>
+                                <?php endif; ?>
+                            </div>
                         </div>
                         <div class="text-right flex-shrink-0">
                             <p class="preview-ms-amount"><?= number_format((float) $ms['amount'], 2) ?> MMK</p>
-                            <p style="font-size:0.65rem;color:var(--color-text-muted);text-transform:capitalize"><?= e(ucfirst(str_replace('_', ' ', $ms['status']))) ?></p>
+                            <?php if ($ms['status'] === 'draft'): ?>
+                                <p style="font-size:0.65rem;color:var(--color-text-muted);text-transform:capitalize">Pending</p>
+                            <?php else: ?>
+                                <p style="font-size:0.65rem;color:var(--color-text-muted);text-transform:capitalize"><?= e(ucfirst(str_replace('_', ' ', $ms['status']))) ?></p>
+                            <?php endif; ?>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -283,21 +291,25 @@ require __DIR__ . '/../includes/header.php';
         </div>
     <?php endif; ?>
 
-    <!-- Assignment -->
-    <?php if ($assignment): ?>
+    <!-- Assignments -->
+    <?php if (!empty($assignments)): ?>
         <div class="vj-section" style="border-left:4px solid #059669">
-            <h3>Assigned Freelancer</h3>
-            <div class="vj-app-row" style="border:none;padding:0">
-                <?php if (!empty($assignment['profile_image'])): ?>
-                    <img src="<?= e(base_url('uploads/images/' . $assignment['profile_image'])) ?>" alt="" class="vj-app-avatar">
-                <?php else: ?>
-                    <div class="vj-app-initial"><?= e(strtoupper(substr($assignment['full_name'], 0, 1))) ?></div>
-                <?php endif; ?>
-                <div class="flex-1">
-                    <p class="font-semibold" style="color:var(--color-text-primary)"><?= e($assignment['full_name']) ?></p>
-                    <p style="font-size:0.75rem;color:var(--color-text-muted)">Status: <?= e(ucfirst($assignment['status'])) ?></p>
+            <h3>Assigned Freelancers</h3>
+            <div class="space-y-3">
+                <?php foreach ($assignments as $assn): ?>
+                <div class="vj-app-row" style="border-bottom:1px solid var(--color-border);padding-bottom:10px">
+                    <?php if (!empty($assn['profile_image'])): ?>
+                        <img src="<?= e(base_url('uploads/images/' . $assn['profile_image'])) ?>" alt="" class="vj-app-avatar">
+                    <?php else: ?>
+                        <div class="vj-app-initial"><?= e(strtoupper(substr($assn['full_name'], 0, 1))) ?></div>
+                    <?php endif; ?>
+                    <div class="flex-1">
+                        <p class="font-semibold" style="color:var(--color-text-primary)"><?= e($assn['full_name']) ?></p>
+                        <p style="font-size:0.75rem;color:var(--color-text-muted)">Status: <?= e(ucfirst($assn['status'])) ?></p>
+                    </div>
+                    <?= status_badge($assn['status']) ?>
                 </div>
-                <?= status_badge($assignment['status']) ?>
+                <?php endforeach; ?>
             </div>
         </div>
     <?php endif; ?>
@@ -332,10 +344,43 @@ require __DIR__ . '/../includes/header.php';
 
     <!-- Actions -->
     <div class="vj-actions">
-        <a href="<?= e(base_url('company/edit_job.php?id=' . $job_id)) ?>" class="vj-btn vj-btn-primary">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-            Edit Job
-        </a>
+        <?php if ($job['status'] === 'open'): ?>
+            <form action="<?= e(base_url('api/update_job_status.php')) ?>" method="POST" class="inline-block" onsubmit="return confirm('Mark this job as In Review? This will hide it from new applicants.');">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="job_id" value="<?= $job['id'] ?>">
+                <input type="hidden" name="status" value="in_review">
+                <button type="submit" class="vj-btn vj-btn-outline" style="color:#d97706;border-color:#fcd34d;">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    Mark as In Review
+                </button>
+            </form>
+        <?php endif; ?>
+        <?php if (!in_array($job['status'], ['completed', 'closed', 'cancelled'])): ?>
+            <form action="<?= e(base_url('api/update_job_status.php')) ?>" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to close this job?');">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="job_id" value="<?= $job['id'] ?>">
+                <input type="hidden" name="status" value="closed">
+                <button type="submit" class="vj-btn vj-btn-outline" style="color:#ef4444;border-color:#fca5a5;">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Close Job
+                </button>
+            </form>
+            <form action="<?= e(base_url('api/update_job_status.php')) ?>" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to cancel this project?');">
+                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                <input type="hidden" name="job_id" value="<?= $job['id'] ?>">
+                <input type="hidden" name="status" value="cancelled">
+                <button type="submit" class="vj-btn vj-btn-outline" style="color:#ef4444;border-color:#fca5a5;">
+                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                    Cancel Project
+                </button>
+            </form>
+        <?php endif; ?>
+        <?php if (!in_array($job['status'], ['completed', 'closed', 'cancelled'])): ?>
+            <a href="<?= e(base_url('company/edit_job.php?id=' . $job_id)) ?>" class="vj-btn vj-btn-primary">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                Edit Job
+            </a>
+        <?php endif; ?>
         <a href="<?= e(base_url('company/view_applications.php?id=' . $job_id)) ?>" class="vj-btn vj-btn-outline">
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             View Applications
@@ -346,5 +391,6 @@ require __DIR__ . '/../includes/header.php';
         </a>
     </div>
 </div>
+
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

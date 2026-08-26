@@ -39,14 +39,7 @@ $unread_total = get_unread_count($conn, $user_id);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($page_title) ?> - <?= e('FreelanceHub') ?></title>
-    <script>
-    (function(){
-        var t = localStorage.getItem('theme');
-        if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark');
-        }
-    })();
-    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
     tailwind.config = {
@@ -431,7 +424,26 @@ $unread_total = get_unread_count($conn, $user_id);
                         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/></svg>
                     </button>
                     <div id="convMenuDropdown" class="hidden absolute right-0 top-full mt-2 w-48 rounded-xl shadow-lg bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 z-50 overflow-hidden">
-                        <button type="button" onclick="deleteConversation()" class="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2">
+                        <?php if ($role === 'admin'): ?>
+                        <button type="button" onclick="generateTempPassword(<?= $other_id ?>)" class="w-full text-left px-4 py-3 text-sm text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                            Generate Temp Password
+                        </button>
+                        <?php endif; ?>
+                        <?php if ($role !== 'admin'): ?>
+                            <?php if (!empty($partner['is_blocked']) && !empty($partner['blocked_by_me'])): ?>
+                                <button type="button" onclick="showBlockModal('unblock')" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+                                    Unblock User
+                                </button>
+                            <?php else: ?>
+                                <button type="button" onclick="showBlockModal('block')" class="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                                    Block User
+                                </button>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                        <button type="button" onclick="showDeleteModal()" class="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                             Delete Conversation
                         </button>
@@ -455,35 +467,43 @@ $unread_total = get_unread_count($conn, $user_id);
                 </div>
             </div>
 
-            <div class="chat-input-area">
-                <form id="messageForm">
-                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                    <input type="hidden" name="receiver_id" value="<?= $other_id ?>">
-                    <div class="flex items-end gap-2">
-                        <button type="button" id="emojiBtn" class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style="color:var(--color-text-muted);background:none;border:none;cursor:pointer;" title="Emoji">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        </button>
-                        <button type="button" id="attachBtn" class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style="color:var(--color-text-muted);background:none;border:none;cursor:pointer;" title="Attach file">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                        </button>
-                        <input type="file" id="fileInput" name="attachment" style="display:none" accept="image/*,.pdf,.docx,.zip,.rar,.txt,.csv,.xlsx,.pptx">
-                        <div class="flex-1 min-w-0 flex flex-col relative">
-                            <div id="editModeIndicator" class="hidden flex items-center justify-between px-2 pb-1">
-                                <span class="text-xs font-medium text-indigo-600 dark:text-indigo-400">Editing message</span>
-                                <button type="button" onclick="cancelEdit()" class="text-xs text-gray-500 hover:text-red-500 transition-colors">Cancel</button>
-                            </div>
-                            <textarea id="messageInput" rows="1" placeholder="<?= e('Type a message...') ?>"
-                                class="w-full px-4 py-3 text-sm rounded-2xl resize-none focus:outline-none transition-all"
-                                style="max-height:120px; background:rgba(255,255,255,0.7); border:1px solid rgba(99,102,241,0.08); color:var(--color-text-primary); backdrop-filter:blur(8px);"
-                                oninput="autoResize(this)"></textarea>
-                        </div>
-                        <button type="submit" class="send-btn" id="sendBtn">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                        </button>
+            <?php if (!empty($partner['is_blocked'])): ?>
+                <div class="chat-input-area flex items-center justify-center p-4">
+                    <div class="text-sm font-medium px-4 py-2 rounded-xl text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30">
+                        You cannot send messages to this user.
                     </div>
-                </form>
-                <div id="filePreview" class="hidden mt-2"></div>
-            </div>
+                </div>
+            <?php else: ?>
+                <div class="chat-input-area">
+                    <form id="messageForm">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="receiver_id" value="<?= $other_id ?>">
+                        <div class="flex items-end gap-2">
+                            <button type="button" id="emojiBtn" class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style="color:var(--color-text-muted);background:none;border:none;cursor:pointer;" title="Emoji">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </button>
+                            <button type="button" id="attachBtn" class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors" style="color:var(--color-text-muted);background:none;border:none;cursor:pointer;" title="Attach file">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                            </button>
+                            <input type="file" id="fileInput" name="attachment" style="display:none" accept="image/*,.pdf,.docx,.zip,.rar,.txt,.csv,.xlsx,.pptx">
+                            <div class="flex-1 min-w-0 flex flex-col relative">
+                                <div id="editModeIndicator" class="hidden flex items-center justify-between px-2 pb-1">
+                                    <span class="text-xs font-medium text-indigo-600 dark:text-indigo-400">Editing message</span>
+                                    <button type="button" onclick="cancelEdit()" class="text-xs text-gray-500 hover:text-red-500 transition-colors">Cancel</button>
+                                </div>
+                                <textarea id="messageInput" rows="1" placeholder="<?= e('Type a message...') ?>"
+                                    class="w-full px-4 py-3 text-sm rounded-2xl resize-none focus:outline-none transition-all"
+                                    style="max-height:120px; background:rgba(255,255,255,0.7); border:1px solid rgba(99,102,241,0.08); color:var(--color-text-primary); backdrop-filter:blur(8px);"
+                                    oninput="autoResize(this)"></textarea>
+                            </div>
+                            <button type="submit" class="send-btn" id="sendBtn">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                            </button>
+                        </div>
+                    </form>
+                    <div id="filePreview" class="hidden mt-2"></div>
+                </div>
+            <?php endif; ?>
 
         <?php else: ?>
             <div class="empty-state">
@@ -512,10 +532,7 @@ $unread_total = get_unread_count($conn, $user_id);
             <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
             <span class="font-medium">Edit Message</span>
         </button>
-        <button onclick="triggerDelete()" class="flex items-center gap-3 w-full p-4 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-red-600">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-            <span class="font-medium">Delete Message</span>
-        </button>
+
         <button onclick="closeActionMenu()" class="mt-2 p-3 text-center text-sm font-medium w-full text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancel</button>
     </div>
 </div>
@@ -534,6 +551,30 @@ $unread_total = get_unread_count($conn, $user_id);
             <span class="font-medium">Delete Conversation</span>
         </button>
         <button onclick="closeListActionMenu()" class="mt-2 p-3 text-center text-sm font-medium w-full text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancel</button>
+    </div>
+</div>
+
+<div id="deleteModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="hideDeleteModal()"></div>
+    <div class="relative bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Delete Conversation</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">Delete this conversation? All chat history with this user will be removed from your messages.</p>
+        <div class="flex items-center gap-3 justify-end">
+            <button type="button" onclick="hideDeleteModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Cancel</button>
+            <button type="button" onclick="confirmDeleteConversation()" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors">Delete Conversation</button>
+        </div>
+    </div>
+</div>
+
+<div id="blockModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="hideBlockModal()"></div>
+    <div class="relative bg-white dark:bg-slate-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-2" id="blockModalTitle">Block User</h3>
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-6" id="blockModalText">Are you sure you want to block this user?</p>
+        <div class="flex items-center gap-3 justify-end">
+            <button type="button" onclick="hideBlockModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">Cancel</button>
+            <button type="button" onclick="confirmBlockUser()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors" id="blockModalBtn">Block User</button>
+        </div>
     </div>
 </div>
 
@@ -1023,29 +1064,18 @@ $unread_total = get_unread_count($conn, $user_id);
         autoResize(input);
     };
 
-    window.triggerDelete = function() {
-        if (!actionMenuTargetId) return;
-        var target = actionMenuTargetId;
-        closeActionMenu();
-        if (!confirm('Are you sure you want to delete this message? It will be deleted for everyone.')) return;
-        
-        fetch('<?= e(base_url('api/chat.php')) ?>', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: JSON.stringify({ action: 'delete_message', message_id: target, csrf_token: csrfToken })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) {
-                loadMessages(false);
-            } else {
-                showInlineError(data.error || 'Failed to delete message');
-            }
-        });
+    window.showDeleteModal = function() {
+        if (document.getElementById('convMenuDropdown')) {
+            document.getElementById('convMenuDropdown').classList.add('hidden');
+        }
+        document.getElementById('deleteModal').classList.remove('hidden');
     };
 
-    window.deleteConversation = function() {
-        if (!confirm('Are you sure you want to delete this conversation? It will be cleared for you only.')) return;
+    window.hideDeleteModal = function() {
+        document.getElementById('deleteModal').classList.add('hidden');
+    };
+
+    window.confirmDeleteConversation = function() {
         fetch('<?= e(base_url('api/chat.php')) ?>', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -1055,6 +1085,48 @@ $unread_total = get_unread_count($conn, $user_id);
         .then(function(data) {
             if (data.success) {
                 window.location.href = '<?= e(base_url('chat/index.php')) ?>';
+            } else {
+                alert('Error deleting conversation.');
+            }
+        });
+    };
+    
+    var currentBlockAction = 'block';
+    
+    window.showBlockModal = function(action) {
+        if (document.getElementById('convMenuDropdown')) {
+            document.getElementById('convMenuDropdown').classList.add('hidden');
+        }
+        currentBlockAction = action;
+        if (action === 'unblock') {
+            document.getElementById('blockModalTitle').textContent = 'Unblock User';
+            document.getElementById('blockModalText').textContent = 'Are you sure you want to unblock this user?';
+            document.getElementById('blockModalBtn').textContent = 'Unblock User';
+        } else {
+            document.getElementById('blockModalTitle').textContent = 'Block User';
+            document.getElementById('blockModalText').textContent = 'Are you sure you want to block this user? You will not be able to send or receive messages.';
+            document.getElementById('blockModalBtn').textContent = 'Block User';
+        }
+        document.getElementById('blockModal').classList.remove('hidden');
+    };
+
+    window.hideBlockModal = function() {
+        document.getElementById('blockModal').classList.add('hidden');
+    };
+
+    window.confirmBlockUser = function() {
+        var apiAction = currentBlockAction === 'block' ? 'block_user' : 'unblock_user';
+        fetch('<?= e(base_url('api/chat.php')) ?>', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ action: apiAction, partner_id: otherUserId, csrf_token: csrfToken })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Error processing request.');
             }
         });
     };
@@ -1182,7 +1254,8 @@ $unread_total = get_unread_count($conn, $user_id);
         if (!window.listActionTargetId) return;
         var target = window.listActionTargetId;
         closeListActionMenu();
-        if (!confirm('Delete this entire conversation?')) return;
+        
+        if (!confirm('Delete this conversation? All chat history with this user will be removed from your messages.')) return;
         
         var csrf = '<?= e(csrf_token()) ?>';
         fetch('<?= e(base_url('api/chat.php')) ?>', {
@@ -1201,6 +1274,70 @@ $unread_total = get_unread_count($conn, $user_id);
             }
         });
     };
+
+    window.generateTempPassword = function(userId) {
+        var csrf = '<?= e(csrf_token()) ?>';
+        fetch('<?= e(base_url('admin/api_recovery.php')) ?>', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ action: 'generate_temp_password', user_id: userId, csrf_token: csrf })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showTempPasswordModal(userId, data.temp_password, csrf);
+            } else {
+                alert('Error: ' + (data.error || 'Failed to generate temporary password'));
+            }
+        }).catch(function(err) {
+            alert('Error generating temporary password.');
+        });
+    };
+
+    function showTempPasswordModal(userId, tempPassword, csrf) {
+        var existing = document.getElementById('tempPwdModal');
+        if (existing) existing.remove();
+
+        var modal = document.createElement('div');
+        modal.id = 'tempPwdModal';
+        modal.className = 'fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4';
+        modal.innerHTML = `
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-sm p-6">
+                <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">Temporary Password Generated</h3>
+                <div class="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg mb-4 text-center select-all cursor-text border border-slate-200 dark:border-slate-700">
+                    <span class="font-mono text-xl text-indigo-600 dark:text-indigo-400 font-bold" id="tempPwdText">${tempPassword}</span>
+                </div>
+                <p class="text-xs text-slate-500 mb-6 text-center text-red-500 font-semibold">Please communicate this to the user manually.</p>
+                <div class="flex flex-col gap-2">
+                    <button type="button" id="copyPwdBtn" class="w-full px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-colors shadow-sm shadow-indigo-600/20">
+                        Copy Password
+                    </button>
+                    <button type="button" id="closePwdBtn" class="w-full px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 rounded-lg font-medium transition-colors mt-2">
+                        Done
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById('copyPwdBtn').onclick = function() {
+            navigator.clipboard.writeText(tempPassword).then(function() {
+                var btn = document.getElementById('copyPwdBtn');
+                var orig = btn.innerText;
+                btn.innerText = 'Copied!';
+                setTimeout(function() { btn.innerText = orig; }, 2000);
+            });
+        };
+
+        document.getElementById('closePwdBtn').onclick = function() {
+            modal.remove();
+            if (typeof window.loadMessages === 'function') {
+                window.loadMessages();
+            } else {
+                window.location.reload();
+            }
+        };
+    }
 })();
 </script>
 <?php if ($role !== 'admin'): ?>

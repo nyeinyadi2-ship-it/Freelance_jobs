@@ -94,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf() && $has_status_col) {
                     $notif_msg = 'Your account has been reactivated.';
                     $notif_type = 'account_activated';
                 }
-                create_notification($conn, $user_id, $notif_type, $notif_msg, $link);
+                create_notification($conn, $user_id, $notif_type, $notif_msg, $link, $admin_id);
 
                 // Clear cached status if we're somehow modifying our own (rare for admin, but safe)
                 if ($user_id === $_SESSION['user_id']) {

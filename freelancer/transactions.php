@@ -22,6 +22,7 @@ if ($freelancer_id === 0) {
 $transactions = [];
 $stmt = $conn->prepare("
     SELECT p.id as payment_id, p.amount, p.paid_at as created_at, p.status, p.transaction_slip,
+           p.payment_method, p.transaction_reference,
            c.company_name, j.title as job_title, m.title as ms_title
     FROM payments p
     LEFT JOIN companies c ON p.company_id = c.id
@@ -60,8 +61,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <tr class="border-b dark:border-gray-700 text-gray-500">
                         <th class="py-3 px-4 font-medium">Date</th>
                         <th class="py-3 px-4 font-medium">Project</th>
-                        <th class="py-3 px-4 font-medium">Name</th>
+                        <th class="py-3 px-4 font-medium">Milestone</th>
+                        <th class="py-3 px-4 font-medium">Payment Method</th>
                         <th class="py-3 px-4 text-right font-medium">Amount</th>
+                        <th class="py-3 px-4 font-medium">Transaction ID</th>
                         <th class="py-3 px-4 font-medium">View Slip</th>
                     </tr>
                 </thead>
@@ -75,10 +78,16 @@ require_once __DIR__ . '/../includes/header.php';
                                 <span class="text-sm text-gray-900 dark:text-gray-100 font-medium"><?= e($t['job_title'] ?? 'Unknown Project') ?></span>
                             </td>
                             <td class="py-3 px-4">
-                                <span class="text-sm text-gray-900 dark:text-gray-100"><?= e($t['company_name'] ?? 'Unknown') ?></span>
+                                <span class="text-sm text-gray-900 dark:text-gray-100"><?= e($t['ms_title'] ?? 'N/A') ?></span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="text-sm text-gray-900 dark:text-gray-100"><?= e($t['payment_method'] ?? 'N/A') ?></span>
                             </td>
                             <td class="py-3 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
                                 +<?= number_format((float) $t['amount'], 2) ?> MMK
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="text-sm font-mono text-gray-900 dark:text-gray-100"><?= e($t['transaction_reference'] ?? 'N/A') ?></span>
                             </td>
                             <td class="py-3 px-4">
                                 <?php if (!empty($t['transaction_slip']) && !empty($t['payment_id'])): ?>

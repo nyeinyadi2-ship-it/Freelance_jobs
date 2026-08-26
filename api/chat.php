@@ -167,6 +167,13 @@ if ($method === 'POST') {
             exit;
         }
 
+        $partner = get_partner_info($conn, $user_id, $receiver_id);
+        if ($partner && !empty($partner['is_blocked'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'You cannot send messages to this user']);
+            exit;
+        }
+
         // If file present, auto-set message_type to 'file'
         if (!empty($_FILES['attachment'])) {
             $message_type = 'file';
@@ -272,24 +279,23 @@ if ($method === 'POST') {
         exit;
     }
 
-    if ($action === 'delete_message') {
-        $msg_id = (int) ($input['message_id'] ?? 0);
-        if ($msg_id <= 0) {
+    if ($action === 'block_user' || $action === 'unblock_user') {
+        $partner_id = (int) ($input['partner_id'] ?? 0);
+        if ($partner_id <= 0) {
             http_response_code(400);
             echo json_encode(['error' => 'Invalid data']);
             exit;
         }
-        $stmt = $conn->prepare("UPDATE messages SET is_deleted = 1 WHERE id = ? AND sender_id = ?");
-        $stmt->bind_param('ii', $msg_id, $user_id);
+        
+        $meta = json_encode(['action' => ($action === 'block_user' ? 'block' : 'unblock')]);
+        $msg_text = ($action === 'block_user' ? 'User blocked' : 'User unblocked');
+        
+        $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message, message_type, message_meta) VALUES (?, ?, ?, 'system', ?)");
+        $stmt->bind_param('iiss', $user_id, $partner_id, $msg_text, $meta);
         $stmt->execute();
-        $affected = $stmt->affected_rows;
         $stmt->close();
-        if ($affected > 0) {
-            echo json_encode(['success' => true]);
-        } else {
-            http_response_code(403);
-            echo json_encode(['error' => 'Cannot delete this message']);
-        }
+        
+        echo json_encode(['success' => true]);
         exit;
     }
 

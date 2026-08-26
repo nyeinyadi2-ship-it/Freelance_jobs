@@ -3,7 +3,7 @@ require_once __DIR__ . '/config/db.php';
 
 // Fix jobs that were incorrectly marked as completed
 $sql = "SELECT j.id, j.status, j.freelancers_needed, 
-        (SELECT COUNT(*) FROM assignments WHERE job_id = j.id) AS total_assigned,
+        (SELECT COUNT(*) FROM assignments WHERE job_id = j.id AND status NOT IN ('rejected', 'cancelled')) AS total_assigned,
         (SELECT COUNT(*) FROM assignments WHERE job_id = j.id AND status = 'completed') AS done_assigned
         FROM jobs j WHERE j.status = 'completed'";
 

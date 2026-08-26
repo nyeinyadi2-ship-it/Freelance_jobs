@@ -91,7 +91,7 @@ if (!$mime) {
 
 header('Content-Description: File Transfer');
 header('Content-Type: ' . $mime);
-header('Content-Disposition: attachment; filename="' . basename($ms['submission_file']) . '"');
+header('Content-Disposition: attachment; filename="' . basename($file_name) . '"');
 header('Content-Transfer-Encoding: binary');
 header('Expires: 0');
 header('Cache-Control: must-revalidate, post-check=0, pre-check=0');

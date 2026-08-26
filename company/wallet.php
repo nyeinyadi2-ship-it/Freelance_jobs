@@ -49,7 +49,7 @@ $stmt->bind_param('i', $user['user_id']);
 $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
 $stmt->close();
-$total_balance = (float)($row['available_balance'] ?? 0);
+$total_balance = max(0, (float)($row['available_balance'] ?? 0));
 
 // Fetch transaction history
 $transactions = [];
@@ -124,16 +124,23 @@ require_once __DIR__ . '/../includes/header.php';
                     </thead>
                     <tbody class="divide-y dark:divide-gray-700">
                         <?php foreach ($transactions as $t): 
-                            $is_payment = in_array($t['type'], ['payment', 'funding']) && $t['sender_id'] == $user['user_id'];
+                            $is_funding = $t['type'] === 'funding';
+                            $is_payment = $t['type'] === 'payment' && $t['sender_id'] == $user['user_id'];
                             $is_credit = in_array($t['type'], ['deposit', 'refund']) && !$is_payment;
                             
                             $sign = $is_credit ? '+' : '-';
                             $color = $is_credit ? 'text-emerald-800 dark:text-emerald-300' : 'text-red-800 dark:text-red-300';
                             $bg = $is_credit ? 'bg-emerald-100 dark:bg-emerald-500/20' : 'bg-red-100 dark:bg-red-500/20';
                             
-                            $label = ucwords(str_replace('_', ' ', $t['type']));
-                            if ($t['type'] === 'funding') $label = 'Fund Milestone';
-                            elseif ($is_payment) $label = 'Payment to Freelancer';
+                            if ($is_funding) {
+                                $sign = '';
+                                $color = 'text-gray-600 dark:text-gray-400';
+                                $bg = 'bg-gray-100 dark:bg-gray-700/50';
+                                $label = 'Start Milestone';
+                            } else {
+                                $label = ucwords(str_replace('_', ' ', $t['type']));
+                                if ($is_payment) $label = 'Payment to Freelancer';
+                            }
                         ?>
                             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                 <td class="py-3 px-4">
@@ -146,7 +153,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     </span>
                                 </td>
                                 <td class="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
-                                    <?= $is_payment ? e($t['freelancer_name'] ?? 'Unknown') : '-' ?>
+                                    <?= ($is_payment || $is_funding) ? e($t['freelancer_name'] ?? 'Unknown') : '-' ?>
                                 </td>
                                 <td class="py-3 px-4 text-sm text-gray-900 dark:text-gray-100">
                                     <?php if ($t['job_title']): ?>
@@ -159,10 +166,12 @@ require_once __DIR__ . '/../includes/header.php';
                                     <?php endif; ?>
                                 </td>
                                 <td class="py-3 px-4">
-                                    <div class="font-bold <?= $color ?>">
-                                        <?= $sign ?><?= number_format($t['amount'], 2) ?> MMK
+                                    <div class="text-sm font-bold <?= $color ?>">
+                                        <?= $is_funding ? '0.00 MMK' : $sign . number_format((float)$t['amount'], 2) . ' MMK' ?>
                                     </div>
-                                    <?php if ($is_payment && !empty($t['transaction_slip']) && !empty($t['payment_id'])): ?>
+                                    <?php if ($is_funding): ?>
+                                        <div class="text-xs text-gray-500 font-medium mt-0.5">No Deduction</div>
+                                    <?php elseif ($is_payment && !empty($t['transaction_slip']) && !empty($t['payment_id'])): ?>
                                         <div class="mt-2">
                                             <a href="<?= base_url('api/view_slip.php?payment_id=' . $t['payment_id']) ?>" target="_blank" class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
                                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>

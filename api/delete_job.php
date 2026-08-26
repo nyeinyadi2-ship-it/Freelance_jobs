@@ -35,21 +35,34 @@ if (!$job) {
     redirect('company/manage_jobs.php');
 }
 
-// Safely handle jobs with applications/assignments to prevent breaking existing data
-$stmt = $conn->prepare("
-    SELECT 
-        (SELECT COUNT(*) FROM job_applications WHERE job_id = ?) as apps,
-        (SELECT COUNT(*) FROM assignments WHERE job_id = ?) as assignments
-");
-$stmt->bind_param('ii', $job_id, $job_id);
-$stmt->execute();
-$counts = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+    // Safely handle jobs with applications/assignments to prevent breaking existing data
+    $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM job_applications WHERE job_id = ?");
+    $stmt->bind_param('i', $job_id);
+    $stmt->execute();
+    $apps_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+    $stmt->close();
+    
+    $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM assignments WHERE job_id = ?");
+    $stmt->bind_param('i', $job_id);
+    $stmt->execute();
+    $assignments_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+    $stmt->close();
 
-if ($counts['apps'] > 0 || $counts['assignments'] > 0) {
+if ($apps_count > 0 || $assignments_count > 0) {
     set_flash('error', 'Cannot delete this job because it has existing applications or assignments. Please close the job instead to preserve records.');
     redirect('company/manage_jobs.php');
 }
+
+// Proceed to delete related records first to avoid foreign key constraints
+$stmt = $conn->prepare("DELETE FROM job_skills WHERE job_id = ?");
+$stmt->bind_param('i', $job_id);
+$stmt->execute();
+$stmt->close();
+
+$stmt = $conn->prepare("DELETE FROM milestones WHERE job_id = ?");
+$stmt->bind_param('i', $job_id);
+$stmt->execute();
+$stmt->close();
 
 // Proceed to delete the job
 $stmt = $conn->prepare("DELETE FROM jobs WHERE id = ?");

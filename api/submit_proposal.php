@@ -14,7 +14,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verify_csrf()) {
 $user = current_user();
 $freelancer_id = get_freelancer_id($conn, (int) $user['user_id']);
 $proposal_id = (int) ($_POST['proposal_id'] ?? 0);
-$github_link = trim($_POST['github_link'] ?? '');
 $comment = trim($_POST['comment'] ?? '');
 
 if (!$freelancer_id || $proposal_id <= 0) {
@@ -22,7 +21,7 @@ if (!$freelancer_id || $proposal_id <= 0) {
     redirect('freelancer/dashboard.php');
 }
 
-$stmt = $conn->prepare("SELECT p.id, p.company_id, p.status, p.deadline, j.title FROM proposal_projects p JOIN jobs j ON p.job_id = j.id WHERE p.id = ? AND p.freelancer_id = ? AND p.status = 'accepted'");
+$stmt = $conn->prepare("SELECT p.id, p.company_id, p.status, p.deadline, j.title FROM proposal_projects p JOIN jobs j ON p.job_id = j.id WHERE p.id = ? AND p.freelancer_id = ? AND p.status = 'in_progress'");
 $stmt->bind_param('ii', $proposal_id, $freelancer_id);
 $stmt->execute();
 $proposal = $stmt->get_result()->fetch_assoc();
@@ -36,7 +35,7 @@ if ($proposal && !empty($proposal['deadline'])) {
 }
 
 if (!$proposal) {
-    set_flash('error', 'Post not found or not in accepted state.');
+    set_flash('error', 'Post not found or not in progress.');
     redirect("freelancer/view_proposal.php?id=$proposal_id");
 }
 
@@ -51,18 +50,16 @@ if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
         set_flash('error', 'Failed to upload file: ' . $upload_err);
         redirect("freelancer/view_proposal.php?id=$proposal_id");
     }
-}
-
-if (empty($github_link) && empty($file_path) && empty($comment)) {
-    set_flash('error', 'Please provide a file, a link, or a comment.');
+} else {
+    set_flash('error', 'Please upload your completed work before submitting the Trial Task.');
     redirect("freelancer/view_proposal.php?id=$proposal_id");
 }
 
 $stmt = $conn->prepare("
-    INSERT INTO proposal_project_submissions (proposal_project_id, freelancer_id, file, github_link, comment)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO proposal_project_submissions (proposal_project_id, freelancer_id, file, comment)
+    VALUES (?, ?, ?, ?)
 ");
-$stmt->bind_param('iisss', $proposal_id, $freelancer_id, $file_path, $github_link, $comment);
+$stmt->bind_param('iiss', $proposal_id, $freelancer_id, $file_path, $comment);
 
 if ($stmt->execute()) {
     // Update proposal status to 'submitted'
@@ -82,7 +79,7 @@ if ($stmt->execute()) {
 
     set_flash('success', 'Your trial task has been submitted successfully.');
 } else {
-    set_flash('error', 'Could not submit assignment.');
+    set_flash('error', 'Could not submit trial task.');
 }
 $stmt->close();
 

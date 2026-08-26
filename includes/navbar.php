@@ -25,24 +25,25 @@ $base = base_url('');
 $home_links = [];
 if ($role === 'company') {
     $home_links = [
-        ['label' => 'Home', 'href' => base_url('index.php'), 'anchor' => ''],
-        ['label' => 'Find Freelancers', 'href' => base_url('company/find_freelancers.php'), 'anchor' => 'find_freelancers'],
-        ['label' => 'My Jobs', 'href' => base_url('company/manage_jobs.php'), 'anchor' => 'manage_jobs'],
-        ['label' => 'About', 'href' => base_url('company/about.php'), 'anchor' => 'about'],
+        ['label' => 'Home',            'href' => base_url('index.php'),                          'anchor' => ''],
+        ['label' => 'Find Freelancers', 'href' => base_url('company/find_freelancers.php'),       'anchor' => 'find_freelancers'],
+        ['label' => 'My Freelancers',   'href' => base_url('company/my_freelancers.php'),         'anchor' => 'my_freelancers'],
+        ['label' => 'My Jobs',          'href' => base_url('company/manage_jobs.php'),            'anchor' => 'manage_jobs'],
+        ['label' => 'About',            'href' => base_url('about.php'),                  'anchor' => 'about'],
     ];
 } elseif ($role === 'freelancer') {
     $home_links = [
         ['label' => 'Home', 'href' => base_url('index.php'), 'anchor' => ''],
         ['label' => 'Find Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'anchor' => 'find-jobs'],
         ['label' => 'Freelancers', 'href' => base_url('company/find_freelancers.php'), 'anchor' => 'find_freelancers'],
-        ['label' => 'About', 'href' => base_url('index.php'), 'anchor' => ''],
+        ['label' => 'About', 'href' => base_url('about.php'), 'anchor' => ''],
     ];
 } else {
     $home_links = [
-        ['label' => 'Home', 'href' => $is_home ? '#' : base_url('index.php'), 'anchor' => ''],
-        ['label' => 'Find Jobs', 'href' => $is_home ? '#find-jobs' : base_url('index.php#find-jobs'), 'anchor' => 'find-jobs'],
-        ['label' => 'Freelancers', 'href' => $is_home ? '#freelancers' : base_url('index.php#freelancers'), 'anchor' => 'freelancers'],
-        ['label' => 'About', 'href' => $is_home ? '#why-us' : base_url('index.php#why-us'), 'anchor' => 'why-us'],
+        ['label' => 'Home', 'href' => base_url('index.php'), 'anchor' => ''],
+        ['label' => 'Find Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'anchor' => 'find-jobs'],
+        ['label' => 'Freelancers', 'href' => base_url('company/find_freelancers.php'), 'anchor' => 'freelancers'],
+        ['label' => 'About', 'href' => base_url('about.php'), 'anchor' => 'about'],
     ];
 }
 
@@ -64,10 +65,11 @@ $role_links = [];
 if ($is_logged_in) {
     if ($role === 'company') {
         $role_links = [
-            ['label' => 'Dashboard', 'href' => base_url('company/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
-            ['label' => 'Post Job', 'href' => base_url('company/post_job.php'), 'icon' => 'plus', 'page' => 'post_job'],
-            ['label' => 'My Jobs', 'href' => base_url('company/manage_jobs.php'), 'icon' => 'briefcase', 'page' => 'manage_jobs'],
-            ['label' => 'Wallet', 'href' => base_url('company/wallet.php'), 'icon' => 'credit-card', 'page' => 'wallet'],
+            ['label' => 'Dashboard', 'href' => base_url('company/dashboard.php'),           'icon' => 'home',          'page' => 'dashboard'],
+            ['label' => 'Post Job',  'href' => base_url('company/post_job.php'),            'icon' => 'plus',          'page' => 'post_job'],
+            ['label' => 'My Jobs',   'href' => base_url('company/manage_jobs.php'),         'icon' => 'briefcase',     'page' => 'manage_jobs'],
+            ['label' => 'My Freelancers', 'href' => base_url('company/my_freelancers.php'), 'icon' => 'user-group',    'page' => 'my_freelancers'],
+            ['label' => 'Wallet',    'href' => base_url('company/wallet.php'),              'icon' => 'credit-card',   'page' => 'wallet'],
         ];
     } elseif ($role === 'freelancer') {
         $role_links = [
@@ -76,7 +78,6 @@ if ($is_logged_in) {
             ['label' => 'My Tasks', 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
             ['label' => 'Trial Task', 'href' => base_url('freelancer/test_assignments.php'), 'icon' => 'document-text', 'page' => 'test_assignments'],
             ['label' => 'Transactions', 'href' => base_url('freelancer/transactions.php'), 'icon' => 'document-text', 'page' => 'transactions'],
-            ['label' => 'Payment Info', 'href' => base_url('freelancer/payment_settings.php'), 'icon' => 'credit-card', 'page' => 'payment_settings'],
         ];
     }
 }
@@ -362,6 +363,7 @@ if ($is_logged_in) {
                     if ($role === 'company') {
                         if ($i === 0 && in_array($pc, ['index'])) $active = true;
                         elseif ($link['anchor'] === 'find_freelancers' && $pc === 'find_freelancers') $active = true;
+                        elseif ($link['anchor'] === 'my_freelancers' && $pc === 'my_freelancers') $active = true;
                         elseif ($link['anchor'] === 'manage_jobs' && in_array($pc, ['manage_jobs', 'post_job', 'edit_job', 'view_job', 'view_applications'])) $active = true;
                         elseif ($link['anchor'] === 'about' && $pc === 'about') $active = true;
                     } else {
@@ -387,7 +389,7 @@ if ($is_logged_in) {
                             <span class="font-semibold text-[13px]" style="color:#1e293b">Browse by Skill</span>
                         </div>
                         <?php foreach ($nav_skills as $sk): ?>
-                            <a href="<?= e(base_url('freelancer/skill_jobs.php?skill=' . urlencode($sk['skill_name']))) ?>" class="di">
+                            <a href="<?= e(base_url('freelancer/skill_jobs.php?id=' . $sk['id'])) ?>" class="di">
                                 <svg class="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
                                 <?= e($sk['skill_name']) ?>
                             </a>
@@ -438,9 +440,22 @@ if ($is_logged_in) {
                                 <?php else: ?>
                                     <?php foreach ($recent_notifications as $n): ?>
                                         <div class="notification-item flex items-start gap-2.5 px-3.5 py-3 transition-colors <?= $n['is_read'] ? '' : 'bg-indigo-50/50 dark:bg-indigo-900/15' ?>" style="border-bottom:1px solid rgba(0,0,0,.03)" data-id="<?= (int) $n['id'] ?>">
-                                            <div class="mt-0.5 flex-shrink-0"><?= notification_icon($n['type']) ?></div>
+                                            <?php if (!empty($n['sender_name'])): ?>
+                                                <div class="mt-0.5 flex-shrink-0">
+                                                    <?php if (!empty($n['sender_image'])): ?>
+                                                        <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-7 h-7 rounded-full object-cover">
+                                                    <?php else: ?>
+                                                        <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="mt-0.5 flex-shrink-0"><?= notification_icon($n['type']) ?></div>
+                                            <?php endif; ?>
                                             <div class="flex-1 min-w-0">
                                                 <a href="<?= e($n['link'] ? base_url($n['link']) : base_url('notifications.php')) ?>" class="block notif-link" data-id="<?= (int) $n['id'] ?>" data-csrf="<?= e(csrf_token()) ?>" data-url="<?= e($n['link'] ? base_url($n['link']) : base_url('notifications.php')) ?>">
+                                                    <?php if (!empty($n['sender_name'])): ?>
+                                                        <p class="text-[12.5px] font-semibold text-gray-900 dark:text-white mb-0.5"><?= e($n['sender_name']) ?></p>
+                                                    <?php endif; ?>
                                                     <p class="text-[12.5px] leading-relaxed <?= $n['is_read'] ? '' : 'font-medium' ?>" style="color:<?= $n['is_read'] ? '#94a3b8' : '#1e293b' ?>"><?= e($n['message']) ?></p>
                                                     <p class="text-[10.5px] mt-0.5" style="color:#cbd5e1"><?= e($n['created_at']) ?></p>
                                                 </a>
@@ -457,15 +472,6 @@ if ($is_logged_in) {
                         </div>
                     </div>
 
-                    <!-- Theme -->
-                    <button id="theme-toggle" type="button" class="ni" aria-label="Toggle theme">
-                        <svg class="w-[18px] h-[18px] dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                        </svg>
-                        <svg class="w-[18px] h-[18px] hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                        </svg>
-                    </button>
 
                     <!-- Divider -->
                     <div class="w-px h-5 mx-1 hidden sm:block" style="background:rgba(0,0,0,.07)"></div>
@@ -511,6 +517,9 @@ if ($is_logged_in) {
                                             </svg>
                                         <?php elseif ($rl['icon'] === 'search'): ?><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                        <?php elseif ($rl['icon'] === 'user-group'): ?><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
                                         <?php elseif ($rl['icon'] === 'clipboard'): ?><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -634,14 +643,6 @@ if ($is_logged_in) {
             }
         });
 
-        /* ===== Theme toggle ===== */
-        var themeToggle = document.getElementById('theme-toggle');
-        if (themeToggle) {
-            themeToggle.addEventListener('click', function() {
-                document.documentElement.classList.toggle('dark');
-                localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-            });
-        }
 
         /* ===== Notification: mark all read ===== */
         document.querySelectorAll('.notification-mark-all').forEach(function(btn) {

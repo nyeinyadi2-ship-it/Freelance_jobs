@@ -15,11 +15,11 @@ $types = 'ii';
 $sql = "SELECT j.id,j.title,j.status,
         c.company_name,
         (SELECT ja.status FROM job_applications ja WHERE ja.job_id=j.id AND ja.freelancer_id=?) AS my_status,
-        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id AND a.status != 'completed') AS assigned_count,
+        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id AND a.status NOT IN ('rejected', 'cancelled')) AS assigned_count,
         (SELECT GROUP_CONCAT(s.skill_name SEPARATOR ',') FROM job_skills js2 JOIN skills s ON js2.skill_id = s.id WHERE js2.job_id = j.id) AS skills_concat
         FROM jobs j JOIN companies c ON j.company_id=c.id
         JOIN job_skills js ON js.job_id = j.id
-        WHERE j.status IN ('open', 'position_filled') AND j.category != 'Direct Hire' AND js.skill_id = ?
+        WHERE j.status IN ('open', 'in_review') AND j.category != 'Direct Hire' AND js.skill_id = ?
         ORDER BY j.created_at DESC";
 
 $st = $conn->prepare($sql);

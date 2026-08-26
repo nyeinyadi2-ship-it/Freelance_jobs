@@ -1,17 +1,30 @@
 <?php
 $page_title = 'Skill Jobs';
-require __DIR__ . '/../includes/freelancer_init.php';
+$public_access = true;
 
-$skill_name = trim(urldecode($_GET['skill'] ?? ''));
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../config/notifications.php';
 
-if ($skill_name === '') {
+$user = current_user();
+$fl_user = null;
+$fl_freelancer_id = 0;
+if ($user && ($user['role'] ?? '') === 'freelancer') {
+    $fl_user = $user;
+    $fl_freelancer_id = get_freelancer_id($conn, (int)$user['user_id']);
+}
+
+$skill_id = (int) ($_GET['id'] ?? 0);
+
+if ($skill_id <= 0) {
     redirect('freelancer/browse_jobs.php');
 }
 
 // Fetch skill info
 $skill_info = null;
-$st = $conn->prepare('SELECT id, skill_name FROM skills WHERE skill_name = ?');
-$st->bind_param('s', $skill_name);
+$st = $conn->prepare('SELECT id, skill_name FROM skills WHERE id = ?');
+$st->bind_param('i', $skill_id);
 $st->execute();
 $skill_info = $st->get_result()->fetch_assoc();
 $st->close();
@@ -23,20 +36,24 @@ if (!$skill_info) {
 
 // Handle apply
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
+    if (!$fl_freelancer_id) {
+        set_flash('error', 'Please login as a freelancer to apply for jobs.');
+        redirect('auth/login.php');
+    }
+
     $job_id = (int) ($_POST['job_id'] ?? 0);
     if ($job_id > 0) {
-        $st = $conn->prepare("SELECT id, freelancers_needed FROM jobs WHERE id = ? AND status IN ('open', 'position_filled')");
+        $st = $conn->prepare("SELECT id FROM jobs WHERE id = ? AND status = 'open'");
         $st->bind_param('i', $job_id); $st->execute();
         $job = $st->get_result()->fetch_assoc(); $st->close();
         if (!$job) { set_flash('error', 'Job is not available for application.'); }
         else {
             // Check position limit
-            $needed = max(1, (int) ($job['freelancers_needed'] ?? 1));
-            $st = $conn->prepare('SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status != \'completed\'');
+            $st = $conn->prepare('SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status NOT IN (\'rejected\', \'cancelled\')');
             $st->bind_param('i', $job_id); $st->execute();
             $filled = (int) $st->get_result()->fetch_assoc()['cnt']; $st->close();
-            if ($filled >= $needed) {
-                set_flash('error', 'All positions for this job have been filled.');
+            if ($filled >= 1) {
+                set_flash('error', 'The position for this job has been filled.');
             } else {
                 $st = $conn->prepare('SELECT id FROM job_applications WHERE job_id = ? AND freelancer_id = ?');
                 $st->bind_param('ii', $job_id, $fl_freelancer_id); $st->execute();
@@ -48,26 +65,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     $st = $conn->prepare("SELECT j.title, c.user_id FROM jobs j JOIN companies c ON j.company_id = c.id WHERE j.id = ?");
                     $st->bind_param('i', $job_id); $st->execute();
                     $ji = $st->get_result()->fetch_assoc(); $st->close();
-                    if ($ji) create_notification($conn, (int) $ji['user_id'], 'new_application', $fl_user['username'] . " applied for your job \"{$ji['title']}\".", 'company/view_applications.php?id=' . $job_id);
+                    if ($ji) create_notification($conn, (int) $ji['user_id'], 'new_application', "Applied for your job \"{$ji['title']}\".", 'company/view_applications.php?id=' . $job_id, $user_id);
                     set_flash('success', 'Application submitted successfully.');
                 }
             }
         }
     }
-    redirect('freelancer/skill_jobs.php?skill=' . urlencode($skill_name));
+    redirect('freelancer/skill_jobs.php?id=' . $skill_id);
 }
 
 // Fetch jobs for this skill
-$params = [$fl_freelancer_id, $skill_info['id']];
+$params = [$fl_freelancer_id, $skill_id];
 $types = 'ii';
 
 $sql = "SELECT j.id,j.title,j.description,j.budget,j.created_at,j.category,j.experience_level,j.gender_requirement,j.deadline,j.duration,j.freelancers_needed,j.visibility,j.attachment,j.status,
         c.company_name,c.logo_image,
         (SELECT ja.status FROM job_applications ja WHERE ja.job_id=j.id AND ja.freelancer_id=?) AS my_status,
-        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id AND a.status != 'completed') AS assigned_count,
-        (SELECT GROUP_CONCAT(s.skill_name SEPARATOR ',') FROM job_skills js2 JOIN skills s ON js2.skill_id = s.id WHERE js2.job_id = j.id) AS skills_concat
+        (SELECT COUNT(*) FROM assignments a WHERE a.job_id=j.id AND a.status NOT IN ('rejected', 'cancelled')) AS assigned_count,
+        (SELECT GROUP_CONCAT(DISTINCT s.skill_name SEPARATOR ',') FROM job_skills js2 JOIN skills s ON js2.skill_id = s.id WHERE js2.job_id = j.id) AS skills_concat
         FROM jobs j LEFT JOIN companies c ON j.company_id=c.id
-        WHERE j.status IN ('open', 'position_filled') AND (j.category != 'Direct Hire' OR j.category IS NULL) AND EXISTS (SELECT 1 FROM job_skills js_filter WHERE js_filter.job_id = j.id AND js_filter.skill_id = ?)
+        WHERE j.status IN ('open', 'in_review', 'hired', 'in_progress', 'completed', 'cancelled', 'closed') AND (j.category != 'Direct Hire' OR j.category IS NULL) AND EXISTS (SELECT 1 FROM job_skills js_filter WHERE js_filter.job_id = j.id AND js_filter.skill_id = ?)
         ORDER BY j.created_at DESC";
 
 $st = $conn->prepare($sql);
@@ -75,7 +92,12 @@ $st->bind_param($types, ...$params);
 $st->execute(); 
 $r = $st->get_result();
 $jobs = [];
+$completed_count = 0;
 while ($row = $r->fetch_assoc()) {
+    if ($row['status'] === 'completed') {
+        if ($completed_count >= 1) continue;
+        $completed_count++;
+    }
     $row['skills'] = !empty($row['skills_concat']) ? explode(',', $row['skills_concat']) : [];
     $jobs[] = $row;
 }
@@ -157,11 +179,6 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <?php if ($job['gender_requirement'] !== 'any'): ?>
                                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" style="background:rgba(236,72,153,0.08);color:#ec4899"><?= e(ucfirst($job['gender_requirement'])) ?></span>
                                 <?php endif; ?>
-                                <?php if ((int)$job['freelancers_needed'] > 1): ?>
-                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style="background:rgba(245,158,11,0.08);color:#f59e0b">
-                                        <?= (int)$job['freelancers_needed'] ?> freelancers needed
-                                    </span>
-                                <?php endif; ?>
                             </div>
                         <?php endif; ?>
 
@@ -200,20 +217,22 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <div class="flex items-center gap-2 flex-shrink-0">
                         <a href="<?= e(base_url('freelancer/view_job.php?id=' . $job['id'])) ?>" class="px-4 py-2.5 text-sm font-medium rounded-xl border transition-all hover:bg-gray-50 dark:hover:bg-gray-800" style="color:var(--color-text-secondary);border-color:var(--color-border)">View Post</a>
                         <?php
-                        $assigned = (int) ($job['assigned_count'] ?? 0);
-                        $needed = max(1, (int) ($job['freelancers_needed'] ?? 1));
-                        $is_filled = $assigned >= $needed || $job['status'] === 'position_filled';
+                        $is_open = $job['status'] === 'open';
                         ?>
-                        <?php if ($is_filled): ?>
-                            <span class="text-sm font-medium px-5 py-2.5 rounded-xl" style="background:var(--color-bg);color:var(--color-text-muted)">Positions Filled</span>
+                        <?php if (!$is_open): ?>
+                            <div class="inline-flex"><?= status_badge($job['status']) ?></div>
                         <?php elseif ($job['my_status']): ?>
                             <?= status_badge($job['my_status']) ?>
                         <?php else: ?>
-                            <form method="POST">
-                                <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                                <input type="hidden" name="job_id" value="<?= (int) $job['id'] ?>">
-                                <button type="submit" class="btn-grad px-6 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Apply</button>
-                            </form>
+                            <?php if (!$fl_freelancer_id): ?>
+                                <a href="<?= e(base_url('auth/login.php')) ?>" class="btn-grad px-6 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20" style="text-decoration:none;">Apply</a>
+                            <?php else: ?>
+                                <form method="POST">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                    <input type="hidden" name="job_id" value="<?= (int) $job['id'] ?>">
+                                    <button type="submit" class="btn-grad px-6 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Apply</button>
+                                </form>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>

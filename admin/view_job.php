@@ -31,8 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 
                     if ($job_info) {
                         create_notification($conn, (int) $job_info['user_id'], 'job_hidden',
-                            "Your job \"{$job_info['title']}\" has been hidden by an admin for policy violation.",
-                            'company/manage_jobs.php');
+                            "Hidden your job \"{$job_info['title']}\" for policy violation.",
+                            'company/manage_jobs.php', $_SESSION['user_id'] ?? null);
                     }
                     set_flash('success', 'Job has been hidden successfully.');
                 } else {
@@ -54,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 
                     if ($job_info) {
                         create_notification($conn, (int) $job_info['user_id'], 'job_restored',
-                            "Your job \"{$job_info['title']}\" has been restored and is now visible again.",
-                            'company/manage_jobs.php');
+                            "Restored your job \"{$job_info['title']}\". It is now visible again.",
+                            'company/manage_jobs.php', $_SESSION['user_id'] ?? null);
                     }
                     set_flash('success', 'Job has been restored successfully.');
                 } else {
@@ -148,7 +148,7 @@ try {
 // Count assignments
 $assign_count = 0;
 try {
-    $as = $conn->prepare('SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ?');
+    $as = $conn->prepare('SELECT COUNT(*) AS cnt FROM assignments WHERE job_id = ? AND status NOT IN (\'rejected\', \'cancelled\')');
     $as->bind_param('i', $job_id);
     $as->execute();
     $assign_count = (int) $as->get_result()->fetch_assoc()['cnt'];
@@ -217,10 +217,7 @@ require __DIR__ . '/includes/admin_header.php';
                     <p class="text-[10px] font-medium uppercase tracking-wider mb-0.5" style="color:var(--color-text-muted)">Experience</p>
                     <p class="text-sm font-medium capitalize" style="color:var(--color-text-primary)"><?= e(str_replace('_', ' ', $job['experience_level'])) ?></p>
                 </div>
-                <div>
-                    <p class="text-[10px] font-medium uppercase tracking-wider mb-0.5" style="color:var(--color-text-muted)">Positions</p>
-                    <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= (int) $job['freelancers_needed'] ?></p>
-                </div>
+
                 <div>
                     <p class="text-[10px] font-medium uppercase tracking-wider mb-0.5" style="color:var(--color-text-muted)">Deadline</p>
                     <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= $job['deadline'] ? e(date('M j, Y', strtotime($job['deadline']))) : '—' ?></p>

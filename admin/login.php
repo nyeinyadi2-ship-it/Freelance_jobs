@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $admin_id = get_admin_user_id($conn);
                     if ($admin_id && $admin_id !== (int) $user['id']) {
-                        create_notification($conn, $admin_id, 'login_event', "Admin \"{$user['username']}\" has logged in.", null);
+                        create_notification($conn, $admin_id, 'login_event', "Logged in.", null, (int)$user['id']);
                     }
 
                     redirect('admin/admin_dashboard.php');
@@ -69,40 +69,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$page_title = 'Login';
+$page_title = 'Admin Login';
+require __DIR__ . '/../includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="<?= e('en') ?>" data-theme>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= e($page_title) ?> - Admin</title>
-    <script>
-    (function(){
-        var t = localStorage.getItem('theme');
-        if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark');
-        }
-    })();
-    </script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-    tailwind.config = {
-        darkMode: 'class',
-    };
-    </script>
-    <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+<style>
     .auth-wrapper {
-        min-height: 100vh;
+        min-height: calc(100vh - 4rem);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 2rem 1rem;
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+        border-radius: 16px; /* slightly round the edges inside the main container */
+        margin: -2rem -1rem; /* counteract main padding to fill */
     }
     .auth-card {
         width: 100%;
@@ -183,9 +162,7 @@ $page_title = 'Login';
         60% { transform: translateX(-4px); }
         80% { transform: translateX(4px); }
     }
-    </style>
-</head>
-<body>
+</style>
     <div class="auth-wrapper">
         <div class="auth-card">
             <div class="text-center mb-8">
@@ -246,7 +223,7 @@ $page_title = 'Login';
             </div>
 
             <p class="mt-6 text-center text-sm text-white/60">
-                <a href="<?= e(base_url('auth/login.php')) ?>" class="text-white/80 hover:text-white font-medium transition-colors">&larr; Back to main login</a>
+
             </p>
         </div>
     </div>
@@ -267,5 +244,4 @@ $page_title = 'Login';
         }
     }
     </script>
-</body>
-</html>
+<?php require __DIR__ . '/../includes/footer.php'; ?>

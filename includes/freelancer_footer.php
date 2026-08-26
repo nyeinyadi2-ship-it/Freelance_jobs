@@ -33,8 +33,9 @@
             <div class="flex items-center gap-6">
                 <?php $admin_chat_id = get_admin_user_id($conn); ?>
                 <?php if ($admin_chat_id): ?>
-                <a href="<?= e(base_url('chat/index.php?user_id=' . $admin_chat_id)) ?>" class="text-xs font-medium hover:text-primary-500 transition-colors" style="color:var(--color-text-placeholder)">Contact Us</a>
+                <a href="<?= e(base_url('chat/index.php?user_id=' . $admin_chat_id)) ?>" class="text-xs font-medium hover:text-primary-500 transition-colors" style="color:var(--color-text-placeholder)">Chat with Admin</a>
                 <?php endif; ?>
+                <a href="tel:09678789678" class="text-xs font-medium hover:text-primary-500 transition-colors" style="color:var(--color-text-placeholder)">Phone No.: 09678789678</a>
                 <p class="text-xs" style="color:var(--color-text-placeholder)">&copy; <?= date('Y') ?> FreelanceHub. All rights reserved.</p>
             </div>
         </div>
@@ -53,10 +54,6 @@ if (typeof NotificationSSE !== 'undefined') {
 }
 
 (function(){
-    // Theme
-    var tt=document.getElementById('fl-theme-toggle');
-    if(tt)tt.addEventListener('click',function(){var d=document.documentElement.classList.toggle('dark');localStorage.setItem('theme',d?'dark':'light');});
-
     // Sticky nav shadow
     var nav=document.getElementById('fl-nav');
     if(nav)window.addEventListener('scroll',function(){nav.style.boxShadow=window.scrollY>20?'0 4px 30px rgba(0,0,0,0.08)':'none';});

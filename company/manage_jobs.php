@@ -169,10 +169,7 @@ function closeExtendModal() {
                                         </span>
                                     <?php endif; ?>
                                     <span class="capitalize"><?= e(str_replace('_', ' ', $job['experience_level'])) ?></span>
-                                    <span class="flex items-center gap-1">
-                                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                        <?= (int) $job['freelancers_needed'] ?> <?= (int) $job['freelancers_needed'] === 1 ? 'Post' : 'Posts' ?>
-                                    </span>
+
                                 </div>
 
                                 <p class="text-xs" style="color:var(--color-text-muted)">
@@ -181,8 +178,6 @@ function closeExtendModal() {
                                         <span class="mx-1">·</span>
                                         Deadline: <?= e(date('M j, Y', strtotime($job['deadline']))) ?>
                                     <?php endif; ?>
-                                    <span class="mx-1">·</span>
-                                    <?= (int) $job['app_count'] ?> application<?= (int) $job['app_count'] !== 1 ? 's' : '' ?>
                                     <?php if ($job['attachment']): ?>
                                         <span class="mx-1">·</span>
                                         <span class="flex items-center gap-1 inline-flex">
@@ -228,7 +223,7 @@ function closeExtendModal() {
                                 <?php if ($job['status'] !== 'closed'): ?>
                                 <a href="<?= e(base_url('company/view_applications.php?id=' . $job['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all" style="background:rgba(16,185,129,0.08);color:#10b981">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                                    Applications (<?= (int) $job['app_count'] ?>)
+                                    Details
                                 </a>
                                 <?php endif; ?>
                             </div>

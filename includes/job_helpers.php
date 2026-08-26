@@ -102,45 +102,7 @@ function check_assignment_deadlines($conn) {
         }
     }
 
-    // Target milestones that are active and have a deadline
-    $sql_ms = "SELECT m.id, m.deadline, m.status, m.job_id, m.freelancer_id, m.title as milestone_title,
-                      j.company_id, f.user_id as freelancer_user_id
-               FROM milestones m
-               JOIN jobs j ON m.job_id = j.id
-               JOIN freelancers f ON m.freelancer_id = f.id
-               WHERE m.status IN ('funded', 'in_progress', 'revision_requested')
-               AND m.deadline IS NOT NULL";
-               
-    $result_ms = $conn->query($sql_ms);
-    if ($result_ms) {
-        $now = new DateTime();
-        while ($row = $result_ms->fetch_assoc()) {
-            $deadline = new DateTime($row['deadline']);
-            $is_overdue = $deadline <= $now;
-            
-            if ($is_overdue) {
-                $milestone_id = (int)$row['id'];
-                $freelancer_id = (int)$row['freelancer_user_id'];
-                $milestone_title = $row['milestone_title'];
-                
-                $update = $conn->prepare("UPDATE milestones SET status = 'overdue' WHERE id = ?");
-                $update->bind_param('i', $milestone_id);
-                $update->execute();
-                $update->close();
-                
-                $type = "ms_ovr_" . $milestone_id;
-                if (!_dl_notification_exists($conn, $freelancer_id, $type)) {
-                    create_notification($conn, $freelancer_id, $type, "The deadline for your milestone '$milestone_title' has passed.", "freelancer/milestone.php?id=" . $milestone_id);
-                }
-                
-                $company_id = (int)$row['company_id'];
-                $c_type = "ms_c_ovr_" . $milestone_id;
-                if (!_dl_notification_exists($conn, $company_id, $c_type)) {
-                    create_notification($conn, $company_id, $c_type, "The deadline for milestone '$milestone_title' has passed and the freelancer has not submitted the work.", "company/view_applications.php?id=" . $row['job_id']);
-                }
-            }
-        }
-    }
+    check_milestone_overdue($conn);
 
     // Target proposal projects (trial tasks) that are active and have a deadline
     $sql_pp = "SELECT p.id, p.deadline, p.status, p.job_id, p.freelancer_id,
@@ -182,3 +144,87 @@ function check_assignment_deadlines($conn) {
         }
     }
 }
+
+/**
+ * Record a milestone history entry
+ */
+function record_milestone_history($conn, $milestone_id, $freelancer_id, $company_id, $user_id, $prev_status, $new_status, $action_type, $description, $old_deadline = null, $new_deadline = null) {
+    $stmt = $conn->prepare("INSERT INTO milestone_history (milestone_id, freelancer_id, company_id, user_id, previous_status, new_status, action_type, description, old_deadline, new_deadline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    if ($stmt) {
+        $stmt->bind_param('iiiissssss', $milestone_id, $freelancer_id, $company_id, $user_id, $prev_status, $new_status, $action_type, $description, $old_deadline, $new_deadline);
+        $stmt->execute();
+        $stmt->close();
+    } else {
+        error_log("Failed to record milestone history: " . $conn->error);
+    }
+}
+
+/**
+ * Dedicated milestone overdue checker.
+ * Uses Asia/Yangon timezone for exact deadline comparison.
+ * Can be called independently (e.g., from cron) or from check_assignment_deadlines().
+ */
+function check_milestone_overdue($conn) {
+    require_once __DIR__ . '/../config/notifications.php';
+
+    $tz = new DateTimeZone('Asia/Yangon');
+    $now = new DateTime('now', $tz);
+
+    // Only target milestones that are active and have a pending extension request handled
+    // Milestones in funded, in_progress, or revision_requested with a past deadline become overdue
+    $sql_ms = "SELECT m.id, m.deadline, m.status, m.job_id, m.freelancer_id, m.title as milestone_title,
+                      j.company_id, f.user_id as freelancer_user_id
+               FROM milestones m
+               JOIN jobs j ON m.job_id = j.id
+               JOIN freelancers f ON m.freelancer_id = f.id
+               WHERE m.status IN ('funded', 'in_progress', 'revision_requested')
+               AND m.deadline IS NOT NULL";
+
+    $result_ms = $conn->query($sql_ms);
+    if (!$result_ms) return;
+
+    while ($row = $result_ms->fetch_assoc()) {
+        $deadline = new DateTime($row['deadline'], $tz);
+        if ($deadline <= $now) {
+            $milestone_id = (int)$row['id'];
+            $freelancer_id = (int)$row['freelancer_user_id'];
+            $milestone_title = $row['milestone_title'];
+
+            $update = $conn->prepare("UPDATE milestones SET status = 'overdue' WHERE id = ? AND status NOT IN ('overdue', 'cancelled', 'paid', 'approved')");
+            $update->bind_param('i', $milestone_id);
+            $update->execute();
+            $affected = $update->affected_rows;
+            $update->close();
+
+            if ($affected > 0) {
+                // Record history
+                record_milestone_history(
+                    $conn,
+                    $milestone_id,
+                    (int)$row['freelancer_id'],
+                    (int)$row['company_id'],
+                    null,
+                    $row['status'],
+                    'overdue',
+                    'OVERDUE',
+                    'Milestone deadline passed and is now overdue.',
+                    $row['deadline'],
+                    null
+                );
+            }
+
+            $type = "ms_ovr_" . $milestone_id;
+            if (!_dl_notification_exists($conn, $freelancer_id, $type)) {
+                create_notification($conn, $freelancer_id, $type, "The deadline for your milestone '$milestone_title' has passed.", "freelancer/milestone.php?id=" . $milestone_id);
+            }
+
+            $company_id = (int)$row['company_id'];
+            $c_type = "ms_c_ovr_" . $milestone_id;
+            if (!_dl_notification_exists($conn, $company_id, $c_type)) {
+                create_notification($conn, $company_id, $c_type, "The deadline for milestone '$milestone_title' has passed and the freelancer has not submitted the work.", "company/view_applications.php?id=" . $row['job_id']);
+            }
+        }
+    }
+}
+
+

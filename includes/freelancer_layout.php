@@ -3,19 +3,29 @@
  * Shared layout for all freelancer pages.
  * Set $page_title before including. Content goes between this file and freelancer_footer.php.
  */
-require_once __DIR__ . '/freelancer_init.php';
+if (!isset($public_access) || !$public_access) {
+    require_once __DIR__ . '/freelancer_init.php';
+} else {
+    // Basic init for public pages that still use the layout
+    if (session_status() === PHP_SESSION_NONE) { session_start(); }
+    require_once __DIR__ . '/../config/db.php';
+    require_once __DIR__ . '/../config/auth.php';
+    require_once __DIR__ . '/../config/notifications.php';
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="<?= e('en') ?>" data-theme>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($page_title) ?> - FreelanceHub</title>
-    <script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();</script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{poppins:['Poppins','sans-serif']}}}};</script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
+    <link rel="stylesheet" href="<?= e(base_url('assets/css/freelancer-redesign.css')) ?>">
     <style>
         *,*::before,*::after{font-family:'Poppins',system-ui,sans-serif;}
         ::selection{background:rgba(99,102,241,0.2);}

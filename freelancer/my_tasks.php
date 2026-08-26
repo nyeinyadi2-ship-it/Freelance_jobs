@@ -18,50 +18,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ms_action = $_POST['ms_action'] ?? '';
     $milestone_id = (int) ($_POST['milestone_id'] ?? 0);
 
-    if ($ms_action === 'start' && $milestone_id > 0) {
-        // Funded → In Progress
-        $st = $conn->prepare("
-            SELECT m.id, m.job_id, m.status
-            FROM milestones m
-            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
-            WHERE m.id = ? AND m.status = 'funded'
-        ");
-        $st->bind_param('ii', $fl_freelancer_id, $milestone_id);
-        $st->execute();
-        $ms = $st->get_result()->fetch_assoc();
-        $st->close();
-
-        if ($ms) {
-            $conn->begin_transaction();
-            try {
-                $st = $conn->prepare("UPDATE milestones SET status = 'in_progress' WHERE id = ?");
-                $st->bind_param('i', $milestone_id);
-                $st->execute();
-                $st->close();
-
-                // Update assignment status to working (from any active state)
-                $st = $conn->prepare("UPDATE assignments SET status = 'working' WHERE job_id = ? AND status IN ('assigned', 'submitted')");
-                $st->bind_param('i', $ms['job_id']);
-                $st->execute();
-                $st->close();
-
-                $conn->commit();
-                set_flash('success', 'Milestone started! You can now work on it.');
-            } catch (Exception $e) {
-                $conn->rollback();
-                set_flash('error', 'Failed to start milestone.');
-            }
-        } else {
-            set_flash('error', 'Milestone not found or not funded yet.');
-        }
-    } elseif ($ms_action === 'submit' && $milestone_id > 0) {
+    if ($ms_action === 'submit' && $milestone_id > 0) {
         // In Progress / Revision Requested → Submitted
         $st = $conn->prepare("
             SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, j.deadline as job_deadline
             FROM milestones m
             JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
             JOIN jobs j ON j.id = m.job_id
-            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested', 'overdue')
+            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'revision_requested', 'overdue')
         ");
         $st->bind_param('ii', $fl_freelancer_id, $milestone_id);
         $st->execute();
@@ -84,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            $submission_link = trim($_POST['submission_link'] ?? '');
+            $submission_link = '';
             $submission_note = trim($_POST['submission_note'] ?? '');
             $submission_file = null;
 
@@ -96,8 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            if ($submission_link === '' && $submission_file === null) {
-                set_flash('error', 'Please provide a submission link or upload a file.');
+            if ($submission_file === null) {
+                set_flash('error', 'Please upload your completed work before submitting.');
                 redirect('freelancer/milestone.php?id=' . $milestone_id);
             }
 
@@ -113,11 +77,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND status IN ('working', 'assigned')");
                 $st->bind_param('i', $ms['job_id']);
                 $st->execute();
-
-                // Update job status
-                $st_job = $conn->prepare("UPDATE jobs SET status='submitted' WHERE id=? AND status='in_progress'");
-                $st_job->bind_param('i', $ms['job_id']);
-                $st_job->execute();
                 $st->close();
 
                 $conn->commit();
@@ -130,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id']);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id'], $user_id);
                     }
                 } catch (Exception $ne) {
                     error_log("Notification failed after submission: " . $ne->getMessage());
@@ -147,6 +106,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
         }
+    } elseif ($ms_action === 'request_extension' && $milestone_id > 0) {
+        $requested_deadline = trim($_POST['requested_deadline'] ?? '');
+        $reason = trim($_POST['extension_reason'] ?? '');
+
+        if (empty($requested_deadline)) {
+            set_flash('error', 'Please provide a new deadline date.');
+            redirect('freelancer/my_tasks.php');
+        }
+
+        $st = $conn->prepare("SELECT m.id, m.freelancer_id, m.deadline, m.status, j.title AS job_title, j.id AS job_id FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.freelancer_id = ? AND m.status IN ('overdue', 'in_progress', 'funded')");
+        $st->bind_param('ii', $milestone_id, $fl_freelancer_id);
+        $st->execute();
+        $ms = $st->get_result()->fetch_assoc();
+        $st->close();
+
+        if ($ms) {
+            $chk = $conn->prepare("SELECT id FROM milestone_extensions WHERE milestone_id = ? AND status = 'pending'");
+            $chk->bind_param('i', $milestone_id);
+            $chk->execute();
+            if ($chk->get_result()->num_rows > 0) {
+                $chk->close();
+                set_flash('error', 'You already have a pending extension request for this milestone.');
+                redirect('freelancer/my_tasks.php');
+            }
+            $chk->close();
+
+            $current_deadline = $ms['deadline'] ?? date('Y-m-d H:i:s');
+            $requested_dt = date('Y-m-d H:i:s', strtotime($requested_deadline));
+
+            $ins = $conn->prepare("INSERT INTO milestone_extensions (milestone_id, freelancer_id, current_deadline, requested_deadline, reason) VALUES (?, ?, ?, ?, ?)");
+            $ins->bind_param('iiisss', $milestone_id, $fl_freelancer_id, $current_deadline, $requested_dt, $reason);
+            $ins->execute();
+            $ins->close();
+
+            $up = $conn->prepare("UPDATE milestones SET extension_reason = ? WHERE id = ?");
+            $up->bind_param('si', $reason, $milestone_id);
+            $up->execute();
+            $up->close();
+
+            try {
+                $ns = $conn->prepare("SELECT c.user_id FROM milestones m JOIN jobs j ON m.job_id = j.id JOIN companies c ON j.company_id = c.id WHERE m.id = ?");
+                $ns->bind_param('i', $milestone_id);
+                $ns->execute();
+                $ni = $ns->get_result()->fetch_assoc();
+                $ns->close();
+                if ($ni) {
+                    create_notification($conn, (int) $ni['user_id'], 'admin_announcement', "Requested a deadline extension for a milestone in \"{$ms['job_title']}\".", 'company/view_applications.php?id=' . $ms['job_id'], $user_id);
+                }
+            } catch (Exception $ne) {
+                error_log("Notification failed: " . $ne->getMessage());
+            }
+
+            set_flash('success', 'Extension request submitted. Waiting for company approval.');
+        } else {
+            set_flash('error', 'Milestone not found or not eligible for extension.');
+        }
     } elseif ($ms_action === 'quick_submit' && $milestone_id > 0) {
         // Quick submit: change status to submitted without requiring link/file
         $st = $conn->prepare("
@@ -154,8 +169,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             FROM milestones m
             JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
             JOIN jobs j ON j.id = m.job_id
-            WHERE m.id = ? AND m.status IN ('in_progress', 'revision_requested', 'overdue')
-              AND (m.freelancer_id = ? OR m.freelancer_id IS NULL)
+            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'revision_requested', 'overdue')
+              AND m.freelancer_id = ?
         ");
         $st->bind_param('iii', $fl_freelancer_id, $milestone_id, $fl_freelancer_id);
         $st->execute();
@@ -181,11 +196,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
                 $st->bind_param('ii', $ms['job_id'], $fl_freelancer_id);
                 $st->execute();
-
-                // Update job status
-                $st_job = $conn->prepare("UPDATE jobs SET status='submitted' WHERE id=? AND status='in_progress'");
-                $st_job->bind_param('i', $ms['job_id']);
-                $st_job->execute();
                 $st->close();
 
                 $conn->commit();
@@ -197,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id']);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id'], $user_id);
                     }
                 } catch (Exception $ne) {
                     error_log("Notification failed after submission: " . $ne->getMessage());
@@ -249,12 +259,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st->execute();
                 $st->close();
 
-                // Update job status
-                $st = $conn->prepare("UPDATE jobs SET status = 'submitted' WHERE id = ?");
-                $st->bind_param('i', $assignment['job_id']);
-                $st->execute();
-                $st->close();
-
                 // Insert into submissions
                 $file_for_db = $submission_file ?? null;
                 $st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, file_path, notes, status) VALUES (?, ?, ?, ?, 'pending')");
@@ -272,7 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', $fl_user['username'] . " submitted work for " . $ni['title'], 'company/view_applications.php?id=' . $assignment['job_id']);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for " . $ni['title'], 'company/view_applications.php?id=' . $assignment['job_id'], $user_id);
                     }
                 } catch (Exception $ne) {
                     error_log("Notification failed: " . $ne->getMessage());
@@ -319,19 +323,10 @@ foreach ($tasks as &$task) {
         SELECT m1.* 
         FROM milestones m1
         WHERE m1.job_id = ? 
-          AND (m1.freelancer_id = ? OR m1.freelancer_id IS NULL)
-          AND (
-              m1.freelancer_id IS NOT NULL 
-              OR NOT EXISTS (
-                  SELECT 1 FROM milestones m2 
-                  WHERE m2.job_id = m1.job_id 
-                    AND m2.freelancer_id = ? 
-                    AND m2.sort_order = m1.sort_order
-              )
-          )
+          AND m1.freelancer_id = ?
         ORDER BY m1.sort_order ASC
     ");
-    $ms->bind_param('iii', $task['job_id'], $fl_freelancer_id, $fl_freelancer_id);
+    $ms->bind_param('ii', $task['job_id'], $fl_freelancer_id);
     $ms->execute();
     $mr = $ms->get_result();
     while ($m = $mr->fetch_assoc()) { $task['milestones'][] = $m; }
@@ -345,11 +340,13 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 <style>
 .ms-status { display:inline-flex; align-items:center; gap:0.25rem; padding:0.25rem 0.65rem; border-radius:9999px; font-size:0.7rem; font-weight:600; }
 .ms-draft { background:rgba(107,114,128,0.1); color:#6b7280; }
-.ms-funded { background:rgba(245,158,11,0.1); color:#f59e0b; }
+.ms-funded { background:rgba(59,130,246,0.1); color:#3b82f6; }
 .ms-in_progress { background:rgba(99,102,241,0.1); color:#6366f1; }
 .ms-submitted { background:rgba(139,92,246,0.1); color:#8b5cf6; }
 .ms-approved { background:rgba(16,185,129,0.1); color:#10b981; }
 .ms-revision_requested { background:rgba(239,68,68,0.1); color:#ef4444; }
+.ms-overdue { background:rgba(220,38,38,0.1); color:#dc2626; }
+.ms-cancelled { background:rgba(107,114,128,0.1); color:#6b7280; }
 .ms-payment_pending { background:rgba(59,130,246,0.1); color:#3b82f6; }
 .ms-paid { background:rgba(16,185,129,0.1); color:#10b981; }
 
@@ -446,7 +443,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <h3 class="text-sm font-bold mb-4" style="color:var(--color-text-primary)">Milestones</h3>
                     <div class="space-y-4">
                         <?php foreach ($task['milestones'] as $ms):
-                            $status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved', 'payment_pending'=>'Payment Pending', 'paid'=>'Received', 'revision_requested'=>'Revision Requested'];
+                            $status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved', 'payment_pending'=>'Payment Pending', 'paid'=>'Received', 'revision_requested'=>'Revision Requested', 'overdue'=>'Overdue', 'cancelled'=>'Cancelled'];
                             $status_class = 'ms-' . $ms['status'];
                         ?>
                         <div class="rounded-xl overflow-hidden transition-all hover:shadow-md" style="border:1px solid var(--color-border)">
@@ -464,7 +461,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                         <div>
                                             <p class="text-sm font-bold" style="color:var(--color-text-primary)"><?= e($ms['title']) ?></p>
                                             <?php if ($ms['description']): ?><p class="text-xs mt-0.5" style="color:var(--color-text-muted)"><?= e(mb_strimwidth($ms['description'], 0, 80, '...')) ?></p><?php endif; ?>
-                                            <?php if (!empty($ms['deadline'])): ?><p class="text-[11px] mt-0.5" style="color:var(--color-text-muted)">Due: <?= date('M j, Y', strtotime($ms['deadline'])) ?></p><?php endif; ?>
+                                            <?php if (!empty($ms['deadline'])): ?><p class="text-[11px] mt-0.5" style="color:var(--color-text-muted)">Due: <?= date('M j, Y, g:i A', strtotime($ms['deadline'])) ?></p><?php endif; ?>
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-2">
@@ -477,11 +474,11 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <!-- Status Timeline -->
                                 <div class="ms-timeline mt-3">
                                     <?php
-                                    $steps = ['funded', 'in_progress', 'submitted', 'payment_pending', 'paid'];
-                                    $step_labels = ['Funded', 'Working', 'Submitted', 'Pending Pay', 'Received'];
+                                    $steps = ['draft', 'in_progress', 'submitted', 'payment_pending', 'paid'];
+                                    $step_labels = ['Draft', 'Working', 'Submitted', 'Pending Pay', 'Received'];
                                     $current_idx = array_search($ms['status'], $steps);
                                     if ($ms['status'] === 'revision_requested') $current_idx = 1;
-                                    if ($ms['status'] === 'draft') $current_idx = -1;
+                                    if ($ms['status'] === 'funded') $current_idx = 1;
                                     if ($current_idx === false) $current_idx = -1;
                                     ?>
                                     <?php for ($si = 0; $si < count($steps); $si++): ?>
@@ -500,14 +497,9 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <?php if ($ms['status'] === 'draft'): ?>
                                 <div class="p-3 flex items-center gap-2" style="border-top:1px solid var(--color-border)">
                                     <svg class="w-3.5 h-3.5" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    <span class="text-xs font-medium" style="color:var(--color-text-muted)">Waiting for escrow funding</span>
+                                    <span class="text-xs font-medium" style="color:var(--color-text-muted)">Waiting for company to start</span>
                                 </div>
-                            <?php elseif ($ms['status'] === 'funded'): ?>
-                                <div class="p-3 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
-                                    <span class="text-xs font-medium" style="color:var(--color-text-muted)">Escrow funded — ready to start</span>
-                                    <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">Start Working</a>
-                                </div>
-                            <?php elseif ($ms['status'] === 'in_progress' || $ms['status'] === 'revision_requested'): ?>
+                            <?php elseif ($ms['status'] === 'in_progress' || $ms['status'] === 'funded' || $ms['status'] === 'revision_requested'): ?>
                                 <div class="p-3 flex items-center justify-between" style="border-top:1px solid var(--color-border)">
                                     <span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= $ms['status'] === 'revision_requested' ? 'Revision needed — resubmit work' : 'Working on this milestone' ?></span>
                                     <div class="flex items-center gap-2">
@@ -550,6 +542,14 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <div class="p-3 flex items-center gap-2" style="border-top:1px solid var(--color-border);background:rgba(16,185,129,0.03)">
                                     <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                     <span class="text-xs font-medium text-emerald-600">Payment received</span>
+                                </div>
+                            <?php elseif ($ms['status'] === 'overdue'): ?>
+                                <div class="p-3 flex items-center justify-between" style="border-top:1px solid var(--color-border);background:rgba(220,38,38,0.03)">
+                                    <div class="flex items-center gap-2">
+                                        <svg class="w-3.5 h-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                        <span class="text-xs font-medium text-red-600">Overdue</span>
+                                    </div>
+                                    <a href="<?= e(base_url('freelancer/milestone.php?id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white" style="background:linear-gradient(135deg,#3b82f6,#2563eb)">Request Extension</a>
                                 </div>
                             <?php endif; ?>
                         </div>

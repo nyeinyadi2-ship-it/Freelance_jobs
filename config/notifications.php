@@ -18,7 +18,17 @@ function create_notification(mysqli $conn, int $user_id, string $type, string $m
 function get_notifications(mysqli $conn, int $user_id, int $limit = 10): array
 {
     if (!notifications_table_exists($conn)) return [];
-    $stmt = $conn->prepare('SELECT id, type, message, link, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?');
+    $stmt = $conn->prepare('
+        SELECT n.id, n.type, n.message, n.link, n.is_read, n.created_at, n.from_user_id,
+               u.profile_image AS sender_image, u.role AS sender_role,
+               COALESCE(c.company_name, f.full_name, u.username) AS sender_name
+        FROM notifications n
+        LEFT JOIN users u ON n.from_user_id = u.id
+        LEFT JOIN companies c ON u.id = c.user_id
+        LEFT JOIN freelancers f ON u.id = f.user_id
+        WHERE n.user_id = ?
+        ORDER BY n.created_at DESC LIMIT ?
+    ');
     $stmt->bind_param('ii', $user_id, $limit);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -34,16 +44,16 @@ function get_notifications_filtered(mysqli $conn, int $user_id, ?string $filter 
 {
     if (!notifications_table_exists($conn)) return [];
 
-    $where = 'WHERE user_id = ?';
+    $where = 'WHERE n.user_id = ?';
     $params = [$user_id];
     $types = ['i'];
 
     if ($filter === 'unread') {
-        $where .= ' AND is_read = 0';
+        $where .= ' AND n.is_read = 0';
     } elseif ($filter === 'read') {
-        $where .= ' AND is_read = 1';
+        $where .= ' AND n.is_read = 1';
     } elseif ($filter !== 'all' && $filter !== null) {
-        $where .= ' AND type = ?';
+        $where .= ' AND n.type = ?';
         $params[] = $filter;
         $types[] = 's';
     }
@@ -51,7 +61,17 @@ function get_notifications_filtered(mysqli $conn, int $user_id, ?string $filter 
     $types[] = 'i';
     $params[] = $limit;
 
-    $stmt = $conn->prepare("SELECT id, type, message, link, is_read, created_at FROM notifications {$where} ORDER BY created_at DESC LIMIT ?");
+    $stmt = $conn->prepare("
+        SELECT n.id, n.type, n.message, n.link, n.is_read, n.created_at, n.from_user_id,
+               u.profile_image AS sender_image, u.role AS sender_role,
+               COALESCE(c.company_name, f.full_name, u.username) AS sender_name
+        FROM notifications n
+        LEFT JOIN users u ON n.from_user_id = u.id
+        LEFT JOIN companies c ON u.id = c.user_id
+        LEFT JOIN freelancers f ON u.id = f.user_id
+        {$where}
+        ORDER BY n.created_at DESC LIMIT ?
+    ");
     $stmt->bind_param(implode('', $types), ...$params);
     $stmt->execute();
     $result = $stmt->get_result();

@@ -322,26 +322,15 @@ if (isset($admin_user['user_id'])) {
 
         <!-- Right: Actions -->
         <div class="flex items-center gap-1">
-            <!-- Language Switcher -->
-            <div class="relative" id="lang-switcher">
-                <button type="button" onclick="event.stopPropagation(); document.getElementById('lang-dropdown').classList.toggle('hidden')" class="topbar-btn" aria-label="Language">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                </button>
-                <div id="lang-dropdown" class="hidden absolute right-0 mt-2 w-28 rounded-lg shadow-lg border z-50 overflow-hidden" style="background:var(--color-card);border-color:var(--color-border)">
-                    <a href="<?= e(lang_switch_url('en')) ?>" class="block px-3 py-2 text-xs font-medium <?= $current_lang === 'en' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' : '' ?>" style="color:<?= $current_lang === 'en' ? '' : 'var(--color-text-secondary)' ?>"><?= e('English') ?></a>
-                    <a href="<?= e(lang_switch_url('my')) ?>" class="block px-3 py-2 text-xs font-medium <?= $current_lang === 'my' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' : '' ?>" style="color:<?= $current_lang === 'my' ? '' : 'var(--color-text-secondary)' ?>"><?= e('မြန်မာ') ?></a>
-                </div>
-            </div>
-
-            <!-- Dark Mode Toggle -->
-            <button id="theme-toggle" type="button" class="topbar-btn" aria-label="Toggle theme">
-                <svg class="w-4 h-4 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            <!-- Messages -->
+            <a href="<?= e(base_url('chat/index.php')) ?>" class="topbar-btn relative" aria-label="<?= e('Messages') ?>">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
                 </svg>
-                <svg class="w-4 h-4 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-                </svg>
-            </button>
+                <?php if (isset($admin_unread_count) && $admin_unread_count > 0): ?>
+                    <span class="notif-badge" style="display:flex;"><?= min($admin_unread_count, 99) ?></span>
+                <?php endif; ?>
+            </a>
 
             <!-- Notification Bell -->
             <div class="relative notification-container">
@@ -372,9 +361,22 @@ if (isset($admin_user['user_id'])) {
                         <?php else: ?>
                             <?php foreach ($recent_notifications as $n): ?>
                                 <div class="notification-item flex items-start gap-2 px-4 py-2.5 border-b last:border-0 <?= $n['is_read'] ? '' : 'bg-indigo-50/50 dark:bg-indigo-900/20' ?>" style="border-color:var(--color-border)" data-id="<?= (int) $n['id'] ?>">
-                                    <div class="mt-0.5 flex-shrink-0"><?= notification_icon($n['type']) ?></div>
+                                    <?php if (!empty($n['sender_name'])): ?>
+                                        <div class="mt-0.5 flex-shrink-0">
+                                            <?php if (!empty($n['sender_image'])): ?>
+                                                <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-7 h-7 rounded-full object-cover">
+                                            <?php else: ?>
+                                                <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-[10px]"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="mt-0.5 flex-shrink-0"><?= notification_icon($n['type']) ?></div>
+                                    <?php endif; ?>
                                     <div class="flex-1 min-w-0">
                                         <a href="<?= e($n['link'] ? base_url($n['link']) : base_url('admin/notifications.php')) ?>" class="block">
+                                            <?php if (!empty($n['sender_name'])): ?>
+                                                <p class="text-[11px] font-semibold text-gray-900 dark:text-white mb-0.5"><?= e($n['sender_name']) ?></p>
+                                            <?php endif; ?>
                                             <p class="text-xs <?= $n['is_read'] ? '' : 'font-medium' ?>" style="color:<?= $n['is_read'] ? 'var(--color-text-muted)' : 'var(--color-text-primary)' ?>"><?= e($n['message']) ?></p>
                                             <p class="text-[10px] mt-0.5" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
                                         </a>
@@ -390,7 +392,7 @@ if (isset($admin_user['user_id'])) {
             </div>
 
             <!-- Admin User -->
-            <div class="flex items-center gap-2 pl-1 ml-1 border-l border-gray-200 dark:border-gray-700">
+            <div class="flex items-center gap-2 pl-2 ml-2 border-l border-gray-200 dark:border-gray-700">
                 <?php $admin_img = profile_image_url($admin_user['profile_image'] ?? ''); ?>
                 <?php if ($admin_img): ?>
                     <img src="<?= e($admin_img) ?>" alt="" class="w-7 h-7 rounded-full object-cover">
@@ -401,6 +403,14 @@ if (isset($admin_user['user_id'])) {
                 <?php endif; ?>
                 <span class="text-xs font-medium text-gray-700 dark:text-gray-300 hidden md:inline"><?= e($admin_user['username'] ?? '') ?></span>
             </div>
+
+            <!-- Logout -->
+            <a href="<?= e(base_url('auth/logout.php')) ?>" class="flex items-center gap-1.5 ml-2 pl-2 border-l border-gray-200 dark:border-gray-700 text-red-500 hover:text-red-600 transition-colors" title="<?= e('Logout') ?>">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span class="text-xs font-semibold hidden sm:inline"><?= e('Logout') ?></span>
+            </a>
         </div>
     </div>
 </header>

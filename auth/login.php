@@ -35,7 +35,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $stmt->get_result()->fetch_assoc();
             $stmt->close();
 
+            $password_valid = false;
+            
             if ($user && password_verify($password, $user['password'])) {
+                // Check if user has an active temporary password flag
+                $stmt_temp = $conn->prepare("
+                    SELECT message_meta 
+                    FROM messages 
+                    WHERE sender_id = ? 
+                      AND JSON_EXTRACT(message_meta, '$.must_change_password') = true 
+                    ORDER BY id DESC 
+                    LIMIT 1
+                ");
+                $stmt_temp->bind_param('i', $user['id']);
+                $stmt_temp->execute();
+                $temp_res = $stmt_temp->get_result()->fetch_assoc();
+                $stmt_temp->close();
+                
+                $is_temp_password_login = false;
+                if ($temp_res) {
+                    $meta = json_decode($temp_res['message_meta'], true);
+                    if ($meta && !empty($meta['must_change_password'])) {
+                        if (isset($meta['expires_at']) && time() > $meta['expires_at']) {
+                            $error = 'Your temporary password has expired. Please contact Admin again to request a new temporary password.';
+                        } else {
+                            $is_temp_password_login = true;
+                            $password_valid = true;
+                        }
+                    }
+                } else {
+                    $password_valid = true;
+                }
+            }
+
+            if ($password_valid) {
                 $account_status = $has_status_col ? ($user['account_status'] ?? 'active') : 'active';
                 $end_date = $user['suspension_end_date'] ?? null;
                 
@@ -59,6 +92,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['role'] = $user['role'];
                     $_SESSION['profile_image'] = $user['profile_image'];
 
+                    if (isset($is_temp_password_login) && $is_temp_password_login) {
+                        $_SESSION['must_change_password'] = true;
+                    }
+
                     // Regenerate session ID to prevent session fixation
                     regenerate_session();
 
@@ -66,6 +103,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($admin_id && $admin_id !== (int) $user['id']) {
                         $role_label = ucfirst($user['role']);
                         create_notification($conn, $admin_id, 'login_event', "{$role_label} \"{$user['username']}\" has logged in.", null);
+                    }
+
+                    if (isset($is_temp_password_login) && $is_temp_password_login) {
+                        redirect('auth/change_password.php');
                     }
 
                     if ($user['role'] === 'company') {
@@ -88,7 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             } else {
-                $error = 'Invalid email or password.';
+                if (!$error) { // Don't override expired error
+                    $error = 'Invalid email or password.';
+                }
             }
         }
     }

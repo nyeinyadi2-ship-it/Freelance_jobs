@@ -28,13 +28,17 @@ $company = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 // Stats
-$stats = ['open' => 0, 'completed' => 0, 'expired' => 0, 'total' => 0];
+$stats = ['active' => 0, 'completed' => 0, 'total' => 0];
 $stmt = $conn->prepare('SELECT status, COUNT(*) AS cnt FROM jobs WHERE company_id = ? GROUP BY status');
 $stmt->bind_param('i', $company_id);
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
-    $stats[$row['status']] = (int) $row['cnt'];
+    if (in_array($row['status'], ['open', 'in_review', 'hired', 'in_progress'])) {
+        $stats['active'] += (int) $row['cnt'];
+    } elseif ($row['status'] === 'completed') {
+        $stats['completed'] += (int) $row['cnt'];
+    }
     $stats['total'] += (int) $row['cnt'];
 }
 $stmt->close();
@@ -305,11 +309,6 @@ require __DIR__ . '/../includes/header.php';
       <svg class="w-4 h-4 inline-block mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
       Overview
     </button>
-    <button class="dash-tab px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg" data-tab="jobs" style="color:var(--color-text-muted)">
-      <svg class="w-4 h-4 inline-block mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-      My Jobs
-      <span class="ml-1.5 text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 font-bold rounded-full px-1.5 py-0.5"><?= $stats['total'] ?></span>
-    </button>
     <button class="dash-tab px-3 sm:px-4 py-2.5 text-sm font-medium rounded-t-lg" data-tab="proposals" style="color:var(--color-text-muted)">
       <svg class="w-4 h-4 inline-block mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
       Applications
@@ -348,7 +347,7 @@ require __DIR__ . '/../includes/header.php';
         <svg class="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
       </div>
       <p class="text-sm opacity-80 font-medium"><?= 'Active Jobs' ?></p>
-      <p class="text-3xl font-bold mt-1"><?= $stats['open'] ?? 0 ?></p>
+      <p class="text-3xl font-bold mt-1"><?= $stats['active'] ?? 0 ?></p>
     </div>
     <div class="card stat-card relative overflow-hidden" style="background:linear-gradient(135deg, #059669 0%, #10b981 100%);color:#fff;border:none;">
       <div class="absolute top-0 right-0 w-24 h-24 opacity-10">
@@ -401,31 +400,6 @@ require __DIR__ . '/../includes/header.php';
       <?php endif; ?>
     </div>
 
-    <div class="card">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-semibold" style="color:var(--color-text-primary)">Recent Jobs</h2>
-        <button class="text-sm font-medium text-indigo-600 hover:text-indigo-700" onclick="switchTab('jobs')">View All &rarr;</button>
-      </div>
-      <?php if (empty($jobs)): ?>
-        <div class="text-center py-10" style="color:var(--color-text-placeholder)">
-          <svg class="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-          <p class="mb-3">No jobs posted yet.</p>
-          <a href="<?= e(base_url('company/post_job.php')) ?>" class="btn-primary text-sm"><?= 'Post a New Job' ?></a>
-        </div>
-      <?php else: ?>
-        <div class="space-y-3">
-          <?php foreach (array_slice($jobs, 0, 5) as $job): ?>
-            <div class="flex items-center justify-between p-3 rounded-lg hover-lift" style="background:var(--color-bg);border:1px solid var(--color-border)">
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium truncate" style="color:var(--color-text-primary)"><?= e($job['title']) ?></p>
-                <p class="text-xs" style="color:var(--color-text-muted)"><?= e(number_format((float) $job['budget'], 2)) ?> MMK &middot; <?= (int) $job['app_count'] ?> applications</p>
-              </div>
-              <?= status_badge($job['status']) ?>
-            </div>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-    </div>
   </div>
 
   <?php if (!empty($hired)): ?>
@@ -452,47 +426,6 @@ require __DIR__ . '/../includes/header.php';
       <?php endforeach; ?>
     </div>
   </div>
-  <?php endif; ?>
-</div>
-
-<!-- ====== JOBS TAB ====== -->
-<div class="dash-section" id="tab-jobs">
-  <div class="flex items-center justify-between mb-5">
-    <h2 class="text-lg font-semibold" style="color:var(--color-text-primary)">All Posted Jobs</h2>
-    <a href="<?= e(base_url('company/post_job.php')) ?>" class="btn-primary text-sm">
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-      <?= 'Post Job' ?>
-    </a>
-  </div>
-  <?php if (empty($jobs)): ?>
-    <div class="card text-center py-12" style="color:var(--color-text-placeholder)">
-      <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-      <p class="mb-3"><?= 'You have not posted any jobs yet.' ?></p>
-      <a href="<?= e(base_url('company/post_job.php')) ?>" class="btn-primary text-sm"><?= 'Post a New Job' ?></a>
-    </div>
-  <?php else: ?>
-    <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-      <?php foreach ($jobs as $job): ?>
-        <div class="card hover-lift relative flex flex-col" style="border-top:3px solid <?= $job['status'] === 'approved' ? '#10b981' : ($job['status'] === 'pending' ? '#f59e0b' : ($job['status'] === 'completed' ? '#3b82f6' : '#ef4444')) ?>">
-          <div class="flex items-start justify-between mb-2">
-            <span class="text-xs font-medium px-2 py-0.5 rounded-full" style="background:var(--color-bg);color:var(--color-text-muted)"><?= date('M j, Y', strtotime($job['created_at'])) ?></span>
-            <?= status_badge($job['status']) ?>
-          </div>
-          <h3 class="font-semibold mb-1 truncate" style="color:var(--color-text-primary)"><?= e($job['title']) ?></h3>
-          <p class="text-sm mb-3 line-clamp-2 flex-1" style="color:var(--color-text-muted)"><?= e(substr($job['description'] ?? '', 0, 120)) ?><?= strlen($job['description'] ?? '') > 120 ? '...' : '' ?></p>
-          <div class="flex items-center justify-between pt-3 border-t" style="border-color:var(--color-border)">
-            <span class="text-sm font-bold text-indigo-600"><?= e(number_format((float) $job['budget'], 2)) ?> MMK</span>
-            <span class="text-xs" style="color:var(--color-text-placeholder)"><?= (int) $job['app_count'] ?> app<?= $job['app_count'] !== 1 ? 's' : '' ?></span>
-          </div>
-          <div class="flex gap-2 mt-3">
-            <?php if ($job['status'] !== 'completed'): ?>
-              <a href="<?= e(base_url('company/edit_job.php?id=' . $job['id'])) ?>" class="flex-1 text-center text-xs font-medium py-1.5 rounded-lg border hover-lift" style="border-color:var(--color-border);color:var(--color-text-secondary)"><?= 'Edit' ?></a>
-            <?php endif; ?>
-            <a href="<?= e(base_url('company/view_applications.php?id=' . $job['id'])) ?>" class="flex-1 text-center text-xs font-medium py-1.5 rounded-lg text-white" style="background:#4f46e5"><?= 'Applications' ?></a>
-          </div>
-        </div>
-      <?php endforeach; ?>
-    </div>
   <?php endif; ?>
 </div>
 
@@ -562,11 +495,6 @@ require __DIR__ . '/../includes/header.php';
             <span style="color:var(--color-text-muted)">Budget: <strong class="text-indigo-600"><?= e(number_format((float) $h['budget'], 2)) ?> MMK</strong></span>
             <span style="color:var(--color-text-placeholder)"><?= date('M j', strtotime($h['assigned_at'])) ?></span>
           </div>
-          <?php if ($h['submission_link']): ?>
-            <div class="mt-2 pt-2 border-t" style="border-color:var(--color-border)">
-              <a href="<?= e($h['submission_link']) ?>" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline truncate block">View submission &rarr;</a>
-            </div>
-          <?php endif; ?>
           <?php if ($h['job_id']): ?>
             <a href="<?= e(base_url('company/view_applications.php?id=' . $h['job_id'])) ?>" class="mt-3 block text-center text-xs font-medium py-1.5 rounded-lg border hover-lift" style="border-color:var(--color-border);color:var(--color-text-secondary)">Manage Assignment</a>
           <?php endif; ?>
@@ -608,8 +536,23 @@ require __DIR__ . '/../includes/header.php';
     <div class="space-y-2">
       <?php foreach ($notifications as $n): ?>
         <div class="card flex items-start gap-3 p-4 <?= $n['is_read'] ? '' : 'border-l-4 border-l-indigo-500' ?>" style="<?= $n['is_read'] ? '' : 'background:rgba(99,102,241,0.03)' ?>">
-          <div class="mt-0.5 flex-shrink-0"><?= notification_icon($n['type']) ?></div>
+          <?php if (!empty($n['sender_name'])): ?>
+            <div class="mt-0.5 flex-shrink-0">
+                <?php if (!empty($n['sender_image'])): ?>
+                    <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover shadow-sm">
+                <?php else: ?>
+                    <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                <?php endif; ?>
+            </div>
+          <?php else: ?>
+            <div class="mt-0.5 flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800">
+                <?= notification_icon($n['type']) ?>
+            </div>
+          <?php endif; ?>
           <div class="flex-1 min-w-0">
+            <?php if (!empty($n['sender_name'])): ?>
+                <p class="font-semibold text-gray-900 dark:text-white mb-1"><?= e($n['sender_name']) ?></p>
+            <?php endif; ?>
             <p class="text-sm <?= $n['is_read'] ? '' : 'font-semibold' ?>" style="color:var(--color-text-primary)"><?= e($n['message']) ?></p>
             <p class="text-xs mt-1" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
           </div>

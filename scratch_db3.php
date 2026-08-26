@@ -1,8 +1,8 @@
 <?php
-require 'config/db.php';
-$res = $conn->query("SELECT COUNT(*) FROM payments");
-$row = $res->fetch_row();
-echo 'Payments count: ' . $row[0] . "\n";
-$res2 = $conn->query("SELECT COUNT(*) FROM wallet_transactions");
-$row2 = $res2->fetch_row();
-echo 'Wallet transactions count: ' . $row2[0] . "\n";
+require_once __DIR__ . '/config/db.php';
+$stmt = $conn->query("SELECT * FROM payments");
+$rows = [];
+while ($row = $stmt->fetch_assoc()) {
+    $rows[] = $row;
+}
+echo json_encode($rows, JSON_PRETTY_PRINT);

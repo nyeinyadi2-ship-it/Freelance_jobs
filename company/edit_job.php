@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $gender_requirement = $_POST['gender_requirement'] ?? 'any';
         $deadline = trim($_POST['deadline'] ?? '') ?: null;
         $duration = trim($_POST['duration'] ?? '');
-        $freelancers_needed = max(1, (int) ($_POST['freelancers_needed'] ?? 1));
+        $freelancers_needed = 1;
         $visibility = 'public';
         $selected_skills = $_POST['skills'] ?? [];
 
@@ -258,12 +258,6 @@ require __DIR__ . '/../includes/header.php';
                     <div>
                         <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Estimated Duration</label>
                         <input type="text" name="duration" maxlength="100" placeholder="e.g. 2 weeks" class="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($_POST['duration'] ?? $job['duration'] ?? '') ?>">
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <div>
-                        <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Freelancers Needed</label>
-                        <input type="number" name="freelancers_needed" min="1" max="50" class="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($_POST['freelancers_needed'] ?? $job['freelancers_needed'] ?? 1) ?>">
                     </div>
                 </div>
             </div>

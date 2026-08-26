@@ -3,16 +3,11 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';
 
-require_login();
-
 $user = current_user();
-
-if (!in_array($user['role'], ['company', 'freelancer', 'admin'], true)) {
-    redirect('index.php');
-}
+$role = $user ? ($user['role'] ?? null) : null;
 
 $company_id = null;
-if ($user['role'] === 'company') {
+if ($role === 'company') {
     $company_id = get_company_id($conn, (int) $user['user_id']);
     if (!$company_id) {
         set_flash('error', 'Company profile not found.');
@@ -23,11 +18,8 @@ if ($user['role'] === 'company') {
 // Get filter parameters
 $search = trim($_GET['q'] ?? '');
 $skill_filter = trim($_GET['skill'] ?? '');
-$min_rate = isset($_GET['min_rate']) ? (float) $_GET['min_rate'] : null;
-$max_rate = isset($_GET['max_rate']) ? (float) $_GET['max_rate'] : null;
-$min_exp = isset($_GET['min_exp']) ? (int) $_GET['min_exp'] : null;
-$availability = trim($_GET['availability'] ?? '');
-$location_filter = trim($_GET['location'] ?? '');
+$min_rating = (float)($_GET['min_rating'] ?? 0);
+
 $sort = $_GET['sort'] ?? 'rating';
 
 // Fetch all skills for filter
@@ -57,29 +49,7 @@ if ($skill_filter !== '') {
     $types .= 's';
 }
 
-if ($min_rate !== null) {
-    $where[] = 'f.hourly_rate >= ?';
-    $params[] = $min_rate;
-    $types .= 'd';
-}
 
-if ($max_rate !== null) {
-    $where[] = 'f.hourly_rate <= ?';
-    $params[] = $max_rate;
-    $types .= 'd';
-}
-
-if ($min_exp !== null) {
-    $where[] = 'f.experience_years >= ?';
-    $params[] = $min_exp;
-    $types .= 'i';
-}
-
-if ($location_filter !== '') {
-    $where[] = 'f.location LIKE ?';
-    $params[] = '%' . $location_filter . '%';
-    $types .= 's';
-}
 
 $where_sql = implode(' AND ', $where);
 
@@ -103,6 +73,7 @@ $sql = "SELECT f.id, f.full_name, f.title, f.hourly_rate, f.experience_years, f.
         LEFT JOIN reviews r ON r.freelancer_id = f.id
         WHERE {$where_sql}
         GROUP BY f.id
+        " . ($min_rating > 0 ? "HAVING avg_rating >= " . floatval($min_rating) : "") . "
         ORDER BY {$order_by}
         LIMIT 50";
 
@@ -246,10 +217,10 @@ html.dark {
     border: 1px solid var(--ff-border);
     border-radius: var(--ff-radius-lg);
     padding: 0.625rem;
-    margin-top: -2rem;
     margin-bottom: 1.5rem;
-    position: relative;
-    z-index: 2;
+    position: sticky;
+    top: 85px; /* Spacing below navbar */
+    z-index: 40;
     box-shadow: var(--ff-shadow-lg);
     display: flex;
     align-items: center;
@@ -636,39 +607,6 @@ html.dark .ff-post-cta {
 
 <div style="max-width:1560px;margin:0 auto;padding-bottom:3rem">
 
-    <!-- Hero Section with Illustration -->
-    <div class="ff-hero">
-        <div class="ff-hero-inner">
-            <div class="ff-hero-text">
-                <h1>Find Expert Freelancers</h1>
-                <p>Discover top talent and build your dream team in minutes. Browse profiles, compare skills, and hire with confidence.</p>
-            </div>
-            <div class="ff-hero-illustration">
-                <div class="ff-illust-dots"></div>
-                <div class="ff-illust-card">
-                    <div class="ff-illust-avatar">S</div>
-                    <div class="ff-illust-info">
-                        <span class="ff-illust-name">Sarah K.</span>
-                        <span class="ff-illust-role">UI/UX Designer</span>
-                    </div>
-                </div>
-                <div class="ff-illust-card">
-                    <div class="ff-illust-avatar">J</div>
-                    <div class="ff-illust-info">
-                        <span class="ff-illust-name">James M.</span>
-                        <span class="ff-illust-role">Full Stack Dev</span>
-                    </div>
-                </div>
-                <div class="ff-illust-card">
-                    <div class="ff-illust-avatar">A</div>
-                    <div class="ff-illust-info">
-                        <span class="ff-illust-name">Anna L.</span>
-                        <span class="ff-illust-role">Data Scientist</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Search Bar -->
     <form method="GET" action="<?= e(base_url('company/find_freelancers.php')) ?>" id="ff-top-form">
@@ -684,15 +622,8 @@ html.dark .ff-post-cta {
                     <option value="<?= e($sk['skill_name']) ?>" <?= $skill_filter === $sk['skill_name'] ? 'selected' : '' ?>><?= e($sk['skill_name']) ?></option>
                 <?php endforeach; ?>
             </select>
-            <div class="ff-sb-sep"></div>
-            <select name="min_exp" class="ff-sb-select">
-                <option value="">Experience Level</option>
-                <option value="1" <?= $min_exp === 1 ? 'selected' : '' ?>>Entry Level</option>
-                <option value="3" <?= $min_exp === 3 ? 'selected' : '' ?>>Intermediate</option>
-                <option value="5" <?= $min_exp === 5 ? 'selected' : '' ?>>Expert</option>
-                <option value="10" <?= $min_exp === 10 ? 'selected' : '' ?>>Master</option>
-            </select>
             <input type="hidden" name="sort" value="<?= e($sort) ?>">
+            <input type="hidden" name="min_rating" value="<?= e($_GET['min_rating'] ?? '') ?>">
             <button type="submit" class="ff-sb-btn">
                 <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                 Search
@@ -724,88 +655,30 @@ html.dark .ff-post-cta {
                         </select>
                     </div>
 
-                    <div class="ff-fg">
-                        <label class="ff-fl">Category</label>
-                        <select name="category" class="ff-fs">
-                            <option value="">All Categories</option>
-                        </select>
-                    </div>
 
-                    <div class="ff-fg">
-                        <label class="ff-fl">Experience Level</label>
-                        <select name="min_exp" class="ff-fs">
-                            <option value="">All Levels</option>
-                            <option value="1" <?= $min_exp === 1 ? 'selected' : '' ?>>Entry Level (1+ yrs)</option>
-                            <option value="3" <?= $min_exp === 3 ? 'selected' : '' ?>>Intermediate (3+ yrs)</option>
-                            <option value="5" <?= $min_exp === 5 ? 'selected' : '' ?>>Expert (5+ yrs)</option>
-                            <option value="10" <?= $min_exp === 10 ? 'selected' : '' ?>>Master (10+ yrs)</option>
-                        </select>
-                    </div>
 
-                    <div class="ff-fg">
-                        <label class="ff-fl">Hourly Rate</label>
-                        <div class="ff-rng">
-                            <div class="ff-rng-track"></div>
-                            <div class="ff-rng-fill" id="ff-rate-fill"></div>
-                            <input type="range" id="ff-rate-min" min="0" max="200" value="<?= $min_rate !== null ? e((string) $min_rate) : '0' ?>" oninput="ffUpdateRange()">
-                            <input type="range" id="ff-rate-max" min="0" max="200" value="<?= $max_rate !== null ? e((string) $max_rate) : '200' ?>" oninput="ffUpdateRange()">
-                        </div>
-                        <div class="ff-rng-labels">
-                            <span id="ff-rate-min-label"><?= $min_rate !== null ? e((string) $min_rate) : '0' ?> MMK</span>
-                            <span id="ff-rate-max-label"><?= $max_rate !== null ? e((string) $max_rate) : '200' ?> MMK+</span>
-                        </div>
-                        <input type="hidden" name="min_rate" id="ff-rate-min-hidden" value="<?= $min_rate !== null ? e((string) $min_rate) : '' ?>">
-                        <input type="hidden" name="max_rate" id="ff-rate-max-hidden" value="<?= $max_rate !== null ? e((string) $max_rate) : '' ?>">
-                    </div>
 
-                    <div class="ff-fg">
-                        <label class="ff-fl">Location</label>
-                        <select name="location" class="ff-fs">
-                            <option value="">All Locations</option>
-                            <?php
-                            $locations = [];
-                            $lr = $conn->query("SELECT DISTINCT location FROM freelancers WHERE location IS NOT NULL AND location != '' ORDER BY location");
-                            if ($lr) { while ($r = $lr->fetch_assoc()) $locations[] = $r['location']; }
-                            foreach ($locations as $loc):
-                            ?>
-                                <option value="<?= e($loc) ?>" <?= $location_filter === $loc ? 'selected' : '' ?>><?= e($loc) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
 
-                    <div class="ff-fg">
-                        <label class="ff-fl">Availability</label>
-                        <div class="ff-cb-group">
-                            <label class="ff-cb-label"><input type="checkbox" name="avail[]" value="now" <?= in_array('now', explode(',', $availability ?? '')) ? 'checked' : '' ?>> Available Now</label>
-                            <label class="ff-cb-label"><input type="checkbox" name="avail[]" value="week" <?= in_array('week', explode(',', $availability ?? '')) ? 'checked' : '' ?>> This Week</label>
-                            <label class="ff-cb-label"><input type="checkbox" name="avail[]" value="next_week" <?= in_array('next_week', explode(',', $availability ?? '')) ? 'checked' : '' ?>> Next Week</label>
-                        </div>
-                    </div>
+
+
+
+
+
 
                     <div class="ff-fg">
                         <label class="ff-fl">Rating</label>
                         <div class="ff-rp-group">
-                            <a href="#" class="ff-rp active" onclick="ffSetRating(this,'')">All</a>
-                            <a href="#" class="ff-rp" onclick="ffSetRating(this,'4')">4★+</a>
-                            <a href="#" class="ff-rp" onclick="ffSetRating(this,'3')">3★+</a>
-                            <a href="#" class="ff-rp" onclick="ffSetRating(this,'2')">2★+</a>
-                            <a href="#" class="ff-rp" onclick="ffSetRating(this,'1')">1★+</a>
+                            <a href="#" class="ff-rp <?= $min_rating == 0 ? 'active' : '' ?>" onclick="event.preventDefault(); ffSetRating(this,'')">All</a>
+                            <a href="#" class="ff-rp <?= $min_rating == 5 ? 'active' : '' ?>" onclick="event.preventDefault(); ffSetRating(this,'5')">5★</a>
+                            <a href="#" class="ff-rp <?= $min_rating == 4 ? 'active' : '' ?>" onclick="event.preventDefault(); ffSetRating(this,'4')">4★+</a>
+                            <a href="#" class="ff-rp <?= $min_rating == 3 ? 'active' : '' ?>" onclick="event.preventDefault(); ffSetRating(this,'3')">3★+</a>
+                            <a href="#" class="ff-rp <?= $min_rating == 2 ? 'active' : '' ?>" onclick="event.preventDefault(); ffSetRating(this,'2')">2★+</a>
+                            <a href="#" class="ff-rp <?= $min_rating == 1 ? 'active' : '' ?>" onclick="event.preventDefault(); ffSetRating(this,'1')">1★+</a>
                         </div>
-                        <input type="hidden" name="min_rating" id="ff-min-rating" value="">
+                        <input type="hidden" name="min_rating" id="ff-min-rating" value="<?= e($_GET['min_rating'] ?? '') ?>">
                     </div>
 
-                    <div class="ff-fg">
-                        <label class="ff-fl">Job Success</label>
-                        <div class="ff-rng">
-                            <div class="ff-rng-track"></div>
-                            <div class="ff-rng-fill" id="ff-success-fill"></div>
-                            <input type="range" id="ff-success-min" min="0" max="100" value="0" oninput="ffUpdateSuccessRange()">
-                        </div>
-                        <div class="ff-rng-labels">
-                            <span>Any</span>
-                            <span id="ff-success-label">100%</span>
-                        </div>
-                    </div>
+
 
                     <button type="submit" class="ff-apply-btn">
                         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
@@ -828,12 +701,7 @@ html.dark .ff-post-cta {
                         <option value="experience" <?= $sort === 'experience' ? 'selected' : '' ?>>Most Experienced</option>
                         <option value="name" <?= $sort === 'name' ? 'selected' : '' ?>>Name A-Z</option>
                     </select>
-                    <button type="button" class="ff-view-btn active" title="List view">
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-                    </button>
-                    <button type="button" class="ff-view-btn" title="Grid view">
-                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
-                    </button>
+
                     <button type="button" class="ff-view-btn ff-mobile-filter-btn" style="display:none" onclick="document.getElementById('ff-sidebar').classList.add('active')">
                         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                     </button>
@@ -911,18 +779,7 @@ html.dark .ff-post-cta {
                                     <?= number_format($rating, 1) ?> (<?= $review_count ?> review<?= $review_count != 1 ? 's' : '' ?>)
                                 </div>
                             <?php endif; ?>
-                            <div class="ff-fl-meta-item success">
-                                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                100% Job Success
-                            </div>
-                            <?php if ($fl['hourly_rate']): ?>
-                                <div class="ff-fl-meta-item rate">
-                                    <?= e(number_format((float) $fl['hourly_rate'], 0)) ?> MMK <span>/hr</span>
-                                </div>
-                            <?php endif; ?>
-                            <div class="ff-fl-meta-item" style="color:var(--ff-green);font-weight:500;font-size:0.75rem;">
-                                <?= $avail_text ?>
-                            </div>
+
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -934,43 +791,17 @@ html.dark .ff-post-cta {
 </div>
 
 <script>
-/* Range slider logic */
-function ffUpdateRange() {
-    var min = parseInt(document.getElementById('ff-rate-min').value);
-    var max = parseInt(document.getElementById('ff-rate-max').value);
-    if (min > max) { var tmp = min; min = max; max = tmp; }
-    var pct1 = (min / 200) * 100;
-    var pct2 = (max / 200) * 100;
-    var fill = document.getElementById('ff-rate-fill');
-    fill.style.left = pct1 + '%';
-    fill.style.width = (pct2 - pct1) + '%';
-    document.getElementById('ff-rate-min-label').textContent = min + ' MMK';
-    document.getElementById('ff-rate-max-label').textContent = max + '+' + ' MMK';
-    document.getElementById('ff-rate-min-hidden').value = min > 0 ? min : '';
-    document.getElementById('ff-rate-max-hidden').value = max < 200 ? max : '';
-}
-function ffUpdateSuccessRange() {
-    var val = document.getElementById('ff-success-min').value;
-    document.getElementById('ff-success-label').textContent = val + '%';
-    var fill = document.getElementById('ff-success-fill');
-    fill.style.left = '0';
-    fill.style.width = val + '%';
-}
 function ffSetRating(el, val) {
     document.querySelectorAll('.ff-rp').forEach(function(p) { p.classList.remove('active'); });
     el.classList.add('active');
     document.getElementById('ff-min-rating').value = val;
+    document.getElementById('ff-sidebar-form').submit();
 }
 function ffSort(val) {
     var url = new URL(window.location.href);
     url.searchParams.set('sort', val);
     window.location.href = url.toString();
 }
-/* Init range sliders */
-document.addEventListener('DOMContentLoaded', function() {
-    ffUpdateRange();
-    ffUpdateSuccessRange();
-});
 </script>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

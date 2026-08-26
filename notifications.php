@@ -114,10 +114,20 @@ require __DIR__ . '/includes/header.php';
                 <div class="card flex items-start gap-3 transition-all duration-200 <?= $n['is_read'] ? '' : 'border-l-4 border-l-indigo-500' ?>"
                      id="notif-<?= (int) $n['id'] ?>"
                      style="<?= $n['is_read'] ? '' : 'background:rgba(99,102,241,0.1)' ?>">
-                    <!-- Notification Icon -->
-                    <div class="mt-1 flex-shrink-0">
-                        <?= notification_icon($n['type']) ?>
-                    </div>
+                    <!-- Notification Icon or Avatar -->
+                    <?php if (!empty($n['sender_name'])): ?>
+                        <div class="mt-1 flex-shrink-0">
+                            <?php if (!empty($n['sender_image'])): ?>
+                                <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover shadow-sm">
+                            <?php else: ?>
+                                <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="mt-1 flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800">
+                            <?= notification_icon($n['type']) ?>
+                        </div>
+                    <?php endif; ?>
 
                     <!-- Unread dot -->
                     <?php if (!$n['is_read']): ?>
@@ -128,7 +138,10 @@ require __DIR__ . '/includes/header.php';
 
                     <!-- Content -->
                     <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 mb-0.5">
+                        <div class="flex items-center gap-2 mb-1">
+                            <?php if (!empty($n['sender_name'])): ?>
+                                <span class="font-semibold text-gray-900 dark:text-white"><?= e($n['sender_name']) ?></span>
+                            <?php endif; ?>
                             <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full <?= $n['is_read'] ? '' : 'text-indigo-700' ?>"
                                   style="<?= $n['is_read'] ? 'background:var(--color-card-hover);color:var(--color-text-muted)' : 'background:rgba(99,102,241,0.15)' ?>">
                                 <?= e(notification_type_label($n['type'])) ?>
@@ -136,7 +149,7 @@ require __DIR__ . '/includes/header.php';
                         </div>
                         <p class="text-sm <?= $n['is_read'] ? '' : 'font-medium' ?>"
                            style="<?= $n['is_read'] ? 'color:var(--color-text-muted)' : 'color:var(--color-text-primary)' ?>"><?= e($n['message']) ?></p>
-                        <p class="text-xs mt-1" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
+                        <p class="text-xs mt-1.5" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
                     </div>
 
                     <!-- Actions -->

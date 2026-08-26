@@ -119,13 +119,54 @@ $hire_success = '';
 $hire_error = '';
 // Removed already hired and pending hire checks to allow multiple projects
 
+// Project History with Current Company
+$company_projects = [];
+$viewer_company_id = 0;
+if ($is_company) {
+    $viewer_company_id = get_company_id($conn, $viewer_user_id);
+    if ($viewer_company_id > 0) {
+        $p_stmt = $conn->prepare("
+            SELECT a.id AS assignment_id, a.job_id, a.assigned_at, a.status, COALESCE(a.budget, j.budget) AS budget, j.title, c.company_name,
+                   (SELECT MAX(paid_at) FROM payments p WHERE p.assignment_id = a.id AND p.status = 'paid') AS completed_at
+            FROM assignments a
+            JOIN jobs j ON a.job_id = j.id
+            JOIN companies c ON j.company_id = c.id
+            WHERE a.freelancer_id = ? AND j.company_id = ?
+            ORDER BY a.assigned_at DESC
+        ");
+        $p_stmt->bind_param('ii', $fid, $viewer_company_id);
+        $p_stmt->execute();
+        $p_res = $p_stmt->get_result();
+        while($p_row = $p_res->fetch_assoc()) {
+            $company_projects[] = $p_row;
+        }
+        $p_stmt->close();
+    }
+}
+
 // Handle Direct Hire
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'direct_hire') {
-    if (!verify_csrf()) { $hire_error = 'Invalid request.'; }
-    elseif (!$is_company) { $hire_error = 'You must be logged in as a company.'; }
+    $is_ajax = isset($_POST['ajax']) && $_POST['ajax'] === '1';
+
+    $send_response = function($success, $message) use ($is_ajax, $fid) {
+        if ($is_ajax) {
+            header('Content-Type: application/json');
+            echo json_encode(['success' => $success, 'message' => $message]);
+            exit;
+        } else {
+            if ($success) {
+                set_flash('success', $message);
+                redirect("company/view_freelancer.php?id=" . $fid);
+            }
+            return $message;
+        }
+    };
+
+    if (!verify_csrf()) { $hire_error = $send_response(false, 'Invalid request.'); }
+    elseif (!$is_company) { $hire_error = $send_response(false, 'You must be logged in as a company.'); }
     else {
         $company_id = get_company_id($conn, $viewer_user_id);
-        if (!$company_id) { $hire_error = 'Company profile not found.'; }
+        if (!$company_id) { $hire_error = $send_response(false, 'Company profile not found.'); }
         else {
             $title = trim($_POST['project_title'] ?? '');
             $description = trim($_POST['project_description'] ?? '');
@@ -138,114 +179,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $ms_amounts = $_POST['ms_amount'] ?? [];
             $ms_deadlines = $_POST['ms_deadline'] ?? [];
             $attachment_name = null;
+
             if (!empty($_FILES['attachment']['name'])) {
                 $attachment_name = upload_attachment($_FILES['attachment']);
-                if ($attachment_name === null) { $hire_error = 'Invalid attachment. Allowed: JPG, PNG, PDF, DOCX, ZIP. Max 500MB.'; }
+                if ($attachment_name === null) { 
+                    $hire_error = $send_response(false, 'Invalid attachment. Allowed: JPG, PNG, PDF, DOCX, ZIP. Max 500MB.'); 
+                }
             }
-            if ($title === '') { $hire_error = 'Project title is required.'; }
-            elseif ($description === '') { $hire_error = 'Project description is required.'; }
-            elseif ($budget <= 0) { $hire_error = 'Budget must be greater than zero.'; }
-            elseif ($payment_type === 'milestone' && empty($ms_titles)) { $hire_error = 'Please add at least one milestone.'; }
-            else {
-                $has_pending = false; // Multiple hires allowed
-                if ($has_pending) { $hire_error = 'You already have a pending direct hire request for this freelancer.'; }
+
+            if (empty($hire_error)) {
+                if ($title === '') { $hire_error = $send_response(false, 'Project title is required.'); }
+                elseif ($description === '') { $hire_error = $send_response(false, 'Project description is required.'); }
+                elseif ($budget <= 0) { $hire_error = $send_response(false, 'Budget must be greater than zero.'); }
+                elseif ($payment_type === 'milestone' && empty($ms_titles)) { $hire_error = $send_response(false, 'Please add at least one milestone.'); }
                 else {
-                    if ($payment_type === 'milestone') {
-                        $ms_total = 0;
-                        foreach ($ms_amounts as $amt) { $ms_total += (float) $amt; }
-                        if (abs($ms_total - $budget) > 0.01) { $hire_error = 'Milestone total ($' . number_format($ms_total, 2) . ') must match the budget ($' . number_format($budget, 2) . ').'; }
-                    }
-                    if (empty($hire_error)) {
-                        $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'open', '')");
-                        $stmt->bind_param('issds', $company_id, $title, $description, $budget, $deadline);
+                    // Double-click / Race Condition Protection
+                    $stmt = $conn->prepare("SELECT id FROM jobs WHERE company_id = ? AND title = ? AND category = 'Direct Hire' AND created_at > (NOW() - INTERVAL 2 MINUTE)");
+                    $stmt->bind_param('is', $company_id, $title);
+                    $stmt->execute();
+                    $recent_duplicate = $stmt->get_result()->fetch_assoc();
+                    $stmt->close();
+
+                    if ($recent_duplicate) {
+                        $send_response(true, 'Hire request sent successfully! The freelancer will be notified.');
+                    } else {
+                        $stmt = $conn->prepare("SELECT a.id FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.freelancer_id = ? AND j.title = ?");
+                        $stmt->bind_param('iis', $company_id, $fid, $title);
                         $stmt->execute();
-                        $job_id = $stmt->insert_id;
+                        $existing_assignment = $stmt->get_result()->fetch_assoc();
                         $stmt->close();
-                        if ($job_id > 0) {
-                            if ($payment_type === 'milestone' && !empty($ms_titles)) {
-                                $ms_stmt = $conn->prepare('INSERT INTO milestones (job_id, freelancer_id, title, description, amount, deadline, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
-                                foreach ($ms_titles as $idx => $ms_t) {
-                                    $ms_t = trim($ms_t);
-                                    $ms_a = (float) ($ms_amounts[$idx] ?? 0);
-                                    $ms_d = trim($ms_descs[$idx] ?? '');
-                                    $ms_dl = trim($ms_deadlines[$idx] ?? '') !== '' ? trim($ms_deadlines[$idx]) : null;
-                                    if ($ms_t !== '' && $ms_a > 0) {
-                                        $order = $idx + 1;
-                                        $ms_stmt->bind_param('iissdsi', $job_id, $fid, $ms_t, $ms_d, $ms_a, $ms_dl, $order);
-                                        $ms_stmt->execute();
-                                    }
+
+                        if ($existing_assignment) {
+                            $send_response(true, 'Hire request sent successfully! The freelancer will be notified.');
+                        } else {
+                            if ($payment_type === 'milestone') {
+                                $ms_total = 0;
+                                foreach ($ms_amounts as $amt) { $ms_total += (float) $amt; }
+                                if (abs($ms_total - $budget) > 0.01) { 
+                                    $hire_error = $send_response(false, 'Milestone total ($' . number_format($ms_total, 2) . ') must match the budget ($' . number_format($budget, 2) . ').'); 
                                 }
-                                $ms_stmt->close();
                             }
-                            $deadline_val = $deadline !== '' ? $deadline : null;
-                            $notes_val = $notes !== '' ? $notes : null;
-                            $stmt = $conn->prepare("INSERT INTO assignments (job_id, freelancer_id, assignment_type, status, freelancer_response, project_title, project_description, budget, deadline, payment_type, notes, attachment) VALUES (?, ?, 'direct_hire', 'assigned', 'pending', ?, ?, ?, ?, ?, ?, ?)");
-                            $stmt->bind_param('iisssssss', $job_id, $fid, $title, $description, $budget, $deadline_val, $payment_type, $notes_val, $attachment_name);
-                            $stmt->execute();
-                            $assignment_id = $stmt->insert_id;
-                            $stmt->close();
-                            if ($assignment_id > 0) {
-                                    if ($payment_type === 'milestone') {
-                                        $first_ms = $conn->prepare("SELECT id, amount FROM milestones WHERE job_id = ? AND sort_order = 1 LIMIT 1");
-                                        $first_ms->bind_param('i', $job_id);
-                                        $first_ms->execute();
-                                        $ms_row = $first_ms->get_result()->fetch_assoc();
-                                        $first_ms->close();
-                                        if ($ms_row) {
-                                            $conn->begin_transaction();
-                                            try {
-                                                $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
-                                                $stmt_bal->bind_param('did', $ms_row['amount'], $viewer_user_id, $ms_row['amount']);
-                                                $stmt_bal->execute();
-                                                if ($stmt_bal->affected_rows === 0) {
-                                                    throw new Exception("Insufficient balance to fund the first milestone.");
+                            
+                            if (empty($hire_error)) {
+                                $conn->begin_transaction();
+                                try {
+                                    $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration, payment_type) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'open', '', ?)");
+                                    $stmt->bind_param('issdss', $company_id, $title, $description, $budget, $deadline, $payment_type);
+                                    $stmt->execute();
+                                    $job_id = $stmt->insert_id;
+                                    $stmt->close();
+                                    
+                                    if ($job_id > 0) {
+                                        if ($payment_type === 'milestone' && !empty($ms_titles)) {
+                                            $ms_stmt = $conn->prepare("INSERT INTO milestones (job_id, freelancer_id, title, description, amount, deadline, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)");
+                                            foreach ($ms_titles as $idx => $ms_t) {
+                                                $ms_t = trim($ms_t);
+                                                $ms_a = (float) ($ms_amounts[$idx] ?? 0);
+                                                $ms_d = trim($ms_descs[$idx] ?? '');
+                                                $ms_dl = trim($ms_deadlines[$idx] ?? '') !== '' ? trim($ms_deadlines[$idx]) : null;
+                                                if ($ms_t !== '' && $ms_a > 0) {
+                                                    $order = $idx + 1;
+                                                    $ms_stmt->bind_param('iissdsi', $job_id, $fid, $ms_t, $ms_d, $ms_a, $ms_dl, $order);
+                                                    $ms_stmt->execute();
                                                 }
-                                                $stmt_bal->close();
-
-                                                $up = $conn->prepare("UPDATE milestones SET status = 'funded' WHERE id = ?");
-                                                $up->bind_param('i', $ms_row['id']); $up->execute(); $up->close();
-                                                
-                                                // Log the funding in wallet_transactions
-                                                $desc = "Fund Milestone: " . ($title ?? 'Job');
-                                                $now = date('Y-m-d H:i:s');
-                                                $fl_user_id = (int) $freelancer['user_id'];
-                                                $stmt_wt = $conn->prepare("INSERT INTO wallet_transactions (user_id, sender_id, receiver_id, job_id, milestone_id, description, amount, type, payment_method, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'funding', 'platform_fund', 'completed', ?)");
-                                                $stmt_wt->bind_param('iiiiisds', $viewer_user_id, $viewer_user_id, $fl_user_id, $job_id, $ms_row['id'], $desc, $ms_row['amount'], $now);
-                                                $stmt_wt->execute();
-                                                $stmt_wt->close();
-
-                                                $conn->commit();
-                                            } catch (Exception $e) { 
-                                                $conn->rollback();
-                                                $hire_error = $e->getMessage();
-                                                $pending_hire = false;
                                             }
+                                            $ms_stmt->close();
+                                        }
+                                        
+                                        $deadline_val = $deadline !== '' ? $deadline : null;
+                                        $notes_val = $notes !== '' ? $notes : null;
+                                        $stmt = $conn->prepare("INSERT INTO assignments (job_id, freelancer_id, assignment_type, status, freelancer_response, project_title, project_description, budget, deadline, payment_type, notes, attachment) VALUES (?, ?, 'direct_hire', 'assigned', 'pending', ?, ?, ?, ?, ?, ?, ?)");
+                                        $stmt->bind_param('iisssssss', $job_id, $fid, $title, $description, $budget, $deadline_val, $payment_type, $notes_val, $attachment_name);
+                                        $stmt->execute();
+                                        $assignment_id = $stmt->insert_id;
+                                        $stmt->close();
+                                        
+                                        if ($assignment_id > 0) {
+                                            create_notification($conn, (int) $freelancer['user_id'], 'direct_hire', "Sent you a direct hire request for: {$title}", "freelancer/dashboard.php", $user_id);
+                                            $conn->commit();
+                                            $send_response(true, 'Hire request sent successfully! The freelancer will be notified.');
+                                        } else {
+                                            $conn->rollback();
+                                            $hire_error = $send_response(false, 'Failed to create assignment.');
                                         }
                                     } else {
-                                        // Reserve funds for Fixed price project
-                                        $conn->begin_transaction();
-                                        try {
-                                            $stmt_bal = $conn->prepare("UPDATE users SET available_balance = available_balance - ? WHERE id = ? AND available_balance >= ?");
-                                            $stmt_bal->bind_param('did', $budget, $user['user_id'], $budget);
-                                            $stmt_bal->execute();
-                                            if ($stmt_bal->affected_rows === 0) {
-                                                throw new Exception("Insufficient balance to reserve project budget.");
-                                            }
-                                            $stmt_bal->close();
-                                            $conn->commit();
-                                        } catch (Exception $e) { 
-                                            $conn->rollback();
-                                            $hire_error = $e->getMessage();
-                                            $pending_hire = false;
-                                        }
+                                        $conn->rollback();
+                                        $hire_error = $send_response(false, 'Failed to create job record.');
                                     }
-                                if (empty($hire_error)) {
-                                    create_notification($conn, (int) $freelancer['user_id'], 'direct_hire', "You have a new direct hire request from a company for: {$title}", "freelancer/dashboard.php");
-                                    $hire_success = 'Hire request sent successfully! The freelancer will be notified.';
-                                    $pending_hire = true;
+                                } catch (Exception $e) {
+                                    $conn->rollback();
+                                    $hire_error = $send_response(false, 'Error processing request.');
                                 }
-                            } else { $hire_error = 'Failed to create assignment.'; }
-                        } else { $hire_error = 'Failed to create job record.'; }
+                            }
+                        }
                     }
                 }
             }
@@ -259,7 +285,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($freelancer['full_name'] ?? 'Freelancer') ?> - Freelancer Profile - FreelanceHub</title>
-    <script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();</script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
     tailwind.config={
@@ -584,15 +610,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
                 <!-- Actions -->
                 <div class="flex flex-col gap-3">
-                    <?php if ($is_company): ?>
+                    <?php if ($viewer_role === null || $is_company): ?>
+                        <?php if ($viewer_role === null): ?>
+                            <a href="<?= e(base_url('auth/login.php')) ?>" class="btn-glow w-full justify-center inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white text-center" style="text-decoration:none;">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                Hire Freelancer
+                            </a>
+                            <a href="<?= e(base_url('auth/login.php')) ?>" class="w-full inline-flex justify-center items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors text-center" style="text-decoration:none;">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
+                                Send Message
+                            </a>
+                        <?php else: ?>
                             <button type="button" onclick="document.getElementById('hireModal').classList.remove('hidden')" class="btn-glow w-full justify-center inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                                 Hire Freelancer
                             </button>
-                        <a href="<?= e(base_url('chat/index.php?user=' . $freelancer['user_id'])) ?>" class="w-full inline-flex justify-center items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">
-                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
-                            Send Message
-                        </a>
+                            <a href="<?= e(base_url('chat/index.php?user=' . $freelancer['user_id'])) ?>" class="w-full inline-flex justify-center items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
+                                Send Message
+                            </a>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -611,6 +648,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     </h2>
                 </div>
                 <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-300 whitespace-pre-wrap"><?= nl2br(e($freelancer['bio'])) ?></p>
+            </div>
+            <?php endif; ?>
+
+            <!-- ===== PROJECT HISTORY (WITH CURRENT COMPANY) ===== -->
+            <?php if ($is_company): ?>
+            <div class="section-card p-6 sm:p-8 reveal reveal-d1">
+                <div class="section-header mb-4 border-b border-slate-100 dark:border-slate-800 pb-4 flex justify-between items-center">
+                    <h2 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+                        Project History
+                    </h2>
+                </div>
+                <?php if (!empty($company_projects)): ?>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead>
+                                <tr class="text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                                    <th class="font-medium py-3 px-2">Project Title</th>
+                                    <th class="font-medium py-3 px-2">Company Name</th>
+                                    <th class="font-medium py-3 px-2">Joined Date</th>
+                                    <th class="font-medium py-3 px-2">Status</th>
+                                    <th class="font-medium py-3 px-2">Payment</th>
+                                    <th class="font-medium py-3 px-2">Completed Date</th>
+                                    <th class="font-medium py-3 px-2 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($company_projects as $cp): 
+                                    $status_label = match($cp['status']) {
+                                        'assigned'   => 'Pending',
+                                        'working'    => 'In Progress',
+                                        'submitted'  => 'Submitted',
+                                        'completed'  => 'Completed',
+                                        'rejected'   => 'Rejected',
+                                        'cancelled'  => 'Cancelled',
+                                        default      => ucfirst($cp['status']),
+                                    };
+                                ?>
+                                    <tr class="border-b border-slate-50 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td class="py-3 px-2 font-semibold text-slate-900 dark:text-white"><?= e($cp['title']) ?></td>
+                                        <td class="py-3 px-2 text-slate-600 dark:text-slate-300"><?= e($cp['company_name']) ?></td>
+                                        <td class="py-3 px-2 text-slate-600 dark:text-slate-300"><?= date('M j, Y', strtotime($cp['assigned_at'])) ?></td>
+                                        <td class="py-3 px-2 text-slate-600 dark:text-slate-300"><?= e($status_label) ?></td>
+                                        <td class="py-3 px-2 text-slate-600 dark:text-slate-300"><?= number_format($cp['budget']) ?> MMK</td>
+                                        <td class="py-3 px-2 text-slate-600 dark:text-slate-300"><?= $cp['completed_at'] ? date('M j, Y', strtotime($cp['completed_at'])) : '-' ?></td>
+                                        <td class="py-3 px-2 text-right">
+                                            <a href="<?= e(base_url('company/view_applications.php?id=' . $cp['job_id'])) ?>" class="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium text-xs">View Project</a>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <div class="text-center py-6 text-sm text-slate-400 dark:text-slate-500">
+                        No project history with this company yet.
+                    </div>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
 
@@ -892,17 +987,86 @@ function updateMilestoneTotal() {
         errEl.classList.add('hidden');
     }
 }
-document.querySelector('#hireModal form')?.addEventListener('submit', function(e) {
+document.querySelector('#hireModal form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var form = this;
+    
     if (document.getElementById('hirePaymentType').value === 'milestone') {
         var total = 0;
         document.querySelectorAll('.ms-amount').forEach(function(input) { total += parseFloat(input.value) || 0; });
         var budget = parseFloat(document.querySelector('input[name="budget"]').value) || 0;
-        if (total <= 0) { e.preventDefault(); alert('Please add at least one milestone with an amount.'); return false; }
-        if (budget > 0 && Math.abs(total - budget) > 0.01) { e.preventDefault(); alert('Milestone total ($' + total.toFixed(2) + ') must match the project budget ($' + budget.toFixed(2) + ').'); return false; }
+        if (total <= 0) { alert('Please add at least one milestone with an amount.'); return false; }
+        if (budget > 0 && Math.abs(total - budget) > 0.01) { alert('Milestone total ($' + total.toFixed(2) + ') must match the project budget ($' + budget.toFixed(2) + ').'); return false; }
         var titles = document.querySelectorAll('input[name="ms_title[]"]');
         for (var i = 0; i < titles.length; i++) {
-            if (!titles[i].value.trim()) { e.preventDefault(); alert('Please fill in all milestone titles.'); titles[i].focus(); return false; }
+            if (!titles[i].value.trim()) { alert('Please fill in all milestone titles.'); titles[i].focus(); return false; }
         }
+    }
+
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn.disabled) return false;
+    
+    var originalBtnHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin h-5 w-5 mr-2 inline-block text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> Sending...';
+    
+    // Clear previous errors
+    var errorDiv = document.getElementById('hireAjaxError');
+    if (errorDiv) {
+        errorDiv.remove();
+    }
+
+    var formData = new FormData(form);
+    formData.append('ajax', '1');
+
+    try {
+        var response = await fetch(window.location.href, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        
+        var result;
+        try {
+            result = await response.json();
+        } catch (e) {
+            throw new Error('Invalid server response');
+        }
+
+        if (result.success) {
+            btn.innerHTML = '<svg class="w-5 h-5 mr-1 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Request Sent';
+            btn.classList.replace('from-indigo-500', 'from-emerald-500');
+            btn.classList.replace('to-violet-600', 'to-emerald-600');
+            
+            setTimeout(() => {
+                window.location.reload(); // Reload to show the success flash message on the main page
+            }, 1000);
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = originalBtnHTML;
+            
+            errorDiv = document.createElement('div');
+            errorDiv.id = 'hireAjaxError';
+            errorDiv.className = 'p-3 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-200 mt-0 mb-4';
+            errorDiv.textContent = result.message || 'An unknown error occurred.';
+            
+            // Insert error message at the top of the form
+            form.insertBefore(errorDiv, form.firstChild);
+            
+            // Scroll to top of modal if needed
+            form.scrollTop = 0;
+        }
+    } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = originalBtnHTML;
+        
+        errorDiv = document.createElement('div');
+        errorDiv.id = 'hireAjaxError';
+        errorDiv.className = 'p-3 rounded-xl bg-red-50 text-red-700 text-sm font-medium border border-red-200 mt-0 mb-4';
+        errorDiv.textContent = 'Network error while sending request.';
+        form.insertBefore(errorDiv, form.firstChild);
     }
 });
 </script>

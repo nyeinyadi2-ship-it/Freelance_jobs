@@ -16,7 +16,7 @@ $stats = [
 ];
 
 try {
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'rejected'");
+    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'closed'");
     $stats['hidden_jobs'] = (int) $r->fetch_assoc()['cnt'];
 } catch (mysqli_sql_exception $e) {}
 
@@ -52,9 +52,11 @@ try {
 } catch (mysqli_sql_exception $e) {}
 
 // Recent users
+$has_status_col = has_account_status_column();
+$status_sel = $has_status_col ? 'u.account_status,' : "'active' AS account_status,";
 $recent_users = [];
 $r = $conn->query("
-    SELECT u.id, u.username, u.email, u.role, u.created_at, u.profile_image
+    SELECT u.id, u.username, u.email, u.role, {$status_sel} u.created_at, u.profile_image
     FROM users u WHERE u.role != 'admin'
     ORDER BY u.created_at DESC LIMIT 5
 ");
@@ -135,14 +137,63 @@ require __DIR__ . '/includes/admin_header.php';
             </div>
         </div>
         <p class="text-2xl font-bold text-red-600 stat-counter" data-target="<?= $stats['hidden_jobs'] ?>">0</p>
-        <p class="text-xs mt-0.5" style="color:var(--color-text-muted)"><?= e('Hidden Jobs') ?></p>
+        <p class="text-xs mt-0.5" style="color:var(--color-text-muted)"><?= e('Closed Jobs') ?></p>
+    </div>
+</div>
+
+<!-- Recent Notifications -->
+<div class="mb-6">
+    <?php
+    $admin_user = current_user();
+    $admin_notifs = [];
+    if ($admin_user) {
+        try {
+            $admin_notifs = get_notifications($conn, (int) $admin_user['user_id'], 100);
+        } catch (Exception $e) {}
+    }
+    ?>
+    <div class="card admin-fade flex flex-col w-full" style="max-height: 600px;">
+        <div class="flex items-center justify-between mb-3 flex-shrink-0">
+            <h3 class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e('Notifications') ?></h3>
+            <a href="<?= e(base_url('admin/notifications.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e('View All Notifications') ?></a>
+        </div>
+        <?php if (empty($admin_notifs)): ?>
+            <p class="text-sm text-center py-8 flex-1" style="color:var(--color-text-muted)"><?= e('No notifications yet.') ?></p>
+        <?php else: ?>
+            <div class="divide-y overflow-y-auto pr-2 flex-1 custom-scrollbar" style="border-color:var(--color-border)">
+                <?php foreach ($admin_notifs as $n): ?>
+                    <div class="flex items-start gap-3 py-3 first:pt-0 last:pb-0 <?= $n['is_read'] ? '' : 'bg-indigo-50/30 dark:bg-indigo-900/10 -mx-2 px-2 rounded-lg' ?>">
+                        <div class="mt-1 flex-shrink-0 relative">
+                            <?= notification_icon($n['type']) ?>
+                            <?php if (!$n['is_read']): ?>
+                                <span class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white dark:border-slate-800 rounded-full" title="Unread"></span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="text-sm <?= $n['is_read'] ? '' : 'font-semibold' ?>" style="color:<?= $n['is_read'] ? 'var(--color-text-primary)' : 'var(--color-text-primary)' ?>"><?= e($n['message']) ?></p>
+                                <span class="text-[10px] font-medium px-1.5 py-0.5 rounded flex-shrink-0 <?= $n['is_read'] ? 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' ?>">
+                                    <?= $n['is_read'] ? 'Read' : 'Unread' ?>
+                                </span>
+                            </div>
+                            <p class="text-[11px] mt-1" style="color:var(--color-text-muted)"><?= date('M j, Y, g:i a', strtotime($n['created_at'])) ?></p>
+                        </div>
+                        <?php if ($n['link']): ?>
+                            <a href="<?= e(base_url($n['link'])) ?>" class="mt-1 flex-shrink-0 text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 p-1.5 rounded-lg transition-colors dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50" title="View details">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                            </a>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 
 <!-- Recent Activity + Quick Actions -->
-<div class="grid lg:grid-cols-3 gap-4 mb-6">
+<div class="grid lg:grid-cols-2 gap-4 mb-6">
     <!-- Recent Jobs -->
-    <div class="lg:col-span-2 card admin-fade">
+    <div class="card admin-fade">
         <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e('Recent Jobs') ?></h3>
             <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e('View All') ?></a>
@@ -167,123 +218,82 @@ require __DIR__ . '/includes/admin_header.php';
         <?php endif; ?>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="card admin-fade">
-        <h3 class="text-sm font-semibold mb-3" style="color:var(--color-text-primary)"><?= e('Quick Actions') ?></h3>
-        <div class="space-y-2">
-            <a href="<?= e(base_url('admin/approve_jobs.php')) ?>" class="flex items-center gap-2.5 p-2.5 rounded-lg border hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors" style="border-color:var(--color-border)">
-                <div class="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e('Moderate Jobs') ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= $admin_hidden_count ?> <?= e('pending review') ?></p>
-                </div>
-            </a>
-            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="flex items-center gap-2.5 p-2.5 rounded-lg border hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors" style="border-color:var(--color-border)">
-                <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e('Manage Users') ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= $stats['total_users'] ?> <?= e('total') ?></p>
-                </div>
-            </a>
-            <a href="<?= e(base_url('admin/manage_skills.php')) ?>" class="flex items-center gap-2.5 p-2.5 rounded-lg border hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors" style="border-color:var(--color-border)">
-                <div class="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e('Manage Skills') ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e('View & edit') ?></p>
-                </div>
-            </a>
-            <a href="<?= e(base_url('admin/categories.php')) ?>" class="flex items-center gap-2.5 p-2.5 rounded-lg border hover:border-indigo-200 dark:hover:border-indigo-800 transition-colors" style="border-color:var(--color-border)">
-                <div class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                </div>
-                <div class="min-w-0">
-                    <p class="text-sm font-medium" style="color:var(--color-text-primary)"><?= e('Manage Categories') ?></p>
-                    <p class="text-xs" style="color:var(--color-text-muted)"><?= e('View & edit') ?></p>
-                </div>
-            </a>
-        </div>
-    </div>
-</div>
-
-<!-- Recent Users + Notifications -->
-<div class="grid lg:grid-cols-2 gap-4 mb-6">
-    <!-- Recent Users -->
-    <div class="card admin-fade">
-        <div class="flex items-center justify-between mb-3">
+    <!-- Recent Users Table -->
+    <div class="card admin-fade delay-4">
+        <div class="flex items-center justify-between mb-4">
             <h3 class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e('Recent Users') ?></h3>
-            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e('View All') ?></a>
+            <a href="<?= e(base_url('admin/manage_users.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e('View All Users') ?></a>
         </div>
+        
         <?php if (empty($recent_users)): ?>
             <p class="text-sm text-center py-8" style="color:var(--color-text-muted)"><?= e('No users registered yet.') ?></p>
         <?php else: ?>
-            <div class="divide-y" style="border-color:var(--color-border)">
-                <?php foreach ($recent_users as $u): ?>
-                    <div class="flex items-center gap-2.5 py-2.5 first:pt-0 last:pb-0">
-                        <?php $img = profile_image_url($u['profile_image']); ?>
-                        <?php if ($img): ?>
-                            <img src="<?= e($img) ?>" alt="" class="w-7 h-7 rounded-full object-cover flex-shrink-0">
-                        <?php else: ?>
-                            <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs flex-shrink-0">
-                                <?= e(_first_char($u['username'])) ?>
-                            </div>
-                        <?php endif; ?>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-sm font-medium truncate" style="color:var(--color-text-primary)"><?= e($u['username']) ?></p>
-                            <p class="text-xs" style="color:var(--color-text-muted)"><?= e($u['email']) ?></p>
-                        </div>
-                        <?php
-                        $rc = $u['role'] === 'company' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
-                        ?>
-                        <span class="inline-flex px-1.5 py-0.5 text-[10px] font-semibold rounded-full <?= $rc ?>"><?= e(ucfirst($u['role'])) ?></span>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-    </div>
-
-    <!-- Recent Notifications -->
-    <?php
-    $admin_user = current_user();
-    $admin_notifs = [];
-    if ($admin_user) {
-        try {
-            $admin_notifs = get_notifications($conn, (int) $admin_user['user_id'], 5);
-        } catch (Exception $e) {}
-    }
-    ?>
-    <div class="card admin-fade">
-        <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e('Notifications') ?></h3>
-            <a href="<?= e(base_url('admin/notifications.php')) ?>" class="text-xs text-indigo-600 hover:underline"><?= e('View All') ?></a>
-        </div>
-        <?php if (empty($admin_notifs)): ?>
-            <p class="text-sm text-center py-8" style="color:var(--color-text-muted)"><?= e('No notifications yet.') ?></p>
-        <?php else: ?>
-            <div class="divide-y" style="border-color:var(--color-border)">
-                <?php foreach ($admin_notifs as $n): ?>
-                    <div class="flex items-start gap-2.5 py-2.5 first:pt-0 last:pb-0 <?= $n['is_read'] ? '' : 'bg-indigo-50/50 dark:bg-indigo-900/20 -mx-2 px-2 rounded' ?>">
-                        <div class="mt-0.5 flex-shrink-0"><?= notification_icon($n['type']) ?></div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-xs truncate <?= $n['is_read'] ? '' : 'font-medium' ?>" style="color:<?= $n['is_read'] ? 'var(--color-text-muted)' : 'var(--color-text-primary)' ?>"><?= e($n['message']) ?></p>
-                            <p class="text-[10px] mt-0.5" style="color:var(--color-text-placeholder)"><?= e($n['created_at']) ?></p>
-                        </div>
-                        <?php if ($n['link']): ?>
-                            <a href="<?= e(base_url($n['link'])) ?>" class="text-indigo-600 hover:text-indigo-700 flex-shrink-0">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-                            </a>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b" style="border-color:var(--color-border)">
+                            <th class="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">User</th>
+                            <th class="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Role</th>
+                            <th class="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Joined Date</th>
+                            <th class="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                            <th class="py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y" style="border-color:var(--color-border)">
+                        <?php foreach ($recent_users as $u): ?>
+                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-3">
+                                        <?php $img = profile_image_url($u['profile_image']); ?>
+                                        <?php if ($img): ?>
+                                            <img src="<?= e($img) ?>" alt="" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
+                                        <?php else: ?>
+                                            <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs flex-shrink-0">
+                                                <?= e(_first_char($u['username'])) ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        <div>
+                                            <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e($u['username']) ?></p>
+                                            <p class="text-xs" style="color:var(--color-text-muted)"><?= e($u['email']) ?></p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <?php
+                                    $rc = $u['role'] === 'company' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
+                                    ?>
+                                    <span class="inline-flex px-2 py-1 text-[10px] font-bold uppercase rounded-md <?= $rc ?>"><?= e($u['role']) ?></span>
+                                </td>
+                                <td class="py-3 px-4 text-sm" style="color:var(--color-text-primary)">
+                                    <?= date('M j, Y', strtotime($u['created_at'])) ?>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <?php 
+                                        $status = $u['account_status'] ?? 'active';
+                                        $status_classes = [
+                                            'active' => 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                                            'suspended' => 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                                            'blocked' => 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                                        ];
+                                        $sc = $status_classes[$status] ?? $status_classes['active'];
+                                    ?>
+                                    <span class="inline-flex px-2 py-1 text-[10px] font-semibold rounded-md <?= $sc ?>"><?= e(ucfirst($status)) ?></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <a href="<?= e(base_url('admin/view_user.php?id=' . $u['id'])) ?>" class="inline-flex items-center justify-center px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-colors">
+                                        View
+                                    </a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             </div>
         <?php endif; ?>
     </div>
 </div>
+
+
 
 <script>
 (function() {

@@ -90,17 +90,17 @@ require __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                 </div>
 
-                <?php if ($proposal['status'] !== 'hired' && $proposal['status'] !== 'rejected'): ?>
+                <?php if ($proposal['status'] === 'submitted'): ?>
                     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 border-t-4 border-t-indigo-500">
                         <h3 class="text-xl font-bold mb-4">Evaluation</h3>
                         <div class="flex gap-4">
                             <form action="<?= e(base_url('company/view_applications.php?id=' . $proposal['job_id'])) ?>" method="POST" class="flex-1">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                 <input type="hidden" name="job_id" value="<?= $proposal['job_id'] ?>">
-                                <input type="hidden" name="action" value="accept">
+                                <input type="hidden" name="action" value="approve_proposal">
                                 <input type="hidden" name="application_id" value="<?= $proposal['application_id'] ?>">
                                 <input type="hidden" name="proposal_id" value="<?= $proposal['id'] ?>">
-                                <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors text-center shadow-lg shadow-green-200 dark:shadow-none">Hire Freelancer</button>
+                                <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-colors text-center shadow-lg shadow-green-200 dark:shadow-none">Approve Trial Task</button>
                             </form>
                             <form action="<?= e(base_url('company/view_applications.php?id=' . $proposal['job_id'])) ?>" method="POST" class="flex-1" onsubmit="return confirm('Are you sure you want to reject this applicant?');">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
@@ -122,7 +122,7 @@ require __DIR__ . '/../includes/header.php';
 
         <div class="space-y-6">
             <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <h3 class="text-lg font-bold mb-4">Assignment Details</h3>
+                <h3 class="text-lg font-bold mb-4">Trial Task Details</h3>
                 <div class="prose dark:prose-invert max-w-none text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap mb-4"><?= e($proposal['description']) ?></div>
                 
                 <ul class="space-y-4 text-sm mt-4">

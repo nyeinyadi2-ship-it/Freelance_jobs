@@ -20,7 +20,7 @@ $error = '';
 $old = [
     'title' => '', 'category' => '', 'budget' => '', 'payment_type' => 'fixed', 'experience_level' => 'intermediate',
     'gender_requirement' => 'any', 'description' => '', 'requirements' => '',
-    'deadline' => '', 'duration' => '', 'freelancers_needed' => '1', 'visibility' => 'public',
+    'deadline' => '', 'duration' => '', 'freelancers_needed' => '1',
 ];
 
 $skills = [];
@@ -52,70 +52,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $old['deadline'] = trim($_POST['deadline'] ?? '');
         $old['duration'] = trim($_POST['duration'] ?? '');
         $old['freelancers_needed'] = trim($_POST['freelancers_needed'] ?? '1');
-        $old['visibility'] = 'public';
 
         // Validation
         if ($old['title'] === '') {
             $error = 'Job title is required. Please enter a title for your job posting.';
         } elseif ($old['category'] === '') {
             $error = 'Category is required. Please select a category for your job.';
-        } elseif ($old['payment_type'] === 'fixed' && !is_numeric($old['budget'])) {
-            $error = 'Please enter a valid budget amount.';
-        } elseif ($old['payment_type'] === 'fixed' && (float) $old['budget'] <= 0) {
-            $error = 'Budget must be greater than zero. Please enter a positive amount.';
-        } elseif ($old['payment_type'] === 'fixed' && (float) $old['budget'] < 1) {
-            $error = 'Budget must be at least 1.00 MMK.';
+        } elseif (!is_numeric($old['budget']) || (float) $old['budget'] <= 0) {
+            $error = 'Total Project Payment (Budget) must be greater than zero.';
         } elseif ($old['description'] === '') {
             $error = 'Job description is required. Please describe your project.';
         } elseif ($old['requirements'] === '') {
             $error = 'Requirements are required. Please list the qualifications needed.';
         } elseif ($old['deadline'] !== '' && strtotime($old['deadline']) < time()) {
             $error = 'Deadline cannot be in the past. Please select a future date.';
-        } elseif (!is_numeric($old['freelancers_needed']) || (int) $old['freelancers_needed'] < 1) {
-            $error = 'Freelancers needed must be at least 1.';
-        } else {
+        }
+
+        $total_budget = (float) $old['budget'];
+
+        // Validate milestones if payment type is milestone and no error yet
+        if (!$error && $old['payment_type'] === 'milestone') {
+            $ms_titles = $_POST['ms_title'] ?? [];
+            $ms_amounts = $_POST['ms_amount'] ?? [];
+            $ms_descs = $_POST['ms_desc'] ?? [];
+            $ms_deadlines = $_POST['ms_deadline'] ?? [];
+            $has_valid_milestone = false;
+            $milestone_sum = 0;
+            foreach ($ms_titles as $idx => $mtitle) {
+                $mtitle = trim($mtitle);
+                $mamt = (float)($ms_amounts[$idx] ?? 0);
+                $mdesc = trim($ms_descs[$idx] ?? '');
+                $mdeadline = $ms_deadlines[$idx] ?? '';
+                if ($mtitle !== '') {
+                    $has_valid_milestone = true;
+                    $milestone_sum += $mamt;
+                    if ($mamt <= 0) {
+                        $error = 'Milestone "' . $mtitle . '" amount must be greater than zero.';
+                        break;
+                    }
+                    if ($mdesc === '') {
+                        $error = 'Milestone "' . $mtitle . '" description is required.';
+                        break;
+                    }
+                    if ($mdeadline === '') {
+                        $error = 'Milestone "' . $mtitle . '" deadline is required.';
+                        break;
+                    }
+                    if (strtotime($mdeadline) < time()) {
+                        $error = 'Milestone "' . $mtitle . '" deadline cannot be in the past.';
+                        break;
+                    }
+                }
+            }
+            if (!$error && !$has_valid_milestone) {
+                $error = 'Please add at least one milestone with a valid title.';
+            }
+            if (!$error && round($milestone_sum, 2) !== round($total_budget, 2)) {
+                $error = 'Total milestone amount (' . number_format($milestone_sum, 2) . ' MMK) must exactly match the Total Project Payment (' . number_format($total_budget, 2) . ' MMK).';
+            }
+        }
+
+        if (!$error) {
             // Handle attachment upload
             $attachment_name = null;
             if (!empty($_FILES['attachment']['name'])) {
                 $attachment_name = upload_attachment($_FILES['attachment']);
                 if ($attachment_name === null) {
-                    $error = 'Invalid attachment. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP. Max 500MB.';
+                    $error = 'Invalid attachment. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP. Max 10MB.';
                 }
             }
 
             if (!$error) {
-                $budget = 0;
+                $budget = $total_budget;
                 $payment_type = $old['payment_type'];
                 
-                if ($payment_type === 'milestone') {
-                    $ms_amounts = $_POST['ms_amount'] ?? [];
-                    foreach ($ms_amounts as $amt) {
-                        $budget += (float)$amt;
-                    }
-                } else {
-                    $budget = (float) $old['budget'];
-                }
-                
                 $deadline = $old['deadline'] !== '' ? $old['deadline'] : null;
-                $freelancers_needed = max(1, (int) $old['freelancers_needed']);
+                $freelancers_needed = 1;
                 $status = 'open';
 
-                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, requirements, budget, deadline, duration, freelancers_needed, visibility, attachment, status, payment_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param('issssssdssissss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $old['requirements'], $budget, $deadline, $old['duration'], $freelancers_needed, $old['visibility'], $attachment_name, $status, $payment_type);
+                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, requirements, budget, deadline, duration, freelancers_needed, attachment, status, payment_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('issssssdssisss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $old['requirements'], $budget, $deadline, $old['duration'], $freelancers_needed, $attachment_name, $status, $payment_type);
                 $stmt->execute();
                 $job_id = $stmt->insert_id;
                 $stmt->close();
                 
                 if ($payment_type === 'milestone' && !empty($_POST['ms_title'])) {
-                    $stmt_ms = $conn->prepare("INSERT INTO milestones (job_id, title, amount, status, sort_order) VALUES (?, ?, ?, 'draft', ?)");
+                    $stmt_ms = $conn->prepare("INSERT INTO milestones (job_id, title, description, amount, deadline, status, sort_order) VALUES (?, ?, ?, ?, ?, 'draft', ?)");
                     $titles = $_POST['ms_title'];
                     $amounts = $_POST['ms_amount'];
+                    $descs = $_POST['ms_desc'] ?? [];
+                    $deadlines = $_POST['ms_deadline'] ?? [];
                     foreach ($titles as $idx => $mtitle) {
                         $mamt = (float)$amounts[$idx];
+                        $mdesc = trim($descs[$idx] ?? '');
+                        $mdeadline = !empty($deadlines[$idx]) ? $deadlines[$idx] : null;
                         $ms_order = $idx + 1;
                         if ($mamt > 0 && trim($mtitle) !== '') {
                             $mtitle_clean = trim($mtitle);
-                            $stmt_ms->bind_param('isdi', $job_id, $mtitle_clean, $mamt, $ms_order);
+                            $stmt_ms->bind_param('issdsi', $job_id, $mtitle_clean, $mdesc, $mamt, $mdeadline, $ms_order);
                             $stmt_ms->execute();
                         }
                     }
@@ -135,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Notify admin
                 $admin_id = get_admin_user_id($conn);
                 if ($admin_id) {
-                    create_notification($conn, $admin_id, 'new_job', "New job \"{$old['title']}\" posted by " . e($user['username']) . " and is now live.", "admin/approve_jobs.php");
+                    create_notification($conn, $admin_id, 'new_job', "Posted a new job \"{$old['title']}\".", "admin/approve_jobs.php", $user_id);
                 }
 
                 set_flash('success', 'Job posted successfully and is now live.');
@@ -326,17 +360,25 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                     <span></span>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <div class="grid grid-cols-1 gap-5">
                                 <div>
                                     <label class="form-label">Payment Type</label>
                                     <select name="payment_type" id="paymentTypeSelect" class="form-input" onchange="togglePaymentType(); updatePreview()">
-                                        <option value="fixed" <?= $old['payment_type'] === 'fixed' ? 'selected' : '' ?>>Project Payment</option>
+                                        <option value="fixed" <?= $old['payment_type'] === 'fixed' ? 'selected' : '' ?>>Fixed Payment</option>
                                         <option value="milestone" <?= $old['payment_type'] === 'milestone' ? 'selected' : '' ?>>Milestone Payment</option>
                                     </select>
                                 </div>
-                                <div id="fixedBudgetContainer" style="<?= $old['payment_type'] === 'milestone' ? 'display:none;' : '' ?>">
-                                    <label class="form-label">Total Budget (MMK) <span class="req">*</span></label>
-                                    <input type="number" name="budget" id="fixedBudgetInput" step="0.01" min="0.01" placeholder="0.00" class="form-input" value="<?= e($old['budget']) ?>" oninput="clearFieldError(this); updatePreview()">
+                            </div>
+                            
+                            <div class="grid grid-cols-1 gap-5">
+                                <div id="budgetContainer">
+                                    <label class="form-label">Total Project Payment (Budget) <span class="req">*</span></label>
+                                    <div class="relative">
+                                        <input type="number" name="budget" id="fixedBudgetInput" step="0.01" min="0.01" placeholder="0.00" class="form-input" value="<?= e($old['budget']) ?>" oninput="clearFieldError(this); updatePreview(); updateMilestoneTotal()">
+                                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                            <span class="text-sm text-gray-500 font-medium">MMK</span>
+                                        </div>
+                                    </div>
                                     <div class="field-error" id="err-budget">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                                         <span></span>
@@ -360,8 +402,22 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                             <span class="text-xs font-bold uppercase tracking-wider" style="color:var(--color-text-muted)">Milestone 1</span>
                                         </div>
                                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <input type="text" name="ms_title[]" required placeholder="e.g. UI Design" class="form-input milestone-title" oninput="updatePreview()">
-                                            <input type="number" name="ms_amount[]" step="0.01" min="0.01" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()">
+                                            <div class="sm:col-span-2">
+                                                <label class="form-label">Title <span class="req">*</span></label>
+                                                <input type="text" name="ms_title[]" required placeholder="e.g. UI Design" class="form-input milestone-title" oninput="updatePreview()">
+                                            </div>
+                                            <div>
+                                                <label class="form-label">Amount (MMK) <span class="req">*</span></label>
+                                                <input type="number" name="ms_amount[]" step="0.01" min="0.01" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()">
+                                            </div>
+                                            <div>
+                                                <label class="form-label">Deadline <span class="req">*</span></label>
+                                                <input type="datetime-local" name="ms_deadline[]" required class="form-input milestone-deadline" min="<?= date('Y-m-d\TH:i') ?>" oninput="updatePreview()">
+                                            </div>
+                                            <div class="sm:col-span-2">
+                                                <label class="form-label">Description <span class="req">*</span></label>
+                                                <textarea name="ms_desc[]" rows="2" required placeholder="Describe what needs to be delivered in this milestone..." class="form-input milestone-desc" oninput="updatePreview()"></textarea>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -436,9 +492,11 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 </div>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                <div>
-                                    <label class="form-label">Freelancers Needed</label>
-                                    <input type="number" name="freelancers_needed" min="1" max="50" class="form-input" value="<?= e($old['freelancers_needed']) ?>">
+                                <div class="flex items-end pb-1">
+                                    <div class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl" style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15)">
+                                        <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <span class="text-sm font-semibold text-emerald-700">Remote Only</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -481,7 +539,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                     <input type="file" name="attachment" id="attachmentInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.zip,.rar">
                                     <svg class="w-10 h-10 mx-auto mb-3" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
                                     <p class="text-sm font-medium" style="color:var(--color-text-secondary)">Drag & drop a file here, or <span style="color:#6366f1">browse</span></p>
-                                    <p class="text-xs mt-1" style="color:var(--color-text-muted)">JPG, PNG, PDF, DOCX, ZIP up to 500MB</p>
+                                    <p class="text-xs mt-1" style="color:var(--color-text-muted)">JPG, PNG, PDF, DOCX, ZIP up to 10MB</p>
                                 </div>
                                 <div id="filePreview" class="flex items-center gap-3 p-3 rounded-xl mt-3" style="display:none;background:var(--color-bg);border:1px solid var(--color-border)">
                                     <span id="fileIcon"></span>
@@ -540,10 +598,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                             <div class="flex justify-between py-2.5 border-b" style="border-color:var(--color-border)">
                                 <span class="text-sm" style="color:var(--color-text-muted)">Duration</span>
                                 <span class="text-sm font-semibold" style="color:var(--color-text-primary)" id="reviewDuration">Not set</span>
-                            </div>
-                            <div class="flex justify-between py-2.5 border-b" style="border-color:var(--color-border)">
-                                <span class="text-sm" style="color:var(--color-text-muted)">Freelancers Needed</span>
-                                <span class="text-sm font-semibold" style="color:var(--color-text-primary)" id="reviewFreelancers">1</span>
                             </div>
                             <div class="py-2.5 border-b" style="border-color:var(--color-border)">
                                 <span class="text-sm font-medium block mb-1.5" style="color:var(--color-text-muted)">Description</span>
@@ -605,10 +659,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                 <span id="pvDurationText">Not set</span>
                             </div>
-                            <div class="inline-flex items-center gap-1 text-xs" style="color:var(--color-text-muted)">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                <span id="pvFreelancers">1 freelancer</span>
-                            </div>
                         </div>
 
                         <hr style="border:none;border-top:1px solid var(--color-border);margin:0.75rem 0">
@@ -646,14 +696,13 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     window.togglePaymentType = function() {
         var pt = document.getElementById('paymentTypeSelect').value;
         if (pt === 'fixed') {
-            document.getElementById('fixedBudgetContainer').style.display = 'block';
             document.getElementById('milestonesSection').style.display = 'none';
         } else {
-            document.getElementById('fixedBudgetContainer').style.display = 'none';
             document.getElementById('milestonesSection').style.display = 'block';
         }
         updatePreview();
     };
+
 
     // ===== Error Display Helpers =====
     function showFieldError(fieldName, message) {
@@ -772,8 +821,11 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     function validateMilestones() {
         var msTitles = document.querySelectorAll('[name="ms_title[]"]');
         var msAmounts = document.querySelectorAll('[name="ms_amount[]"]');
+        var msDescs = document.querySelectorAll('[name="ms_desc[]"]');
+        var msDeadlines = document.querySelectorAll('[name="ms_deadline[]"]');
         var milestoneTotal = 0;
         var errors = [];
+        var now = new Date();
 
         // Clear previous milestone errors
         document.querySelectorAll('.ms-item.has-error').forEach(function(el) {
@@ -783,15 +835,29 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         for (var i = 0; i < msTitles.length; i++) {
             var msTitle = msTitles[i].value.trim();
             var msAmount = parseFloat(msAmounts[i].value) || 0;
+            var msDesc = msDescs[i] ? msDescs[i].value.trim() : '';
+            var msDeadline = msDeadlines[i] ? msDeadlines[i].value : '';
 
             if (msTitle !== '') {
+                var msItem = msTitles[i].closest('.ms-item');
                 if (msAmount <= 0) {
                     errors.push('Milestone "' + msTitle + '" amount must be greater than zero.');
-                    msAmounts[i].closest('.ms-item').classList.add('has-error');
+                    msItem.classList.add('has-error');
                 }
                 if (msAmount < 0) {
                     errors.push('Milestone amounts cannot be negative.');
-                    msAmounts[i].closest('.ms-item').classList.add('has-error');
+                    msItem.classList.add('has-error');
+                }
+                if (!msDesc) {
+                    errors.push('Milestone "' + msTitle + '" description is required.');
+                    msItem.classList.add('has-error');
+                }
+                if (!msDeadline) {
+                    errors.push('Milestone "' + msTitle + '" deadline is required.');
+                    msItem.classList.add('has-error');
+                } else if (new Date(msDeadline) < now) {
+                    errors.push('Milestone "' + msTitle + '" deadline cannot be in the past.');
+                    msItem.classList.add('has-error');
                 }
                 milestoneTotal += msAmount;
             }
@@ -846,6 +912,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
 
     window.addMilestone = function() {
         milestoneCount++;
+        var minDate = new Date().toISOString().slice(0, 16);
         var html = '<div class="ms-item relative">' +
             '<div class="flex items-center justify-between mb-3">' +
             '<span class="text-xs font-bold uppercase tracking-wider" style="color:var(--color-text-muted)">Milestone ' + milestoneCount + '</span>' +
@@ -854,12 +921,14 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
             '</button></div>' +
             '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' +
             '<div class="sm:col-span-2"><label class="form-label">Title <span class="req">*</span></label>' +
-            '<input type="text" name="ms_title[]" required placeholder="e.g. Design Mockups" class="form-input" oninput="updatePreview()"></div>' +
+            '<input type="text" name="ms_title[]" required placeholder="e.g. Design Mockups" class="form-input milestone-title" oninput="updatePreview()"></div>' +
             '<div><label class="form-label">Amount (MMK) <span class="req">*</span></label>' +
             '<input type="number" name="ms_amount[]" step="0.01" min="0.01" required placeholder="0.00" class="form-input milestone-amount" oninput="updateMilestoneTotal(); updatePreview()"></div>' +
-            '<div><label class="form-label">Description</label>' +
-            '<input type="text" name="ms_desc[]" placeholder="Brief description" class="form-input"></div>' +
-            '</div></div>';
+            '<div><label class="form-label">Deadline <span class="req">*</span></label>' +
+            '<input type="datetime-local" name="ms_deadline[]" required min="' + minDate + '" class="form-input milestone-deadline" oninput="updatePreview()"></div>' +
+            '<div class="sm:col-span-2"><label class="form-label">Description <span class="req">*</span></label>' +
+            '<textarea name="ms_desc[]" rows="2" required placeholder="Describe what needs to be delivered in this milestone..." class="form-input milestone-desc" oninput="updatePreview()"></textarea>' +
+            '</div></div></div>';
         document.getElementById('milestonesContainer').insertAdjacentHTML('beforeend', html);
         updateMilestoneTotal();
     };
@@ -890,13 +959,13 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         if (total > 0 && budget > 0) {
             if (total > budget) {
                 warningEl.className = 'ms-total-warning visible over';
-                warningEl.textContent = 'Total ($' + total.toFixed(2) + ') exceeds budget ($' + budget.toFixed(2) + ') by $' + (total - budget).toFixed(2);
+                warningEl.textContent = 'Total (' + total.toLocaleString('en', {minimumFractionDigits:2}) + ' MMK) exceeds budget (' + budget.toLocaleString('en', {minimumFractionDigits:2}) + ' MMK) by ' + (total - budget).toLocaleString('en', {minimumFractionDigits:2}) + ' MMK';
             } else if (total < budget) {
                 warningEl.className = 'ms-total-warning visible under';
-                warningEl.textContent = 'Total ($' + total.toFixed(2) + ') is under budget ($' + budget.toFixed(2) + ') by $' + (budget - total).toFixed(2);
+                warningEl.textContent = 'Total (' + total.toLocaleString('en', {minimumFractionDigits:2}) + ' MMK) is under budget (' + budget.toLocaleString('en', {minimumFractionDigits:2}) + ' MMK) by ' + (budget - total).toLocaleString('en', {minimumFractionDigits:2}) + ' MMK';
             } else {
                 warningEl.className = 'ms-total-warning visible match';
-                warningEl.textContent = 'Total matches budget exactly ($' + total.toFixed(2) + ')';
+                warningEl.textContent = 'Total matches budget exactly (' + total.toLocaleString('en', {minimumFractionDigits:2}) + ' MMK)';
             }
         } else if (total > 0 && budget <= 0) {
             warningEl.className = 'ms-total-warning visible over';
@@ -936,9 +1005,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         var dur = g('duration');
         document.getElementById('pvDurationText').textContent = dur || 'Not set';
 
-        var fn = parseInt(g('freelancers_needed')) || 1;
-        document.getElementById('pvFreelancers').textContent = fn + (fn === 1 ? ' freelancer' : ' freelancers');
-
         var desc = g('description');
         var descEl = document.getElementById('pvDesc');
         if (desc) {
@@ -952,9 +1018,20 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         var msHtml = '';
         var titles = document.querySelectorAll('[name="ms_title[]"]');
         var amounts = document.querySelectorAll('[name="ms_amount[]"]');
+        var descs = document.querySelectorAll('[name="ms_desc[]"]');
+        var deadlines = document.querySelectorAll('[name="ms_deadline[]"]');
         for (var i = 0; i < titles.length; i++) {
             if (titles[i].value.trim()) {
-                msHtml += '<div class="preview-ms-item"><span class="text-xs font-medium" style="color:var(--color-text-secondary)">' + (i+1) + '. ' + titles[i].value + '</span><span class="preview-ms-amount">$' + (parseFloat(amounts[i].value)||0).toFixed(2) + '</span></div>';
+                var msDeadline = deadlines[i] ? deadlines[i].value : '';
+                var deadlineStr = msDeadline ? new Date(msDeadline).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'}) : 'No deadline';
+                msHtml += '<div class="p-2 rounded-lg mb-2" style="background:var(--color-bg);border:1px solid var(--color-border)">' +
+                    '<div class="flex items-center justify-between mb-1">' +
+                    '<span class="text-xs font-bold" style="color:var(--color-text-primary)">' + (i+1) + '. ' + titles[i].value + '</span>' +
+                    '<span class="preview-ms-amount">' + (parseFloat(amounts[i].value)||0).toLocaleString('en', {minimumFractionDigits: 2}) + ' MMK</span>' +
+                    '</div>' +
+                    (descs[i] && descs[i].value.trim() ? '<p class="text-xs mb-1" style="color:var(--color-text-muted)">' + descs[i].value.trim().substring(0, 80) + (descs[i].value.trim().length > 80 ? '...' : '') + '</p>' : '') +
+                    '<p class="text-xs" style="color:var(--color-text-placeholder)"><svg class="w-3 h-3 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> ' + deadlineStr + '</p>' +
+                    '</div>';
             }
         }
         document.getElementById('pvMilestones').innerHTML = msHtml || '<span class="preview-empty">No milestones added</span>';
@@ -988,7 +1065,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         document.getElementById('reviewGender').textContent = g('gender_requirement');
         document.getElementById('reviewDeadline').textContent = g('deadline') ? new Date(g('deadline')).toLocaleString() : 'Not set';
         document.getElementById('reviewDuration').textContent = g('duration') || 'Not set';
-        document.getElementById('reviewFreelancers').textContent = g('freelancers_needed') || '1';
         document.getElementById('reviewDesc').textContent = g('description') || '-';
         document.getElementById('reviewReq').textContent = g('requirements') || '-';
 
@@ -1034,8 +1110,8 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
     fileInput.addEventListener('change', function(){ if(fileInput.files.length) showFile(fileInput.files[0]); });
 
     function showFile(file) {
-        if (file.size > 500 * 1024 * 1024) {
-            alert('File size must not exceed 500MB.');
+        if (file.size > 10*1024*1024) {
+            alert('File is too large. Maximum size is 10MB.');
             fileInput.value = '';
             return;
         }
@@ -1095,8 +1171,8 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                 showStepError(3, 'Invalid file type. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR.');
                 if (!firstErrorStep) firstErrorStep = 3;
             }
-            if (fileInput.files.length > 0 && fileInput.files[0].size > 500 * 1024 * 1024) {
-                showStepError(3, 'File size must not exceed 500MB.');
+            if (file.size > 10*1024*1024) {
+                showStepError(3, 'File must be under 10MB.');
                 if (!firstErrorStep) firstErrorStep = 3;
             }
         }

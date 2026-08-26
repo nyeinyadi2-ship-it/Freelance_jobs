@@ -130,14 +130,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($page_title) ?></title>
-    <script>
-        (function() {
-            var t = localStorage.getItem('theme');
-            if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-            }
-        })();
-    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -870,28 +863,50 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                 </p>
 
                 <div class="flex flex-wrap gap-4 mb-10 reveal reveal-d3">
-                    <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="btn-gradient px-8 py-4 rounded-xl font-semibold text-white text-base shadow-lg shadow-primary-500/30 inline-flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                        Find Jobs
-                    </a>
-                    <a href="<?= e(base_url('auth/register.php')) ?>" class="px-8 py-4 rounded-xl font-semibold text-white text-base bg-white/10 backdrop-blur-md border border-white/20 hover:bg-white/20 hover:border-white/30 transition-all inline-flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        Join Now
-                    </a>
+                    <?php if (!$is_logged_in): ?>
+                        <a href="<?= e(base_url('auth/register.php')) ?>" class="btn-gradient px-8 py-4 rounded-xl font-semibold text-white text-base shadow-lg shadow-primary-500/30 inline-flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            Join Now
+                        </a>
+                    <?php elseif ($role === 'freelancer'): ?>
+                        <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="btn-gradient px-8 py-4 rounded-xl font-semibold text-white text-base shadow-lg shadow-primary-500/30 inline-flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            Browse Jobs
+                        </a>
+                    <?php elseif ($role === 'company'): ?>
+                        <a href="<?= e(base_url('company/post_job.php')) ?>" class="btn-gradient px-8 py-4 rounded-xl font-semibold text-white text-base shadow-lg shadow-primary-500/30 inline-flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Post a Job
+                        </a>
+                    <?php endif; ?>
                 </div>
 
-                <!-- Quick Tags -->
-                <div class="flex flex-wrap gap-2 reveal reveal-d4">
-                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">PHP</span>
-                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">JavaScript</span>
-                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">React.js</span>
-                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">UI/UX Design</span>
-                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">Python</span>
-                    <span class="text-white/70 text-xs px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 hover:text-white hover:bg-white/20 transition-all cursor-pointer">Content Writing</span>
+                <!-- Popular Categories -->
+                <div class="mb-4">
+                    <span class="text-white/70 text-sm font-medium mb-3 block reveal reveal-d4">Popular Categories</span>
+                    <div class="flex flex-wrap gap-2 reveal reveal-d4">
+                        <?php 
+                        $popular_categories = [
+                            'Web Development', 
+                            'Graphic Design', 
+                            'Content Writing', 
+                            'Translation', 
+                            'Digital Marketing', 
+                            'Mobile App Development'
+                        ];
+                        foreach ($popular_categories as $cat): 
+                        ?>
+                            <a href="<?= e(base_url('freelancer/browse_jobs.php?category=' . urlencode($cat))) ?>" class="text-white/80 text-xs px-4 py-2 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 hover:text-white hover:bg-white/20 hover:-translate-y-0.5 hover:shadow-lg transition-all inline-block whitespace-nowrap">
+                                <?= e($cat) ?>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             </div>
         </div>
@@ -920,7 +935,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                     <select id="skill-selector" class="skill-select-no-arrow w-full pl-12 pr-4 py-4 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all" style="background-color:var(--color-card,#fff);border:1px solid var(--color-border,#e5e7eb);color:var(--color-text-primary,#111827)">
                         <option value="">Select a skill...</option>
                         <?php foreach ($skills_list as $sk): ?>
-                            <option value="<?= e($sk['skill_name']) ?>"><?= e($sk['skill_name']) ?></option>
+                            <option value="<?= e($sk['id']) ?>"><?= e($sk['skill_name']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -972,7 +987,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                     if (!in_array($sk['skill_name'], $top_skills)) continue;
                     $color = $pill_colors[$sk['skill_name']] ?? 'from-gray-500 to-gray-600';
                 ?>
-                    <button type="button" onclick="selectSkill('<?= e($sk['skill_name']) ?>')" class="skill-pill inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-br <?= $color ?> shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
+                    <button type="button" onclick="selectSkill('<?= e($sk['id']) ?>', '<?= e($sk['skill_name']) ?>')" class="skill-pill inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-br <?= $color ?> shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
                         <?= e($sk['skill_name']) ?>
                     </button>
                 <?php endforeach; ?>
@@ -998,17 +1013,21 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
     var debounceTimer = null;
 
     selector.addEventListener('change', function() {
-        selectSkill(this.value);
+        if (this.value) {
+            selectSkill(this.value, this.options[this.selectedIndex].text);
+        } else {
+            selectSkill('', '');
+        }
     });
 
-    window.selectSkill = function(skill) {
-        if (!skill) {
+    window.selectSkill = function(skillId, skillName) {
+        if (!skillId) {
             container.classList.add('hidden');
             pills.classList.remove('hidden');
             return;
         }
         // Update dropdown to match
-        selector.value = skill;
+        selector.value = skillId;
 
         // Show container, hide pills
         container.classList.remove('hidden');
@@ -1017,9 +1036,9 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
         loading.classList.remove('hidden');
         empty.classList.add('hidden');
         viewAllWrap.style.display = 'none';
-        title.textContent = skill + ' Jobs';
+        title.textContent = skillName + ' Jobs';
 
-        fetch('<?= e(base_url("api/skill_jobs.php")) ?>?skill=' + encodeURIComponent(skill) + '&limit=6')
+        fetch('<?= e(base_url("api/skill_jobs.php")) ?>?id=' + encodeURIComponent(skillId) + '&limit=6')
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 loading.classList.add('hidden');
@@ -1030,7 +1049,7 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                 }
                 count.textContent = d.count + ' job' + (d.count !== 1 ? 's' : '') + ' found';
                 viewAllWrap.style.display = '';
-                viewAllLink.href = '<?= e(base_url("freelancer/skill_jobs.php?skill=")) ?>' + encodeURIComponent(skill);
+                viewAllLink.href = '<?= e(base_url("freelancer/skill_jobs.php?id=")) ?>' + encodeURIComponent(skillId);
 
                 d.jobs.forEach(function(job) {
                     var logoHtml = job.logo_url
@@ -1152,10 +1171,18 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                                 <svg class="w-4 h-4 text-primary-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                 </svg>
-                                Contact Us
+                                Chat with Admin
                             </a>
                         </li>
                         <?php endif; ?>
+                        <li>
+                            <a href="tel:09678789678" class="flex items-center gap-2.5 text-gray-400 text-sm hover:text-primary-400 transition-colors duration-200">
+                                <svg class="w-4 h-4 text-primary-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                                Phone No.: 09678789678
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </div>
@@ -1250,6 +1277,9 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                             </svg>
                         </button>
+                    </div>
+                    <div class="flex justify-end mt-2">
+                        <a href="<?= e(base_url('auth/forgot_password.php')) ?>" class="text-sm font-semibold text-indigo-600 hover:text-indigo-500 transition-colors">Forgot Password?</a>
                     </div>
                 </div>
 

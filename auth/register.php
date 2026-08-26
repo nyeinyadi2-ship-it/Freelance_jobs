@@ -42,14 +42,7 @@ $industries = [
     'Other',
 ];
 
-// Company size options
-$company_sizes = [
-    '1–10 employees'    => '1–10',
-    '11–50 employees'   => '11–50',
-    '51–200 employees'  => '51–200',
-    '201–500 employees' => '201–500',
-    '500+ employees'    => '500+',
-];
+
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
@@ -131,7 +124,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $established_raw = (int) ($_POST['established_year'] ?? 0);
                         $established_year = ($established_raw >= 1800 && $established_raw <= (int) date('Y')) ? $established_raw : null;
                         $industry        = trim($_POST['industry'] ?? '');
-                        $company_size    = trim($_POST['company_size'] ?? '');
+                        // company_size is no longer required or collected from the form
+                        $company_size = null;
 
                         if ($company_name === '') {
                             throw new Exception('Company name is required.');
@@ -140,12 +134,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Validate industry is from allowed list
                         if ($industry !== '' && !in_array($industry, $industries, true)) {
                             $industry = '';
-                        }
-
-                        // Validate company_size is from allowed list
-                        $valid_sizes = array_values($company_sizes);
-                        if ($company_size !== '' && !in_array($company_size, $valid_sizes, true)) {
-                            $company_size = '';
                         }
 
                         $stmt = $conn->prepare('INSERT INTO companies (user_id, company_name, website, phone, location, description, established_year, industry, company_size, logo_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
@@ -185,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $admin_id = get_admin_user_id($conn);
                     if ($admin_id) {
                         $role_label = ucfirst($role);
-                        create_notification($conn, $admin_id, 'new_registration', "New {$role_label} \"{$username}\" has registered.", null);
+                        create_notification($conn, $admin_id, 'new_registration', "New {$role_label} registered.", null, (int)$user_id);
                     }
 
                     // Auto-login after registration
@@ -658,26 +646,15 @@ require __DIR__ . '/../includes/header.php';
                   </div>
                 </div>
 
-                <!-- Industry + Company Size (2-col) -->
-                <div class="grid-2">
-                  <div>
-                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Industry') ?></label>
-                    <select name="industry" class="auth-input">
-                      <option value="">— Select Industry —</option>
-                      <?php foreach ($industries as $ind): ?>
-                        <option value="<?= e($ind) ?>" <?= (($_POST['industry'] ?? '') === $ind) ? 'selected' : '' ?>><?= e($ind) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Company Size') ?></label>
-                    <select name="company_size" class="auth-input">
-                      <option value="">— Select Size —</option>
-                      <?php foreach ($company_sizes as $label => $val): ?>
-                        <option value="<?= e($val) ?>" <?= (($_POST['company_size'] ?? '') === $val) ? 'selected' : '' ?>><?= e($label) ?></option>
-                      <?php endforeach; ?>
-                    </select>
-                  </div>
+                <!-- Industry -->
+                <div>
+                  <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Industry') ?></label>
+                  <select name="industry" class="auth-input">
+                    <option value="">— Select Industry —</option>
+                    <?php foreach ($industries as $ind): ?>
+                      <option value="<?= e($ind) ?>" <?= (($_POST['industry'] ?? '') === $ind) ? 'selected' : '' ?>><?= e($ind) ?></option>
+                    <?php endforeach; ?>
+                  </select>
                 </div>
 
                 <!-- Description -->

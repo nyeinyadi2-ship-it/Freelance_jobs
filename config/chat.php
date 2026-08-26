@@ -280,6 +280,30 @@ function get_partner_info(mysqli $conn, int $user_id, int $other_user_id): ?arra
     $stmt->close();
     if ($result) {
         $result['is_online'] = is_online($result['last_activity']);
+        
+        // Check block status
+        $stmt_block = $conn->prepare("
+            SELECT sender_id, message_meta 
+            FROM messages 
+            WHERE message_type = 'system' 
+              AND ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
+            ORDER BY id DESC LIMIT 1
+        ");
+        $stmt_block->bind_param('iiii', $user_id, $other_user_id, $other_user_id, $user_id);
+        $stmt_block->execute();
+        $block_row = $stmt_block->get_result()->fetch_assoc();
+        $stmt_block->close();
+        
+        $result['is_blocked'] = false;
+        $result['blocked_by_me'] = false;
+        
+        if ($block_row && !empty($block_row['message_meta'])) {
+            $meta = json_decode($block_row['message_meta'], true);
+            if (isset($meta['action']) && $meta['action'] === 'block') {
+                $result['is_blocked'] = true;
+                $result['blocked_by_me'] = ((int)$block_row['sender_id'] === $user_id);
+            }
+        }
     }
     return $result ?: null;
 }

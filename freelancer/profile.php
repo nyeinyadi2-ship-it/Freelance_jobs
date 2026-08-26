@@ -1,6 +1,5 @@
 <?php
-$page_title = 'My Profile';
-require __DIR__ . '/../includes/freelancer_layout.php';
+require_once __DIR__ . '/../includes/freelancer_init.php';
 require_once __DIR__ . '/../config/upload.php';
 
 $target_uid = isset($_GET['id']) ? (int) $_GET['id'] : $fl_uid;
@@ -121,6 +120,7 @@ $rr = $r->get_result();
 while ($row = $rr->fetch_assoc()) { $fl_reviews[] = $row; }
 $r->close();
 
+require __DIR__ . '/../includes/freelancer_layout.php';
 ?>
 
 <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-2 pb-12">
@@ -232,96 +232,128 @@ $r->close();
         </div>
     </form>
 <?php else: ?>
-    <div class="grid md:grid-cols-2 gap-6">
-        <div class="glass rounded-2xl p-6 hover-lift reveal">
-            <h2 class="text-lg font-bold mb-4" style="color:var(--color-text-primary)">About</h2>
-            <?php if ($fl_profile['bio']): ?><p class="text-sm leading-relaxed whitespace-pre-wrap" style="color:var(--color-text-secondary)"><?= e($fl_profile['bio']) ?></p><?php else: ?><p class="text-sm italic" style="color:var(--color-text-placeholder)">No bio added yet.</p><?php endif; ?>
-            <?php if (!empty($fl_profile_skills)): ?><div class="mt-5"><h3 class="text-xs font-semibold mb-2 uppercase tracking-wider" style="color:var(--color-text-muted)">Skills</h3><div class="flex flex-wrap gap-1.5"><?php foreach ($fl_profile_skills as $sid): ?><span class="badge-skill inline-flex px-3 py-1 text-xs font-medium rounded-xl" style="background:rgba(99,102,241,0.1);color:#4f46e5"><?= e($fl_skill_names[$sid] ?? 'Unknown') ?></span><?php endforeach; ?></div></div><?php endif; ?>
-        </div>
-        <div class="glass rounded-2xl p-6 hover-lift reveal reveal-d1">
-            <h2 class="text-lg font-bold mb-4" style="color:var(--color-text-primary)">Details</h2>
-            <dl class="space-y-3 text-sm">
-                <div class="flex justify-between"><dt style="color:var(--color-text-muted)">Full Name</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['full_name']) ?></dd></div>
-                <?php if ($fl_profile['title']): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Title</dt><dd class="font-semibold text-primary-600"><?= e($fl_profile['title']) ?></dd></div><?php endif; ?>
-                <div class="flex justify-between"><dt style="color:var(--color-text-muted)">Email</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['email']) ?></dd></div>
-                <?php if ($fl_profile['phone']): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Phone</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['phone']) ?></dd></div><?php endif; ?>
-                <?php if ($fl_profile['location']): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Location</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['location']) ?></dd></div><?php endif; ?>
-                <?php if ($fl_profile['experience_years'] !== null): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Experience</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= (int) $fl_profile['experience_years'] ?> year<?= (int) $fl_profile['experience_years'] !== 1 ? 's' : '' ?></dd></div><?php endif; ?>
-                <?php if ($fl_profile['hourly_rate'] !== null): ?><div class="flex justify-between"><dt style="color:var(--color-text-muted)">Hourly Rate</dt><dd class="font-semibold text-emerald-600"><?= number_format((float) $fl_profile['hourly_rate'], 2) ?> MMK / hr</dd></div><?php endif; ?>
-
-                <div class="flex justify-between"><dt style="color:var(--color-text-muted)">Joined</dt><dd class="font-semibold" style="color:var(--color-text-primary)"><?= date('F j, Y', strtotime($fl_profile['created_at'])) ?></dd></div>
-            </dl>
+    <!-- Single Full-Card Design for View Mode -->
+    <div class="glass rounded-2xl overflow-hidden shadow-sm reveal">
+        
+        <!-- About Section -->
+        <div class="p-6 md:p-8 border-b" style="border-color:var(--color-border)">
+            <h2 class="text-xl font-bold mb-4" style="color:var(--color-text-primary)">About Me</h2>
+            <?php if ($fl_profile['bio']): ?>
+                <p class="text-base leading-relaxed whitespace-pre-wrap" style="color:var(--color-text-secondary)"><?= e($fl_profile['bio']) ?></p>
+            <?php else: ?>
+                <p class="text-base italic" style="color:var(--color-text-placeholder)">No bio added yet.</p>
+            <?php endif; ?>
         </div>
 
-        <?php if (!empty($fl_profile['payment_method'])): ?>
-        <div class="glass rounded-2xl p-6 hover-lift reveal reveal-d2 md:col-span-2">
-            <h2 class="text-lg font-bold mb-4" style="color:var(--color-text-primary)">Payment Settings</h2>
-            <div class="flex items-center gap-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border" style="border-color:var(--color-border)">
-                <div class="w-12 h-12 rounded-xl flex items-center justify-center bg-white dark:bg-slate-700 shadow-sm flex-shrink-0">
-                    <svg class="w-6 h-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+        <!-- Skills Section -->
+        <?php if (!empty($fl_profile_skills)): ?>
+        <div class="p-6 md:p-8 border-b" style="border-color:var(--color-border)">
+            <h2 class="text-xl font-bold mb-4" style="color:var(--color-text-primary)">Skills</h2>
+            <div class="flex flex-wrap gap-2">
+                <?php foreach ($fl_profile_skills as $sid): ?>
+                    <span class="inline-flex px-3.5 py-1.5 text-sm font-medium rounded-xl" style="background:rgba(99,102,241,0.1);color:#4f46e5">
+                        <?= e($fl_skill_names[$sid] ?? 'Unknown') ?>
+                    </span>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Details Grid -->
+        <div class="p-6 md:p-8 border-b" style="border-color:var(--color-border)">
+            <h2 class="text-xl font-bold mb-4" style="color:var(--color-text-primary)">Details</h2>
+            <div class="grid sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Full Name</dt>
+                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['full_name']) ?></dd>
                 </div>
-                <div class="flex-1">
-                    <h3 class="font-bold capitalize" style="color:var(--color-text-primary)"><?= e(str_replace('_', ' ', $fl_profile['payment_method'])) ?></h3>
-                    <p class="text-sm mt-1" style="color:var(--color-text-secondary)">
-                        <?= e($fl_profile['payment_account_name']) ?> &bull; 
-                        <?= e($fl_profile['payment_account_number']) ?>
-                        <?php if ($fl_profile['payment_method'] === 'bank_transfer' && !empty($fl_profile['payment_bank_name'])): ?>
-                            &bull; <?= e($fl_profile['payment_bank_name']) ?>
-                        <?php endif; ?>
-                    </p>
+                <?php if ($fl_profile['title']): ?>
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Title</dt>
+                    <dd class="mt-1 text-base font-semibold text-primary-600"><?= e($fl_profile['title']) ?></dd>
                 </div>
+                <?php endif; ?>
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Email</dt>
+                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['email']) ?></dd>
+                </div>
+                <?php if ($fl_profile['phone']): ?>
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Phone</dt>
+                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['phone']) ?></dd>
+                </div>
+                <?php endif; ?>
+                <?php if ($fl_profile['location']): ?>
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Location</dt>
+                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['location']) ?></dd>
+                </div>
+                <?php endif; ?>
+                <?php if ($fl_profile['experience_years'] !== null): ?>
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Experience</dt>
+                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= (int) $fl_profile['experience_years'] ?> year<?= (int) $fl_profile['experience_years'] !== 1 ? 's' : '' ?></dd>
+                </div>
+                <?php endif; ?>
+                <?php if ($fl_profile['hourly_rate'] !== null): ?>
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Hourly Rate</dt>
+                    <dd class="mt-1 text-base font-semibold text-emerald-600"><?= number_format((float) $fl_profile['hourly_rate'], 2) ?> MMK / hr</dd>
+                </div>
+                <?php endif; ?>
+                <div>
+                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Joined</dt>
+                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= date('F j, Y', strtotime($fl_profile['created_at'])) ?></dd>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reviews Section -->
+        <?php if ($fl_total_reviews > 0): ?>
+        <div class="p-6 md:p-8">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-xl font-bold" style="color:var(--color-text-primary)">Reviews</h2>
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                    <span class="text-base font-semibold" style="color:var(--color-text-primary)"><?= $fl_avg_rating ?> / 5</span>
+                    <span class="text-sm" style="color:var(--color-text-muted)">(<?= $fl_total_reviews ?>)</span>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <?php foreach ($fl_reviews as $review): ?>
+                    <div class="p-5 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                        <div class="flex items-start gap-4">
+                            <?php $rev_img = profile_image_url($review['reviewer_image']); ?>
+                            <?php if ($rev_img): ?>
+                                <img src="<?= e($rev_img) ?>" alt="" class="w-12 h-12 rounded-full object-cover flex-shrink-0">
+                            <?php else: ?>
+                                <div class="w-12 h-12 rounded-full flex items-center justify-center text-indigo-600 font-bold text-base flex-shrink-0" style="background:rgba(99,102,241,0.1)">
+                                    <?= strtoupper(mb_substr($review['company_name'] ?? 'C', 0, 1)) ?>
+                                </div>
+                            <?php endif; ?>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div>
+                                        <p class="text-base font-semibold" style="color:var(--color-text-primary)"><?= e($review['company_name'] ?? 'Company') ?></p>
+                                        <div class="flex items-center gap-1 mt-1">
+                                            <?php for ($s = 1; $s <= 5; $s++): ?>
+                                                <svg class="w-3.5 h-3.5 <?= $s <= $review['rating'] ? 'text-amber-400' : 'text-gray-300 dark:text-gray-600' ?>" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                                            <?php endfor; ?>
+                                        </div>
+                                    </div>
+                                    <span class="text-sm flex-shrink-0" style="color:var(--color-text-placeholder)"><?= e(date('M j, Y', strtotime($review['created_at']))) ?></span>
+                                </div>
+                                <?php if ($review['comment']): ?>
+                                    <p class="text-base mt-3 leading-relaxed" style="color:var(--color-text-secondary)"><?= nl2br(e($review['comment'])) ?></p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             </div>
         </div>
         <?php endif; ?>
     </div>
-
-
-
-    <!-- Reviews Section -->
-    <?php if ($fl_total_reviews > 0): ?>
-    <div class="mt-6 glass rounded-2xl p-6 hover-lift reveal">
-        <div class="flex items-center justify-between mb-5">
-            <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Reviews</h2>
-            <div class="flex items-center gap-2">
-                <svg class="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                <span class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= $fl_avg_rating ?> / 5</span>
-                <span class="text-xs" style="color:var(--color-text-muted)">(<?= $fl_total_reviews ?>)</span>
-            </div>
-        </div>
-        <div class="space-y-4">
-            <?php foreach ($fl_reviews as $review): ?>
-                <div class="p-4 rounded-xl" style="background:var(--color-card-hover,rgba(0,0,0,0.03));border:1px solid var(--color-border)">
-                    <div class="flex items-start gap-3">
-                        <?php $rev_img = profile_image_url($review['reviewer_image']); ?>
-                        <?php if ($rev_img): ?>
-                            <img src="<?= e($rev_img) ?>" alt="" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
-                        <?php else: ?>
-                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-indigo-600 font-bold text-sm flex-shrink-0" style="background:rgba(99,102,241,0.1)">
-                                <?= strtoupper(mb_substr($review['company_name'] ?? 'C', 0, 1)) ?>
-                            </div>
-                        <?php endif; ?>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center justify-between gap-2">
-                                <div>
-                                    <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= e($review['company_name'] ?? 'Company') ?></p>
-                                    <div class="flex items-center gap-1 mt-0.5">
-                                        <?php for ($s = 1; $s <= 5; $s++): ?>
-                                            <svg class="w-3 h-3 <?= $s <= $review['rating'] ? 'text-amber-400' : 'text-gray-300 dark:text-gray-600' ?>" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.538 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                                        <?php endfor; ?>
-                                    </div>
-                                </div>
-                                <span class="text-xs flex-shrink-0" style="color:var(--color-text-placeholder)"><?= e(date('M j, Y', strtotime($review['created_at']))) ?></span>
-                            </div>
-                            <?php if ($review['comment']): ?>
-                                <p class="text-sm mt-2 leading-relaxed" style="color:var(--color-text-secondary)"><?= nl2br(e($review['comment'])) ?></p>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    </div>
-    <?php endif; ?>
 <?php endif; ?>
 </div>
 

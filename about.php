@@ -1,20 +1,11 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/auth.php';
-require_once __DIR__ . '/../config/notifications.php';
-
-require_role('company');
-
-$user = current_user();
-$company_id = get_company_id($conn, (int) $user['user_id']);
-
-if (!$company_id) {
-    set_flash('error', 'Company profile not found.');
-    redirect('auth/login.php');
-}
+if (session_status() === PHP_SESSION_NONE) { session_start(); }
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/auth.php';
+require_once __DIR__ . '/config/notifications.php';
 
 $page_title = 'About Us';
-require __DIR__ . '/../includes/header.php';
+require __DIR__ . '/includes/header.php';
 ?>
 
 <style>
@@ -181,4 +172,4 @@ require __DIR__ . '/../includes/header.php';
     </a>
 </section>
 
-<?php require __DIR__ . '/../includes/footer.php'; ?>
+<?php require __DIR__ . '/includes/footer.php'; ?>

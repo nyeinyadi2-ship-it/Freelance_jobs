@@ -8,17 +8,12 @@ $admin_page = match (true) {
     $admin_script === 'manage_users.php' || $admin_script === 'view_user.php' => 'users',
     $admin_script === 'manage_skills.php' => 'skills',
     $admin_script === 'categories.php' => 'categories',
+    $admin_script === 'password_recovery.php' => 'password_recovery',
     $admin_script === 'notifications.php' => 'notifications',
     default => '',
 };
 
-// Get hidden/rejected jobs count for badge
-$admin_hidden_count = 0;
-try {
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'rejected'");
-    if ($r) $admin_hidden_count = (int) $r->fetch_assoc()['cnt'];
-} catch (mysqli_sql_exception $e) {
-}
+// No longer counting rejected/hidden jobs for a badge
 
 // Get unread messages count
 $admin_unread_count = 0;
@@ -49,12 +44,16 @@ $admin_nav = [
         'badge_color' => 'indigo',
     ],
     [
+        'id' => 'password_recovery',
+        'label' => 'Password Recovery',
+        'url' => 'admin/password_recovery.php',
+        'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>',
+    ],
+    [
         'id' => 'approve',
-        'label' => 'Moderate Jobs',
+        'label' => 'Manage Jobs',
         'url' => 'admin/approve_jobs.php',
         'icon' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>',
-        'badge' => $admin_hidden_count > 0 ? $admin_hidden_count : null,
-        'badge_color' => 'red',
     ],
     [
         'id' => 'users',
@@ -110,13 +109,3 @@ $admin_nav = [
     <?php endforeach; ?>
 </nav>
 
-<!-- Logout -->
-<div class="mt-auto p-2 border-t" style="border-color:var(--color-border)">
-    <a href="<?= e(base_url('auth/logout.php')) ?>"
-        class="sidebar-link text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-        <svg class="w-[18px] h-[18px] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-        </svg>
-        <span class="sidebar-label sidebar-footer-text"><?= e('Logout') ?></span>
-    </a>
-</div>

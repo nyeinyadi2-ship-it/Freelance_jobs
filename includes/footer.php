@@ -11,15 +11,6 @@
 </footer>
 <script>
 (function(){
-    var themeToggle = document.getElementById('theme-toggle');
-    var html = document.documentElement;
-    if (themeToggle) {
-        themeToggle.addEventListener('click', function() {
-            var isDark = html.classList.toggle('dark');
-            localStorage.setItem('theme', isDark ? 'dark' : 'light');
-        });
-    }
-
     // Admin sidebar toggle
     var sidebarToggle = document.getElementById('admin-sidebar-toggle');
     var sidebar = document.getElementById('admin-sidebar');
