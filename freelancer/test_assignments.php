@@ -1,5 +1,5 @@
 <?php
-$page_title = 'Trial Tasks';
+$page_title = 'My Trial Task';
 require __DIR__ . '/../includes/freelancer_init.php';
 
 // Fetch all proposal projects for this freelancer
@@ -64,7 +64,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 
                 <div class="flex justify-end">
                     <a href="<?= e(base_url('freelancer/view_proposal.php?id=' . $ta['id'])) ?>" class="btn-grad inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl text-white shadow-lg">
-                        View Trial Task <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        View My Trial Task <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                     </a>
                 </div>
             </div>

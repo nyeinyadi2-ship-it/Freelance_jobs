@@ -16,7 +16,8 @@ if ($job_id <= 0) { set_flash('error', 'Invalid job ID.'); redirect('index.php')
 
 // Fetch job (must belong to this company)
 $stmt = $conn->prepare("
-    SELECT j.*, c.company_name, c.logo_image
+    SELECT j.*, c.company_name, c.logo_image,
+           (SELECT assignment_type FROM assignments WHERE job_id = j.id LIMIT 1) AS assignment_type
     FROM jobs j JOIN companies c ON j.company_id = c.id
     WHERE j.id = ? AND j.company_id = ?
 ");
@@ -97,6 +98,8 @@ require __DIR__ . '/../includes/header.php';
 .vj-status-pending::before { background:#fbbf24; }
 .vj-status-completed::before { background:#60a5fa; }
 .vj-status-rejected::before { background:#f87171; }
+.vj-status-closed::before { background:#9ca3af; }
+.vj-status-cancelled::before { background:#9ca3af; }
 .vj-section { background:var(--color-surface,#fff); border:1px solid var(--color-border,#e5e7eb); border-radius:1rem; padding:1.5rem; margin-bottom:1.5rem; }
 .vj-section h3 { font-size:1rem; font-weight:700; margin-bottom:1rem; color:var(--color-text-primary); }
 .vj-app-row { display:flex; align-items:center; gap:12px; padding:0.75rem 0; border-bottom:1px solid var(--color-border,#e5e7eb); }
@@ -139,6 +142,12 @@ require __DIR__ . '/../includes/header.php';
             <h1 class="text-2xl md:text-3xl font-extrabold mb-3"><?= e($job['title']) ?></h1>
             <div class="flex flex-wrap items-center gap-3">
                 <span class="vj-status vj-status-<?= $job['status'] ?>"><?= ucfirst(e($job['status'])) ?></span>
+                <?php if (!empty($job['assignment_type']) && $job['assignment_type'] === 'direct_hire'): ?>
+                    <span style="background:rgba(147,51,234,0.3);border:1px solid rgba(147,51,234,0.4);padding:5px 14px;border-radius:999px;font-size:0.75rem;font-weight:700;color:#e9d5ff;display:inline-flex;align-items:center;gap:4px;">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                        Direct Hire
+                    </span>
+                <?php endif; ?>
                 <?php
                 $active_count = 0;
                 $hc_st = $conn->prepare("SELECT SUM(CASE WHEN status NOT IN ('completed', 'rejected', 'cancelled') THEN 1 ELSE 0 END) AS active FROM assignments WHERE job_id = ? AND status NOT IN ('rejected', 'cancelled')");
@@ -272,12 +281,7 @@ require __DIR__ . '/../includes/header.php';
                         <?= e($company_info['industry']) ?>
                     </div>
                 <?php endif; ?>
-                <?php if ($company_info['company_size']): ?>
-                    <div class="flex items-center gap-2" style="font-size:0.8125rem;color:var(--color-text-secondary)">
-                        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                        <?= e($company_info['company_size']) ?>
-                    </div>
-                <?php endif; ?>
+                
                 <?php if ($company_info['website']): ?>
                     <div class="flex items-center gap-2" style="font-size:0.8125rem">
                         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
@@ -355,11 +359,17 @@ require __DIR__ . '/../includes/header.php';
                 </button>
             </form>
         <?php endif; ?>
-        <?php if (!in_array($job['status'], ['completed', 'closed', 'cancelled'])): ?>
-            <form action="<?= e(base_url('api/update_job_status.php')) ?>" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to close this job?');">
+
+        <?php if ($job['status'] === 'closed'): ?>
+            <span class="vj-btn vj-btn-outline" style="color:#6b7280;border-color:#d1d5db;background:rgba(107,114,128,0.06);cursor:default;">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                Job Closed
+            </span>
+        <?php elseif (!in_array($job['status'], ['completed', 'cancelled'])): ?>
+            <form action="<?= e(base_url('api/close_job.php')) ?>" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to close this job? All applications, milestones, and project records will be preserved.');">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                 <input type="hidden" name="job_id" value="<?= $job['id'] ?>">
-                <input type="hidden" name="status" value="closed">
+                <input type="hidden" name="redirect_to" value="company/view_job.php?id=<?= $job['id'] ?>">
                 <button type="submit" class="vj-btn vj-btn-outline" style="color:#ef4444;border-color:#fca5a5;">
                     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     Close Job
@@ -375,12 +385,24 @@ require __DIR__ . '/../includes/header.php';
                 </button>
             </form>
         <?php endif; ?>
+
         <?php if (!in_array($job['status'], ['completed', 'closed', 'cancelled'])): ?>
             <a href="<?= e(base_url('company/edit_job.php?id=' . $job_id)) ?>" class="vj-btn vj-btn-primary">
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                 Edit Job
             </a>
         <?php endif; ?>
+
+        <form action="<?= e(base_url('api/delete_job.php')) ?>" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to delete this job? If this job has existing applications or assignments, deletion will be prevented and closing recommended.');">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+            <input type="hidden" name="job_id" value="<?= $job['id'] ?>">
+            <input type="hidden" name="redirect_to" value="company/view_job.php?id=<?= $job['id'] ?>">
+            <button type="submit" class="vj-btn vj-btn-outline" style="color:#dc2626;border-color:#fca5a5;">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                Delete Job
+            </button>
+        </form>
+
         <a href="<?= e(base_url('company/view_applications.php?id=' . $job_id)) ?>" class="vj-btn vj-btn-outline">
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
             View Applications

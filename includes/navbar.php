@@ -75,8 +75,8 @@ if ($is_logged_in) {
         $role_links = [
             ['label' => 'Dashboard', 'href' => base_url('freelancer/dashboard.php'), 'icon' => 'home', 'page' => 'dashboard'],
             ['label' => 'Browse Jobs', 'href' => base_url('freelancer/browse_jobs.php'), 'icon' => 'search', 'page' => 'browse_jobs'],
-            ['label' => 'My Tasks', 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
-            ['label' => 'Trial Task', 'href' => base_url('freelancer/test_assignments.php'), 'icon' => 'document-text', 'page' => 'test_assignments'],
+            ['label' => 'My Projects', 'href' => base_url('freelancer/my_tasks.php'), 'icon' => 'clipboard', 'page' => 'my_tasks'],
+            ['label' => 'My Trial Task', 'href' => base_url('freelancer/test_assignments.php'), 'icon' => 'document-text', 'page' => 'test_assignments'],
             ['label' => 'Transactions', 'href' => base_url('freelancer/transactions.php'), 'icon' => 'document-text', 'page' => 'transactions'],
         ];
     }
@@ -443,9 +443,10 @@ if ($is_logged_in) {
                                             <?php if (!empty($n['sender_name'])): ?>
                                                 <div class="mt-0.5 flex-shrink-0">
                                                     <?php if (!empty($n['sender_image'])): ?>
-                                                        <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-7 h-7 rounded-full object-cover">
+                                                        <img src="<?= e(base_url('uploads/images/' . $n['sender_image'])) ?>" alt="Avatar" class="w-7 h-7 rounded-full object-cover" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                                                        <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs" style="display:none"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                                                     <?php else: ?>
-                                                        <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                                                        <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                                                     <?php endif; ?>
                                                 </div>
                                             <?php else: ?>

@@ -34,9 +34,9 @@ $stmt->bind_param('i', $company_id);
 $stmt->execute();
 $result = $stmt->get_result();
 while ($row = $result->fetch_assoc()) {
-    if (in_array($row['status'], ['open', 'in_review', 'hired', 'in_progress'])) {
+    if (in_array($row['status'], ['open', 'hired', 'in_progress', 'in_review'])) {
         $stats['active'] += (int) $row['cnt'];
-    } elseif ($row['status'] === 'completed') {
+    } elseif (in_array($row['status'], ['closed', 'completed', 'expired', 'cancelled'])) {
         $stats['completed'] += (int) $row['cnt'];
     }
     $stats['total'] += (int) $row['cnt'];
@@ -62,7 +62,7 @@ try {
     $stmt = $conn->prepare("
         SELECT COUNT(*) AS cnt FROM assignments a
         JOIN jobs j ON a.job_id = j.id
-        WHERE j.company_id = ? AND a.status IN ('assigned', 'working', 'submitted')
+        WHERE j.company_id = ? AND a.status IN ('assigned', 'working', 'submitted', 'extended', 'not_started', 'in_progress')
     ");
     $stmt->bind_param('i', $company_id);
     $stmt->execute();
@@ -539,9 +539,10 @@ require __DIR__ . '/../includes/header.php';
           <?php if (!empty($n['sender_name'])): ?>
             <div class="mt-0.5 flex-shrink-0">
                 <?php if (!empty($n['sender_image'])): ?>
-                    <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover shadow-sm">
+                    <img src="<?= e(base_url('uploads/images/' . $n['sender_image'])) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover shadow-sm" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                    <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm" style="display:none"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                 <?php else: ?>
-                    <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                    <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                 <?php endif; ?>
             </div>
           <?php else: ?>

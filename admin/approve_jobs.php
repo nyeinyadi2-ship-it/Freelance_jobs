@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     if ($job_id > 0 && in_array($action, ['hide', 'restore', 'remove'], true)) {
         try {
             if ($action === 'hide') {
-                $stmt = $conn->prepare("UPDATE jobs SET status = 'closed' WHERE id = ? AND status IN ('open', 'in_review', 'in_progress', 'hired')");
+                $stmt = $conn->prepare("UPDATE jobs SET status = 'closed' WHERE id = ? AND status NOT IN ('closed', 'cancelled')");
                 $stmt->bind_param('i', $job_id);
                 $stmt->execute();
 
@@ -31,12 +31,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     }
                     set_flash('success', 'Job has been hidden successfully.');
                 } else {
-                    set_flash('error', 'Could not hide this job.');
+                    set_flash('error', 'Could not hide this job or it is already hidden.');
                 }
                 $stmt->close();
 
             } elseif ($action === 'restore') {
-                $stmt = $conn->prepare("UPDATE jobs SET status = 'open' WHERE id = ? AND status = 'closed'");
+                $stmt = $conn->prepare("UPDATE jobs SET status = 'open' WHERE id = ? AND status IN ('closed', 'cancelled')");
                 $stmt->bind_param('i', $job_id);
                 $stmt->execute();
 
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     }
                     set_flash('success', 'Job has been restored successfully.');
                 } else {
-                    set_flash('error', 'Could not restore this job.');
+                    set_flash('error', 'Could not restore this job or it is not hidden.');
                 }
                 $stmt->close();
 
@@ -111,8 +111,8 @@ $jobs = [];
 try {
     $stmt = $conn->prepare("
         SELECT j.id, j.title, j.description, j.budget, j.created_at, j.category, j.status,
-               j.experience_level, j.gender_requirement, j.deadline, j.duration,
-               j.freelancers_needed, j.visibility, j.attachment,
+               j.experience_level, j.deadline, j.duration,
+               j.attachment,
                c.company_name, c.logo_image
         FROM jobs j
         JOIN companies c ON j.company_id = c.id

@@ -20,25 +20,25 @@ $fl_profile_skills = [];
 $r = $conn->query("SELECT skill_id FROM freelancer_skills WHERE freelancer_id = $fl_freelancer_id");
 if ($r) while ($row = $r->fetch_assoc()) $fl_profile_skills[] = (int) $row['skill_id'];
 
-$fl_fields = [$fl_profile['full_name'], $fl_profile['title'], $fl_profile['phone'], $fl_profile['location'], $fl_profile['bio'], $fl_profile['hourly_rate'], $fl_profile['experience_years'], $fl_profile['profile_image']];
+$fl_fields = [$fl_profile['full_name'], $fl_profile['title'], $fl_profile['phone'], $fl_profile['bio'], $fl_profile['profile_image']];
 $fl_filled = 0;
 foreach ($fl_fields as $f) if (!empty($f)) $fl_filled++;
 $fl_completion = min(100, round(($fl_filled / count($fl_fields)) * 80 + (count($fl_profile_skills) > 0 ? 20 : 0)));
 
 $fl_stats = ['pending' => 0, 'active' => 0, 'completed' => 0, 'earnings' => 0];
 try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM job_applications WHERE freelancer_id=? AND status='pending'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['pending'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
-try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status IN ('assigned','working','submitted')"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['active'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status IN ('assigned', 'working', 'submitted', 'extended', 'overdue', 'revision_requested', 'not_started', 'in_progress') AND status != 'completed'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['active'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
 try { $s = $conn->prepare("SELECT COUNT(*) AS c FROM assignments WHERE freelancer_id=? AND status='completed'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['completed'] = (int)$s->get_result()->fetch_assoc()['c']; $s->close(); } catch(Exception $e) {}
 try { $s = $conn->prepare("SELECT COALESCE(SUM(p.amount),0) AS t FROM payments p JOIN assignments a ON p.assignment_id=a.id WHERE a.freelancer_id=? AND p.status='paid'"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $fl_stats['earnings'] = (float)$s->get_result()->fetch_assoc()['t']; $s->close(); } catch(Exception $e) {}
 
 
 // Ongoing tasks
 $ongoing_tasks = [];
-try { $s = $conn->prepare("SELECT a.id,a.status,a.submission_link,a.assigned_at,j.title,j.description,j.budget,j.status AS job_status,j.id AS job_id,c.company_name,c.logo_image FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id WHERE a.freelancer_id=? AND a.status IN ('assigned','working','submitted') ORDER BY a.assigned_at DESC"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $ongoing_tasks[] = $row; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT a.id,a.status,a.submission_link,a.assigned_at,j.title,j.description,j.budget,j.status AS job_status,j.id AS job_id,c.company_name,c.logo_image FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id WHERE a.freelancer_id=? AND a.status IN ('assigned', 'working', 'submitted', 'extended', 'overdue', 'revision_requested', 'not_started', 'in_progress') AND a.status != 'completed' ORDER BY a.assigned_at DESC"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $ongoing_tasks[] = $row; $s->close(); } catch(Exception $e) {}
 
 // Completed tasks
 $completed_list = [];
-try { $s = $conn->prepare("SELECT a.id,a.status,a.submission_link,a.assigned_at,j.title,j.budget,j.status AS job_status,j.id AS job_id,c.company_name,c.logo_image,p.amount,p.paid_at FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id LEFT JOIN payments p ON p.assignment_id=a.id WHERE a.freelancer_id=? AND a.status='completed' ORDER BY a.assigned_at DESC"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $completed_list[] = $row; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT a.id,a.status,a.submission_link,a.assigned_at,j.title,j.budget,j.status AS job_status,j.id AS job_id,c.company_name,c.logo_image,p.amount,p.paid_at FROM assignments a JOIN jobs j ON a.job_id=j.id JOIN companies c ON j.company_id=c.id LEFT JOIN (SELECT assignment_id, SUM(amount) AS amount, MAX(paid_at) AS paid_at FROM payments WHERE status='paid' GROUP BY assignment_id) p ON p.assignment_id=a.id WHERE a.freelancer_id=? AND a.status='completed' ORDER BY a.assigned_at DESC"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $completed_list[] = $row; $s->close(); } catch(Exception $e) {}
 
 // Recent applications
 $recent_apps = [];
@@ -54,7 +54,7 @@ try { $s = $conn->prepare("SELECT p.id,p.amount,p.status,p.paid_at,j.title AS jo
 
 // Recommended jobs
 $recommended = [];
-try { $s = $conn->prepare("SELECT j.id,j.title,j.description,j.budget,j.created_at,c.company_name,c.logo_image FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.status='open' AND j.category != 'Direct Hire' AND j.id NOT IN (SELECT job_id FROM job_applications WHERE freelancer_id=?) AND j.id NOT IN (SELECT job_id FROM assignments) ORDER BY j.created_at DESC LIMIT 6"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $recommended[] = $row; $s->close(); } catch(Exception $e) {}
+try { $s = $conn->prepare("SELECT j.id,j.title,j.description,j.budget,j.created_at,c.company_name,c.logo_image FROM jobs j JOIN companies c ON j.company_id=c.id WHERE j.status='open' AND j.id NOT IN (SELECT job_id FROM job_applications WHERE freelancer_id=?) AND j.id NOT IN (SELECT job_id FROM assignments) ORDER BY j.created_at DESC LIMIT 6"); $s->bind_param('i', $fl_freelancer_id); $s->execute(); $r = $s->get_result(); while ($row = $r->fetch_assoc()) $recommended[] = $row; $s->close(); } catch(Exception $e) {}
 
 // Direct hire requests (pending)
 $direct_hire_requests = [];
@@ -155,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hire_action'])) {
                         $msg = $action === 'accept'
                             ? "Accepted your direct hire request."
                             : "Declined your direct hire request.";
-                        create_notification($conn, (int) $company_user['user_id'], 'direct_hire_' . $action, $msg, 'company/dashboard.php', $user_id);
+                        create_notification($conn, (int) $company_user['user_id'], 'direct_hire_' . $action, $msg, 'company/dashboard.php', $fl_uid);
                     }
 
                     $hire_action_msg = $action === 'accept' ? 'Request accepted! You can now start working on your milestones.' : 'Request declined.';
@@ -221,8 +221,8 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight"><?= e($fl_profile['full_name'] ?? $fl_profile['username']) ?></h1>
                     <p class="text-sm sm:text-base flex flex-wrap items-center gap-1.5 mt-1.5 text-white/80">
                         <span class="inline-flex items-center gap-1"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> <?= e($fl_profile['title'] ?? 'Freelancer') ?></span>
-                        <?php if ($fl_profile['location']): ?><span class="w-1 h-1 rounded-full bg-white/40"></span><span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg> <?= e($fl_profile['location']) ?></span><?php endif; ?>
-                        <?php if ($fl_profile['hourly_rate'] !== null): ?><span class="w-1 h-1 rounded-full bg-white/40"></span><span class="font-semibold"><?= number_format((float) $fl_profile['hourly_rate'], 0) ?> MMK/hr</span><?php endif; ?>
+
+                        
                     </p>
                     <div class="flex items-center gap-3 mt-2.5">
                         <span class="inline-flex items-center gap-1.5 text-xs bg-emerald-400/20 px-3 py-1 rounded-lg font-medium"><span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>Available for work</span>
@@ -279,7 +279,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
         <div class="flex gap-1 min-w-max">
             <?php $tabs = [
                 ['id'=>'overview','label'=>'Overview','icon'=>'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6'],
-                ['id'=>'hire_requests','label'=>'Hiring Requests','icon'=>'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z','badge'=>count($direct_hire_requests),'bc'=>'purple'],
+                ['id'=>'hire_requests','label'=>'Direct Offers','icon'=>'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z','badge'=>count($direct_hire_requests),'bc'=>'purple'],
                 ['id'=>'applications','label'=>'Applications','icon'=>'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z','badge'=>$fl_stats['pending'],'bc'=>'yellow'],
                 ['id'=>'ongoing','label'=>'Ongoing','icon'=>'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10','badge'=>$fl_stats['active'],'bc'=>'blue'],
                 ['id'=>'completed','label'=>'Completed','icon'=>'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'],
@@ -330,15 +330,16 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                 <div class="mt-8">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">
-                            Trial Tasks
+                            My Trial Tasks
                         </h2>
                     </div>
                     <div class="space-y-3">
                         <?php foreach ($proposal_projects as $prop): ?>
                             <div class="flex items-center gap-3 p-3.5 rounded-xl border" style="border-color:var(--color-border)">
                                 <div class="w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center" style="background:var(--color-bg-secondary)">
-                                    <?php if ($prop['logo_image']): ?>
-                                        <img src="<?= e(base_url('uploads/profiles/' . $prop['logo_image'])) ?>" alt="" class="w-full h-full object-cover rounded-xl">
+                                    <?php if (!empty($prop['logo_image'])): ?>
+                                        <img src="<?= e(base_url('uploads/images/' . $prop['logo_image'])) ?>" alt="" class="w-full h-full object-cover rounded-xl" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='inline';">
+                                        <span class="text-sm font-bold text-gray-400" style="display:none"><?= e(strtoupper(substr($prop['company_name'], 0, 1))) ?></span>
                                     <?php else: ?>
                                         <span class="text-sm font-bold text-gray-400"><?= e(strtoupper(substr($prop['company_name'], 0, 1))) ?></span>
                                     <?php endif; ?>
@@ -370,7 +371,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                             <div class="flex items-center gap-3 mb-2.5">
                                 <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-8 h-8 rounded-lg object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
                                 <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?> &middot; <?= number_format((float) $task['budget'], 0) ?> MMK</p></div>
-                                <div class="flex flex-col items-end gap-1"><?= status_badge($task['job_status']) ?><?= status_badge($task['status']) ?></div>
+                                <div class="flex flex-col items-end gap-1"><?= project_status_badge($task['status']) ?></div>
                             </div>
                             <div class="w-full h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"><div class="progress-bar h-full" style="width:<?= $task['status']==='submitted'?'75':'25' ?>%"></div></div>
                         </div>
@@ -429,9 +430,9 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
     <?php endif; ?>
 </div>
 
-<!-- HIRING REQUESTS -->
+<!-- DIRECT OFFERS -->
 <div class="dash-section" id="tab-hire_requests">
-    <h2 class="text-xl font-bold mb-5" style="color:var(--color-text-primary)">Hiring Requests</h2>
+    <h2 class="text-xl font-bold mb-5" style="color:var(--color-text-primary)">Direct Offer Requests</h2>
 
     <?php if ($hire_action_msg): ?>
         <div class="mb-5 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 text-sm font-medium"><?= e($hire_action_msg) ?></div>
@@ -440,8 +441,8 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
     <?php if (empty($direct_hire_requests)): ?>
         <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)">
             <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-            <p>No pending hiring requests.</p>
-            <p class="text-xs mt-2 opacity-70">When companies hire you directly, requests will appear here.</p>
+            <p>No pending direct offers.</p>
+            <p class="text-xs mt-2 opacity-70">When companies send you a direct offer, requests will appear here.</p>
         </div>
     <?php else: ?>
         <div class="space-y-4">
@@ -553,7 +554,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                 <div class="glass rounded-2xl p-6 hover-lift">
                     <div class="flex flex-wrap justify-between items-start gap-3 mb-4">
                         <div class="flex items-center gap-3"><?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?><div><p class="text-sm font-medium" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p><h3 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($task['title']) ?></h3></div></div>
-                        <div class="flex items-center gap-2"><?= status_badge($task['job_status']) ?><?= status_badge($task['status']) ?></div>
+                        <div class="flex items-center gap-2"><?= project_status_badge($task['status']) ?></div>
                     </div>
                     <p class="text-sm mb-4 leading-relaxed" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($task['description'] ?? '', 0, 200, '...')) ?></p>
                     <div class="flex items-center gap-4 text-sm mb-4"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span><span style="color:var(--color-text-placeholder)">Assigned <?= date('M j', strtotime($task['assigned_at'])) ?></span></div>
@@ -581,7 +582,7 @@ $initial = strtoupper(mb_substr($fl_profile['full_name'] ?? $fl_profile['usernam
                     <div class="flex items-center gap-3 mb-3">
                         <?php if ($task['logo_image']): ?><img src="<?= e(base_url('uploads/images/' . $task['logo_image'])) ?>" alt="" class="w-10 h-10 rounded-xl object-contain border" style="border-color:var(--color-border)"><?php endif; ?>
                         <div class="flex-1 min-w-0"><p class="font-semibold truncate" style="color:var(--color-text-primary)"><?= e($task['title']) ?></p><p class="text-xs" style="color:var(--color-text-muted)"><?= e($task['company_name']) ?></p></div>
-                        <div class="flex items-center gap-2"><?= status_badge($task['job_status']) ?><?= status_badge($task['status']) ?></div>
+                        <div class="flex items-center gap-2"><?= project_status_badge($task['status']) ?></div>
                     </div>
                     <div class="flex items-center justify-between text-sm pt-3 border-t" style="border-color:var(--color-border)"><span style="color:var(--color-text-muted)">Budget: <strong class="text-primary-600"><?= number_format((float) $task['budget'], 2) ?> MMK</strong></span><?php if ($task['paid_at']): ?><span class="flex items-center gap-1 text-emerald-600 font-medium"><svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>Received <?= date('M j', strtotime($task['paid_at'])) ?></span><?php endif; ?></div>
                 </div>

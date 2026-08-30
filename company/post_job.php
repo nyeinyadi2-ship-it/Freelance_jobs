@@ -9,7 +9,8 @@ csrf_cookie();
 require_role('company');
 
 $user = current_user();
-$company_id = get_company_id($conn, (int) $user['user_id']);
+$user_id = (int) $user['user_id'];
+$company_id = get_company_id($conn, $user_id);
 
 if (!$company_id) {
     set_flash('error', 'Company profile not found.');
@@ -19,8 +20,8 @@ if (!$company_id) {
 $error = '';
 $old = [
     'title' => '', 'category' => '', 'budget' => '', 'payment_type' => 'fixed', 'experience_level' => 'intermediate',
-    'gender_requirement' => 'any', 'description' => '', 'requirements' => '',
-    'deadline' => '', 'duration' => '', 'freelancers_needed' => '1',
+    'description' => '', 'requirements' => '',
+    'deadline' => '', 'duration' => '',
 ];
 
 $skills = [];
@@ -44,15 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $old['title'] = trim($_POST['title'] ?? '');
         $old['category'] = trim($_POST['category'] ?? '');
         $old['payment_type'] = $_POST['payment_type'] ?? 'fixed';
+        if (!in_array($old['payment_type'], ['fixed', 'milestone'], true)) {
+            $old['payment_type'] = 'fixed';
+        }
         $old['budget'] = trim($_POST['budget'] ?? '');
         $old['experience_level'] = $_POST['experience_level'] ?? 'intermediate';
-        $old['gender_requirement'] = $_POST['gender_requirement'] ?? 'any';
-        $old['description'] = trim($_POST['description'] ?? '');
+                $old['description'] = trim($_POST['description'] ?? '');
         $old['requirements'] = trim($_POST['requirements'] ?? '');
         $old['deadline'] = trim($_POST['deadline'] ?? '');
         $old['duration'] = trim($_POST['duration'] ?? '');
-        $old['freelancers_needed'] = trim($_POST['freelancers_needed'] ?? '1');
-
+        
         // Validation
         if ($old['title'] === '') {
             $error = 'Job title is required. Please enter a title for your job posting.';
@@ -126,12 +128,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $budget = $total_budget;
                 $payment_type = $old['payment_type'];
                 
-                $deadline = $old['deadline'] !== '' ? $old['deadline'] : null;
-                $freelancers_needed = 1;
-                $status = 'open';
+                $deadline = $old['deadline'] !== '' ? $old['deadline'] : null;                $status = 'open';
 
-                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, gender_requirement, description, requirements, budget, deadline, duration, freelancers_needed, attachment, status, payment_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                $stmt->bind_param('issssssdssisss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['gender_requirement'], $old['description'], $old['requirements'], $budget, $deadline, $old['duration'], $freelancers_needed, $attachment_name, $status, $payment_type);
+                $stmt = $conn->prepare('INSERT INTO jobs (company_id, title, category, experience_level, description, requirements, budget, deadline, duration, attachment, status, payment_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stmt->bind_param('isssssdsssss', $company_id, $old['title'], $old['category'], $old['experience_level'], $old['description'], $old['requirements'], $budget, $deadline, $old['duration'], $attachment_name, $status, $payment_type);
                 $stmt->execute();
                 $job_id = $stmt->insert_id;
                 $stmt->close();
@@ -344,7 +344,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                     <option value="">Select a category</option>
                                     <?php
                                     $cats = [];
-                                    $res = $conn->query("SELECT name FROM categories ORDER BY name ASC");
+                                    $res = $conn->query("SELECT name FROM categories WHERE LOWER(name) NOT IN ('direct hire', 'direct offer') ORDER BY CASE WHEN LOWER(name) = 'other' THEN 1 ELSE 0 END, name ASC");
                                     if ($res) {
                                         while ($row = $res->fetch_assoc()) {
                                             $cats[] = $row['name'];
@@ -364,7 +364,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 <div>
                                     <label class="form-label">Payment Type</label>
                                     <select name="payment_type" id="paymentTypeSelect" class="form-input" onchange="togglePaymentType(); updatePreview()">
-                                        <option value="fixed" <?= $old['payment_type'] === 'fixed' ? 'selected' : '' ?>>Fixed Payment</option>
+                                        <option value="fixed" <?= $old['payment_type'] === 'fixed' ? 'selected' : '' ?>>Full Project Payment</option>
                                         <option value="milestone" <?= $old['payment_type'] === 'milestone' ? 'selected' : '' ?>>Milestone Payment</option>
                                     </select>
                                 </div>
@@ -472,14 +472,6 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                         <option value="expert" <?= $old['experience_level'] === 'expert' ? 'selected' : '' ?>>Expert</option>
                                     </select>
                                 </div>
-                                <div>
-                                    <label class="form-label">Gender Requirement</label>
-                                    <select name="gender_requirement" class="form-input">
-                                        <option value="any" <?= $old['gender_requirement'] === 'any' ? 'selected' : '' ?>>Any</option>
-                                        <option value="male" <?= $old['gender_requirement'] === 'male' ? 'selected' : '' ?>>Male</option>
-                                        <option value="female" <?= $old['gender_requirement'] === 'female' ? 'selected' : '' ?>>Female</option>
-                                    </select>
-                                </div>
                             </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div>
@@ -491,14 +483,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                     <input type="text" name="duration" placeholder="e.g. 2 weeks, 1 month" maxlength="100" class="form-input" value="<?= e($old['duration']) ?>" oninput="updatePreview()">
                                 </div>
                             </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                <div class="flex items-end pb-1">
-                                    <div class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl" style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.15)">
-                                        <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        <span class="text-sm font-semibold text-emerald-700">Remote Only</span>
-                                    </div>
-                                </div>
-                            </div>
+
                         </div>
                     </div>
                     <div class="flex justify-between">
@@ -588,8 +573,8 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                                 <span class="text-sm font-semibold capitalize" style="color:var(--color-text-primary)" id="reviewExp">-</span>
                             </div>
                             <div class="flex justify-between py-2.5 border-b" style="border-color:var(--color-border)">
-                                <span class="text-sm" style="color:var(--color-text-muted)">Gender Requirement</span>
-                                <span class="text-sm font-semibold capitalize" style="color:var(--color-text-primary)" id="reviewGender">-</span>
+                                <span class="text-sm" style="color:var(--color-text-muted)">Payment Type</span>
+                                <span class="text-sm font-semibold" style="color:var(--color-text-primary)" id="reviewPaymentType">Full Project Payment</span>
                             </div>
                             <div class="flex justify-between py-2.5 border-b" style="border-color:var(--color-border)">
                                 <span class="text-sm" style="color:var(--color-text-muted)">Deadline</span>
@@ -644,8 +629,9 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
                         </div>
 
                         <!-- Category & Budget -->
-                        <div class="preview-section" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                        <div class="preview-section" style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
                             <span class="preview-tag" id="pvCategory">Category</span>
+                            <span class="preview-tag" style="background:rgba(99,102,241,0.08);color:#6366f1" id="pvPaymentType">Full Project Payment</span>
                             <span class="preview-budget" id="pvBudget">0 MMK</span>
                         </div>
 
@@ -991,6 +977,9 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         catEl.style.opacity = cat ? '1' : '0.5';
 
         var pt = document.getElementById('paymentTypeSelect').value;
+        var ptText = (pt === 'milestone') ? 'Milestone Payment' : 'Full Project Payment';
+        document.getElementById('pvPaymentType').textContent = ptText;
+
         var budget = 0;
         if (pt === 'fixed') {
             budget = parseFloat(g('budget'));
@@ -1050,6 +1039,9 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         var f = document.getElementById('jobForm');
         var g = function(n){ var el=f.querySelector('[name="'+n+'"]'); return el?el.value:''; };
         var pt = document.getElementById('paymentTypeSelect').value;
+        var ptText = (pt === 'milestone') ? 'Milestone Payment' : 'Full Project Payment';
+        document.getElementById('reviewPaymentType').textContent = ptText;
+
         var budget = 0;
         if (pt === 'fixed') {
             budget = parseFloat(g('budget'));
@@ -1062,8 +1054,7 @@ select.form-input { appearance:none; background-image:url("data:image/svg+xml,%3
         document.getElementById('reviewCategory').textContent = g('category') || '-';
         document.getElementById('reviewBudget').textContent = budget > 0 ? budget.toLocaleString('en',{minimumFractionDigits:2}) + ' MMK' : '-';
         document.getElementById('reviewExp').textContent = g('experience_level');
-        document.getElementById('reviewGender').textContent = g('gender_requirement');
-        document.getElementById('reviewDeadline').textContent = g('deadline') ? new Date(g('deadline')).toLocaleString() : 'Not set';
+                document.getElementById('reviewDeadline').textContent = g('deadline') ? new Date(g('deadline')).toLocaleString() : 'Not set';
         document.getElementById('reviewDuration').textContent = g('duration') || 'Not set';
         document.getElementById('reviewDesc').textContent = g('description') || '-';
         document.getElementById('reviewReq').textContent = g('requirements') || '-';

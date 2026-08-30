@@ -16,6 +16,14 @@ if (!empty($_SESSION['user_id'])) {
 $error = '';
 $role = $_POST['role'] ?? 'company';
 
+$verification_questions = [
+    'What was the name of your first school?',
+    'What was the name of your childhood best friend?',
+    'What was the name of your first pet?',
+    'What was your favorite childhood nickname?',
+    'What city were you born in?',
+];
+
 $skills = [];
 $result = $conn->query('SELECT id, skill_name FROM skills ORDER BY skill_name');
 while ($row = $result->fetch_assoc()) {
@@ -69,6 +77,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (strlen($password) < 6) {
             $error = 'Password must be at least 6 characters.';
         } else {
+            $security_question = trim($_POST['security_question'] ?? '');
+            $security_answer = trim($_POST['security_answer'] ?? '');
+
+            if ($security_question === '' || !in_array($security_question, $verification_questions, true)) {
+                $error = 'Please select a valid verification question.';
+            } elseif ($security_answer === '') {
+                $error = 'Please enter your verification answer.';
+            } elseif (mb_strlen($security_answer) > 255) {
+                $error = 'Verification answer must be 255 characters or fewer.';
+            }
+        }
+
+        if ($error === '') {
             // Check email uniqueness
             $stmt = $conn->prepare('SELECT id FROM users WHERE email = ?');
             $stmt->bind_param('s', $email);
@@ -102,11 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($error === '') {
                 $hashed = password_hash($password, PASSWORD_DEFAULT);
+                $answer_hash = password_hash(strtolower($security_answer), PASSWORD_DEFAULT);
                 $conn->begin_transaction();
 
                 try {
-                    $stmt = $conn->prepare('INSERT INTO users (username, email, password, profile_image, role) VALUES (?, ?, ?, ?, ?)');
-                    $stmt->bind_param('sssss', $username, $email, $hashed, $profile_image, $role);
+                    $stmt = $conn->prepare('INSERT INTO users (username, email, password, profile_image, role, security_question, security_answer_hash) VALUES (?, ?, ?, ?, ?, ?, ?)');
+                    $stmt->bind_param('sssssss', $username, $email, $hashed, $profile_image, $role, $security_question, $answer_hash);
                     $stmt->execute();
                     $user_id = $stmt->insert_id;
                     $stmt->close();
@@ -124,9 +146,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $established_raw = (int) ($_POST['established_year'] ?? 0);
                         $established_year = ($established_raw >= 1800 && $established_raw <= (int) date('Y')) ? $established_raw : null;
                         $industry        = trim($_POST['industry'] ?? '');
-                        // company_size is no longer required or collected from the form
-                        $company_size = null;
-
                         if ($company_name === '') {
                             throw new Exception('Company name is required.');
                         }
@@ -136,8 +155,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $industry = '';
                         }
 
-                        $stmt = $conn->prepare('INSERT INTO companies (user_id, company_name, website, phone, location, description, established_year, industry, company_size, logo_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-                        $stmt->bind_param('isssssisss', $user_id, $company_name, $website, $phone, $location, $description, $established_year, $industry, $company_size, $logo_image);
+                        $stmt = $conn->prepare('INSERT INTO companies (user_id, company_name, website, phone, location, description, established_year, industry, logo_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                        $stmt->bind_param('isssssiss', $user_id, $company_name, $website, $phone, $location, $description, $established_year, $industry, $logo_image);
                         $stmt->execute();
                         $stmt->close();
                     } else {
@@ -491,7 +510,7 @@ require __DIR__ . '/../includes/header.php';
       <div class="step-strip" id="stepStrip">
         <div class="step-item active" id="step1"><div class="step-dot">1</div><span>Account</span></div>
         <div class="step-item" id="step2"><div class="step-dot">2</div><span>Details</span></div>
-        <div class="step-item" id="step3"><div class="step-dot">3</div><span>Done</span></div>
+        <div class="step-item" id="step3"><div class="step-dot">3</div><span>Verification</span></div>
       </div>
 
       <?php if ($error): ?>
@@ -612,7 +631,7 @@ require __DIR__ . '/../includes/header.php';
               <h4>
                 <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
                 Company Details
-                <span class="badge">Step 2 of 2</span>
+                <span class="badge">Step 2 of 3</span>
               </h4>
 
               <div class="space-y-4">
@@ -688,7 +707,7 @@ require __DIR__ . '/../includes/header.php';
               <h4>
                 <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                 Freelancer Details
-                <span class="badge">Step 2 of 2</span>
+                <span class="badge">Step 2 of 3</span>
               </h4>
 
               <div class="space-y-4">
@@ -715,9 +734,55 @@ require __DIR__ . '/../includes/header.php';
             </div>
           </div><!-- /freelancerFields -->
 
-          <!-- Back + Submit -->
+          <!-- Back + Next -->
           <div class="mt-6 flex gap-3">
             <button type="button" class="flex-1 py-3 rounded-xl border-2 font-semibold text-sm transition-all hover:bg-gray-50 dark:hover:bg-white/5" style="border-color:var(--color-border);color:var(--color-text-secondary)" onclick="goStep1()">
+              ← Back
+            </button>
+            <button type="button" class="auth-submit flex-1" onclick="goStep3()">
+              <span class="relative z-10 flex items-center justify-center gap-2">
+                Continue
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              </span>
+            </button>
+          </div>
+        </div><!-- /formStep2 -->
+
+        <!-- ══════════════════════════════════════════
+             STEP 3: VERIFICATION QUESTION
+        ═══════════════════════════════════════════ -->
+        <div id="formStep3" style="display:none;">
+          <div class="section-box mb-6">
+            <h4>
+              <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              Account Security
+              <span class="badge">Step 3 of 3</span>
+            </h4>
+
+            <div class="space-y-4">
+              <!-- Verification Question -->
+              <div>
+                <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Verification Question') ?> <span style="color:#ef4444">*</span></label>
+                <select name="security_question" id="regSecurityQuestion" required class="auth-input">
+                  <option value="">— Select a question —</option>
+                  <?php foreach ($verification_questions as $q): ?>
+                    <option value="<?= e($q) ?>" <?= (($_POST['security_question'] ?? '') === $q) ? 'selected' : '' ?>><?= e($q) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+
+              <!-- Verification Answer -->
+              <div>
+                <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Verification Answer') ?> <span style="color:#ef4444">*</span></label>
+                <input type="text" name="security_answer" id="regSecurityAnswer" required class="auth-input" placeholder="Enter your answer" value="<?= e($_POST['security_answer'] ?? '') ?>" maxlength="255" autocomplete="off">
+                <p class="text-xs mt-1.5" style="color:var(--color-text-placeholder)"><?= e('Please remember your answer. You may need it to recover your account.') ?></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Back + Submit -->
+          <div class="mt-6 flex gap-3">
+            <button type="button" class="flex-1 py-3 rounded-xl border-2 font-semibold text-sm transition-all hover:bg-gray-50 dark:hover:bg-white/5" style="border-color:var(--color-border);color:var(--color-text-secondary)" onclick="goStep2From3()">
               ← Back
             </button>
             <button type="submit" class="auth-submit flex-1" id="btnSubmit">
@@ -727,7 +792,7 @@ require __DIR__ . '/../includes/header.php';
               </span>
             </button>
           </div>
-        </div><!-- /formStep2 -->
+        </div><!-- /formStep3 -->
 
       </form>
     </div><!-- /card -->
@@ -812,6 +877,11 @@ function setStep(n) {
   }
   document.getElementById('formStep1').style.display = n === 1 ? 'block' : 'none';
   document.getElementById('formStep2').style.display = n === 2 ? 'block' : 'none';
+  document.getElementById('formStep3').style.display = n === 3 ? 'block' : 'none';
+  if (n === 2) {
+    var activeRole = document.querySelector('input[name="role"]:checked');
+    if (activeRole) selectRole(activeRole.value);
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -822,16 +892,31 @@ function goStep2() {
   var pw       = document.getElementById('regPassword').value;
   var pwc      = document.getElementById('regConfirm').value;
 
-  if (!username) { flashError('Username is required.'); return; }
-  if (!email || !email.includes('@')) { flashError('A valid email is required.'); return; }
-  if (pw.length < 6) { flashError('Password must be at least 6 characters.'); return; }
-  if (pw !== pwc) { flashError('Passwords do not match.'); return; }
+  if (!username) { flashError('Username is required.', 1); return; }
+  if (!email || !email.includes('@')) { flashError('A valid email is required.', 1); return; }
+  if (pw.length < 6) { flashError('Password must be at least 6 characters.', 1); return; }
+  if (pw !== pwc) { flashError('Passwords do not match.', 1); return; }
   setStep(2);
 }
 
-function goStep1() { setStep(1); }
+function goStep3() {
+  // Validate step 2 fields based on role
+  var role = document.querySelector('input[name="role"]:checked').value;
+  if (role === 'company') {
+    var companyName = document.getElementById('companyNameInput').value.trim();
+    if (!companyName) { flashError('Company name is required.', 2); return; }
+  } else {
+    var fullName = document.querySelector('#freelancerFields input[name="full_name"]').value.trim();
+    if (!fullName) { flashError('Full name is required.', 2); return; }
+  }
+  setStep(3);
+}
 
-function flashError(msg) {
+function goStep1() { setStep(1); }
+function goStep2From3() { setStep(2); }
+
+function flashError(msg, step) {
+  var targetId = step === 2 ? 'formStep2' : (step === 3 ? 'formStep3' : 'formStep1');
   var existing = document.getElementById('clientError');
   if (existing) existing.remove();
   var div = document.createElement('div');
@@ -839,7 +924,7 @@ function flashError(msg) {
   div.className = 'shake mb-4 p-3 rounded-xl flex items-center gap-2 text-sm font-medium';
   div.style.cssText = 'background:rgba(239,68,68,0.08);color:#dc2626;border:1px solid rgba(239,68,68,0.15);';
   div.innerHTML = '<svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>' + msg + '</span>';
-  document.getElementById('formStep1').prepend(div);
+  document.getElementById(targetId).prepend(div);
 }
 
 /* ── Password strength ───────────────────────────────────────── */
@@ -884,6 +969,12 @@ function charCounter(el, counterId, max) {
   if (n >= max)       counter.classList.add('over');
 }
 
+// Init role-fields visibility on page load
+(function(){
+  var initRole = document.querySelector('input[name="role"]:checked');
+  if (initRole) selectRole(initRole.value);
+})();
+
 // Init char counter if description has pre-filled value (on error re-render)
 (function(){
   var desc = document.getElementById('companyDesc');
@@ -895,9 +986,12 @@ function charCounter(el, counterId, max) {
   <?php if ($error !== ''): ?>
   // If the error is about company/freelancer-specific fields, go to step 2
   var step2Errors = ['<?= e('Company name is required.') ?>', '<?= e('Full name is required.') ?>'];
+  // If the error is about verification fields, go to step 3
+  var step3Errors = ['<?= e('Please select a valid verification question.') ?>', '<?= e('Please enter your verification answer.') ?>', '<?= e('Verification answer must be 255 characters or fewer.') ?>'];
   var msg = '<?= e(addslashes($error)) ?>';
-  var inStep2 = step2Errors.indexOf(msg) !== -1;
-  if (inStep2) { setStep(2); } else { setStep(1); }
+  if (step3Errors.indexOf(msg) !== -1) { setStep(3); }
+  else if (step2Errors.indexOf(msg) !== -1) { setStep(2); }
+  else { setStep(1); }
   <?php endif; ?>
 })();
 </script>

@@ -24,7 +24,7 @@ $fallback_url = ($viewer_role === 'company') ? 'index.php' : (($viewer_role === 
 if ($fid <= 0) { redirect($fallback_url); }
 
 // Fetch freelancer data
-$st = $conn->prepare("SELECT f.id, f.full_name, f.title, f.location, f.bio, f.experience_years, f.hourly_rate, f.phone, u.id AS user_id, u.profile_image, u.username, u.email, u.created_at, u.is_online, u.last_seen
+$st = $conn->prepare("SELECT f.id, f.full_name, f.title, f.bio, f.phone, u.id AS user_id, u.profile_image, u.username, u.email, u.created_at, u.is_online, u.last_seen
     FROM freelancers f JOIN users u ON f.user_id = u.id WHERE f.id = ?");
 $st->bind_param('i', $fid);
 $st->execute();
@@ -169,9 +169,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         if (!$company_id) { $hire_error = $send_response(false, 'Company profile not found.'); }
         else {
             $title = trim($_POST['project_title'] ?? '');
+            $category = trim($_POST['category'] ?? '');
+            if ($category === '') {
+                $category = 'Other';
+            }
             $description = trim($_POST['project_description'] ?? '');
             $budget = (float) ($_POST['budget'] ?? 0);
-            $deadline = trim($_POST['deadline'] ?? '');
+            $deadline = !empty($_POST['deadline']) ? $_POST['deadline'] : null;
             $payment_type = $_POST['payment_type'] ?? 'fixed';
             $notes = trim($_POST['notes'] ?? '');
             $ms_titles = $_POST['ms_title'] ?? [];
@@ -194,14 +198,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 elseif ($payment_type === 'milestone' && empty($ms_titles)) { $hire_error = $send_response(false, 'Please add at least one milestone.'); }
                 else {
                     // Double-click / Race Condition Protection
-                    $stmt = $conn->prepare("SELECT id FROM jobs WHERE company_id = ? AND title = ? AND category = 'Direct Hire' AND created_at > (NOW() - INTERVAL 2 MINUTE)");
+                    $stmt = $conn->prepare("SELECT id FROM jobs WHERE company_id = ? AND title = ? AND created_at > (NOW() - INTERVAL 2 MINUTE)");
                     $stmt->bind_param('is', $company_id, $title);
                     $stmt->execute();
                     $recent_duplicate = $stmt->get_result()->fetch_assoc();
                     $stmt->close();
 
                     if ($recent_duplicate) {
-                        $send_response(true, 'Hire request sent successfully! The freelancer will be notified.');
+                        $send_response(true, 'Direct offer sent successfully! The freelancer will be notified.');
                     } else {
                         $stmt = $conn->prepare("SELECT a.id FROM assignments a JOIN jobs j ON a.job_id = j.id WHERE j.company_id = ? AND a.freelancer_id = ? AND j.title = ?");
                         $stmt->bind_param('iis', $company_id, $fid, $title);
@@ -210,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         $stmt->close();
 
                         if ($existing_assignment) {
-                            $send_response(true, 'Hire request sent successfully! The freelancer will be notified.');
+                            $send_response(true, 'Direct offer sent successfully! The freelancer will be notified.');
                         } else {
                             if ($payment_type === 'milestone') {
                                 $ms_total = 0;
@@ -223,8 +227,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             if (empty($hire_error)) {
                                 $conn->begin_transaction();
                                 try {
-                                    $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, gender_requirement, visibility, status, duration, payment_type) VALUES (?, ?, 'Direct Hire', ?, ?, ?, 'any', 'any', 'private', 'open', '', ?)");
-                                    $stmt->bind_param('issdss', $company_id, $title, $description, $budget, $deadline, $payment_type);
+                                    $stmt = $conn->prepare("INSERT INTO jobs (company_id, title, category, description, budget, deadline, experience_level, status, duration, payment_type) VALUES (?, ?, ?, ?, ?, ?, 'intermediate', 'open', '', ?)");
+                                    $stmt->bind_param('isssdss', $company_id, $title, $category, $description, $budget, $deadline, $payment_type);
                                     $stmt->execute();
                                     $job_id = $stmt->insert_id;
                                     $stmt->close();
@@ -583,12 +587,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <p class="text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-4"><?= e($freelancer['title'] ?? 'Freelancer') ?></p>
                 
                 <div class="flex flex-col gap-2 text-sm text-slate-600 dark:text-slate-400 mb-6 border-t border-slate-100 dark:border-slate-800 pt-4">
-                    <?php if ($freelancer['location']): ?>
-                    <div class="flex items-center gap-2 justify-center">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
-                        <span><?= e($freelancer['location']) ?></span>
-                    </div>
-                    <?php endif; ?>
+
                     
                     <div class="flex items-center gap-2 justify-center">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -614,7 +613,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <?php if ($viewer_role === null): ?>
                             <a href="<?= e(base_url('auth/login.php')) ?>" class="btn-glow w-full justify-center inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white text-center" style="text-decoration:none;">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                                Hire Freelancer
+                                Send Direct Offer
                             </a>
                             <a href="<?= e(base_url('auth/login.php')) ?>" class="w-full inline-flex justify-center items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors text-center" style="text-decoration:none;">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
@@ -623,7 +622,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         <?php else: ?>
                             <button type="button" onclick="document.getElementById('hireModal').classList.remove('hidden')" class="btn-glow w-full justify-center inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                                Hire Freelancer
+                                Send Direct Offer
                             </button>
                             <a href="<?= e(base_url('chat/index.php?user=' . $freelancer['user_id'])) ?>" class="w-full inline-flex justify-center items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">
                                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/></svg>
@@ -812,8 +811,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         <div class="shrink-0 p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div class="flex items-center justify-between">
                 <div>
-                    <h3 class="text-xl font-bold text-slate-900 dark:text-white">Hire <?= e($freelancer['full_name'] ?? $freelancer['username']) ?></h3>
-                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Send a direct hire request with project details</p>
+                    <h3 class="text-xl font-bold text-slate-900 dark:text-white">Send Direct Offer to <?= e($freelancer['full_name'] ?? $freelancer['username']) ?></h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Send a direct offer with project details</p>
                 </div>
                 <button type="button" onclick="document.getElementById('hireModal').classList.add('hidden')" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -829,6 +828,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <div>
                 <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Project Title <span class="text-red-500">*</span></label>
                 <input type="text" name="project_title" required maxlength="255" class="w-full px-4 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="e.g. Website Redesign">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium mb-1.5 text-slate-700 dark:text-slate-300">Category <span class="text-red-500">*</span></label>
+                <select name="category" required class="w-full px-4 py-2.5 rounded-xl text-sm border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    <option value="">Select Category</option>
+                    <?php
+                    $res = $conn->query("SELECT name FROM categories WHERE LOWER(name) != 'direct hire' ORDER BY CASE WHEN LOWER(name) = 'other' THEN 1 ELSE 0 END, name ASC");
+                    if ($res) {
+                        while ($c = $res->fetch_assoc()) {
+                            echo '<option value="' . e($c['name']) . '">' . e($c['name']) . '</option>';
+                        }
+                    }
+                    ?>
+                </select>
             </div>
 
             <div>
@@ -885,7 +899,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             <div class="flex gap-3 pt-2">
                 <button type="button" onclick="document.getElementById('hireModal').classList.add('hidden')" class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Cancel</button>
-                <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">Send Hire Request</button>
+                <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:-translate-y-0.5 transition-all">Send Direct Offer</button>
             </div>
         </form>
     </div>

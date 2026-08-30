@@ -3,6 +3,7 @@ require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/config/auth.php';
 require_once __DIR__ . '/config/notifications.php';
 require_once __DIR__ . '/config/chat.php';
+require_once __DIR__ . '/includes/job_helpers.php';
 
 // Set CSRF cookie early (before any HTML output)
 csrf_cookie();
@@ -103,21 +104,65 @@ $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'freelancer'")
 $stats['freelancers'] = (int) $r->fetch_assoc()['cnt'];
 $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'company'");
 $stats['companies'] = (int) $r->fetch_assoc()['cnt'];
-$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'open' AND category != 'Direct Hire'");
+$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs j WHERE j.status = 'open' AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.job_id = j.id AND a.assignment_type = 'direct_hire')");
 $stats['jobs'] = (int) $r->fetch_assoc()['cnt'];
-$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'completed'");
+$r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs j WHERE j.status = 'completed' AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.job_id = j.id AND a.assignment_type = 'direct_hire')");
 $stats['completed'] = (int) $r->fetch_assoc()['cnt'];
 
 
-// Fetch all skills for the Skills section
-$skills_list = isset($_SESSION['nav_skills']) ? $_SESSION['nav_skills'] : [];
-if (empty($skills_list)) {
-    $r = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
-    if ($r) {
-        while ($row = $r->fetch_assoc()) {
-            $skills_list[] = $row;
+check_and_update_expired_jobs($conn);
+
+// Fetch categories and job counts for the Categories section
+$categories_list = [];
+$cat_query = "SELECT c.id, c.name, 
+                     (SELECT COUNT(*) FROM jobs j WHERE (LOWER(j.category) = LOWER(c.name) OR j.category = c.name) AND j.status NOT IN ('closed', 'cancelled', 'expired') AND (j.deadline IS NULL OR j.deadline >= NOW()) AND NOT EXISTS (SELECT 1 FROM assignments a_dh WHERE a_dh.job_id = j.id AND a_dh.assignment_type = 'direct_hire')) AS job_count
+              FROM categories c
+              WHERE LOWER(c.name) NOT IN ('direct hire', 'direct offer')
+              ORDER BY CASE WHEN LOWER(c.name) = 'other' THEN 1 ELSE 0 END, c.name ASC";
+$r_cat = $conn->query($cat_query);
+if ($r_cat) {
+    while ($row = $r_cat->fetch_assoc()) {
+        $categories_list[] = $row;
+    }
+}
+
+if (!function_exists('get_category_icon')) {
+    function get_category_icon(string $cat_name): string {
+        $name = strtolower(trim($cat_name));
+        if (str_contains($name, 'web')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>';
+        } elseif (str_contains($name, 'mobile')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>';
+        } elseif (str_contains($name, 'ui') || str_contains($name, 'ux')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>';
+        } elseif (str_contains($name, 'graphic') || str_contains($name, 'photoshop')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>';
+        } elseif (str_contains($name, 'writing') || str_contains($name, 'content')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
+        } elseif (str_contains($name, 'marketing')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>';
+        } elseif (str_contains($name, 'data')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>';
+        } elseif (str_contains($name, 'video') || str_contains($name, 'animation')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>';
+        } elseif (str_contains($name, 'translation')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>';
+        } elseif (str_contains($name, 'chain')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>';
+        } elseif (str_contains($name, 'ops') || str_contains($name, 'dev')) {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>';
+        } else {
+            return '<svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>';
         }
-        $_SESSION['nav_skills'] = $skills_list;
+    }
+}
+
+// Fetch all skills for the Skills section
+$skills_list = [];
+$r = $conn->query("SELECT id, skill_name FROM skills ORDER BY skill_name");
+if ($r) {
+    while ($row = $r->fetch_assoc()) {
+        $skills_list[] = $row;
     }
 }
 
@@ -919,191 +964,74 @@ $page_title = 'FreelanceHub - Find Work or Hire Talent';
         </div>
     </section>
 
-    <!-- ===== BROWSE BY SKILL ===== -->
-    <section id="skills" class="py-28 bg-white/50 dark:bg-slate-800/30">
+    <!-- ===== BROWSE BY CATEGORIES ===== -->
+    <section id="categories" class="py-24 bg-slate-50/50 dark:bg-slate-800/30">
         <div class="max-w-7xl mx-auto px-4 sm:px-6">
-            <div class="text-center mb-10 reveal">
-                <span class="section-eyebrow justify-center">Skills</span>
-                <h2 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">Browse Jobs by Skill</h2>
-                <p class="text-gray-500 dark:text-gray-400 max-w-xl mx-auto text-lg">Select a skill to find matching job opportunities</p>
+            <div class="text-center mb-14 reveal">
+                <span class="section-eyebrow justify-center">Explore Opportunities</span>
+                <h2 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-gray-900 dark:text-white mb-4">
+                    Browse Jobs by Categories
+                </h2>
+                <p class="text-gray-500 dark:text-gray-400 max-w-xl mx-auto text-base sm:text-lg">
+                    Find the best job opportunities tailored to your expertise across top industry categories.
+                </p>
             </div>
 
-            <!-- Skill Selector -->
-            <div class="max-w-md mx-auto mb-10 reveal">
-                <div class="relative">
-                    <svg class="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
-                    <select id="skill-selector" class="skill-select-no-arrow w-full pl-12 pr-4 py-4 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer transition-all" style="background-color:var(--color-card,#fff);border:1px solid var(--color-border,#e5e7eb);color:var(--color-text-primary,#111827)">
-                        <option value="">Select a skill...</option>
-                        <?php foreach ($skills_list as $sk): ?>
-                            <option value="<?= e($sk['id']) ?>"><?= e($sk['skill_name']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Filtered Jobs Container -->
-            <div id="skill-jobs-container" class="hidden">
-                <div class="flex items-center justify-between mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 dark:text-white" id="skill-jobs-title">Jobs</h3>
-                    <span class="text-sm text-gray-500 dark:text-gray-400" id="skill-jobs-count"></span>
-                </div>
-                <div id="skill-jobs-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                </div>
-                <div id="skill-jobs-loading" class="hidden text-center py-12">
-                    <div class="inline-flex items-center gap-3 text-gray-500 dark:text-gray-400">
-                        <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                        Loading jobs...
-                    </div>
-                </div>
-                <div id="skill-jobs-empty" class="hidden text-center py-12 bg-white dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-700/50">
-                    <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    <p class="text-gray-500 dark:text-gray-400">No jobs found for this skill.</p>
-                </div>
-                <div class="text-center mt-8" id="skill-jows-view-all" style="display:none">
-                    <a id="skill-view-all-link" href="#" class="btn-gradient inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-white text-sm shadow-lg shadow-primary-500/25">
-                        View All Matching Jobs
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Default: show top skills as pills -->
-            <div id="skills-pills" class="flex flex-wrap justify-center gap-3 reveal">
+            <!-- Category Cards Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 reveal">
                 <?php
-                $top_skills = ['PHP', 'JavaScript', 'React.js', 'UI/UX Design', 'Python', 'Content Writing', 'Laravel', 'MySQL', 'Figma', 'Node.js'];
-                $pill_colors = [
-                    'PHP' => 'from-blue-500 to-indigo-600',
-                    'JavaScript' => 'from-yellow-400 to-orange-500',
-                    'React.js' => 'from-cyan-400 to-blue-500',
-                    'UI/UX Design' => 'from-pink-500 to-rose-600',
-                    'Python' => 'from-green-500 to-emerald-600',
-                    'Content Writing' => 'from-violet-500 to-purple-600',
-                    'Laravel' => 'from-red-600 to-rose-700',
-                    'MySQL' => 'from-blue-600 to-indigo-700',
-                    'Figma' => 'from-purple-500 to-fuchsia-600',
-                    'Node.js' => 'from-green-600 to-teal-700',
+                $cat_color_palette = [
+                    ['bg' => 'bg-indigo-50 dark:bg-indigo-900/30', 'text' => 'text-indigo-600 dark:text-indigo-400', 'border' => 'border-indigo-100 dark:border-indigo-800/40'],
+                    ['bg' => 'bg-purple-50 dark:bg-purple-900/30', 'text' => 'text-purple-600 dark:text-purple-400', 'border' => 'border-purple-100 dark:border-purple-800/40'],
+                    ['bg' => 'bg-blue-50 dark:bg-blue-900/30', 'text' => 'text-blue-600 dark:text-blue-400', 'border' => 'border-blue-100 dark:border-blue-800/40'],
+                    ['bg' => 'bg-emerald-50 dark:bg-emerald-900/30', 'text' => 'text-emerald-600 dark:text-emerald-400', 'border' => 'border-emerald-100 dark:border-emerald-800/40'],
+                    ['bg' => 'bg-amber-50 dark:bg-amber-900/30', 'text' => 'text-amber-600 dark:text-amber-400', 'border' => 'border-amber-100 dark:border-amber-800/40'],
+                    ['bg' => 'bg-pink-50 dark:bg-pink-900/30', 'text' => 'text-pink-600 dark:text-pink-400', 'border' => 'border-pink-100 dark:border-pink-800/40'],
+                    ['bg' => 'bg-cyan-50 dark:bg-cyan-900/30', 'text' => 'text-cyan-600 dark:text-cyan-400', 'border' => 'border-cyan-100 dark:border-cyan-800/40'],
+                    ['bg' => 'bg-rose-50 dark:bg-rose-900/30', 'text' => 'text-rose-600 dark:text-rose-400', 'border' => 'border-rose-100 dark:border-rose-800/40'],
                 ];
-                foreach ($skills_list as $sk):
-                    if (!in_array($sk['skill_name'], $top_skills)) continue;
-                    $color = $pill_colors[$sk['skill_name']] ?? 'from-gray-500 to-gray-600';
+
+                foreach ($categories_list as $index => $cat):
+                    $palette = $cat_color_palette[$index % count($cat_color_palette)];
+                    $icon_html = get_category_icon($cat['name']);
+                    $cnt = (int) ($cat['job_count'] ?? 0);
                 ?>
-                    <button type="button" onclick="selectSkill('<?= e($sk['id']) ?>', '<?= e($sk['skill_name']) ?>')" class="skill-pill inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-br <?= $color ?> shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
-                        <?= e($sk['skill_name']) ?>
-                    </button>
+                    <a href="<?= e(base_url('freelancer/browse_jobs.php?category=' . urlencode($cat['name']))) ?>" 
+                       class="group relative rounded-3xl p-6 transition-all duration-300 border hover:-translate-y-1.5 hover:shadow-xl flex flex-col justify-between"
+                       style="background:var(--color-card,#fff);border-color:var(--color-border,#e5e7eb)">
+                        
+                        <div>
+                            <!-- Category Icon -->
+                            <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 border <?= $palette['bg'] ?> <?= $palette['text'] ?> <?= $palette['border'] ?>">
+                                <?= $icon_html ?>
+                            </div>
+
+                            <!-- Category Name -->
+                            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                <?= e($cat['name']) ?>
+                            </h3>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-4 mt-2 border-t" style="border-color:var(--color-border,#e5e7eb)">
+                            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                                <?= $cnt ?> available job<?= $cnt !== 1 ? 's' : '' ?>
+                            </span>
+                            <span class="text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                            </span>
+                        </div>
+                    </a>
                 <?php endforeach; ?>
+            </div>
+
+            <div class="text-center mt-12 reveal">
+                <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="btn-gradient inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl font-bold text-white text-sm shadow-xl shadow-primary-500/25 hover:shadow-2xl transition-all">
+                    Browse All Categories & Jobs
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+                </a>
             </div>
         </div>
     </section>
-
-<script>
-(function() {
-    var selector = document.getElementById('skill-selector');
-    var container = document.getElementById('skill-jobs-container');
-    var grid = document.getElementById('skill-jobs-grid');
-    var loading = document.getElementById('skill-jobs-loading');
-    var empty = document.getElementById('skill-jobs-empty');
-    var title = document.getElementById('skill-jobs-title');
-    var count = document.getElementById('skill-jobs-count');
-    var pills = document.getElementById('skills-pills');
-    var viewAllWrap = document.getElementById('skill-jows-view-all');
-    var viewAllLink = document.getElementById('skill-view-all-link');
-
-    if (!selector) return;
-
-    var debounceTimer = null;
-
-    selector.addEventListener('change', function() {
-        if (this.value) {
-            selectSkill(this.value, this.options[this.selectedIndex].text);
-        } else {
-            selectSkill('', '');
-        }
-    });
-
-    window.selectSkill = function(skillId, skillName) {
-        if (!skillId) {
-            container.classList.add('hidden');
-            pills.classList.remove('hidden');
-            return;
-        }
-        // Update dropdown to match
-        selector.value = skillId;
-
-        // Show container, hide pills
-        container.classList.remove('hidden');
-        pills.classList.add('hidden');
-        grid.innerHTML = '';
-        loading.classList.remove('hidden');
-        empty.classList.add('hidden');
-        viewAllWrap.style.display = 'none';
-        title.textContent = skillName + ' Jobs';
-
-        fetch('<?= e(base_url("api/skill_jobs.php")) ?>?id=' + encodeURIComponent(skillId) + '&limit=6')
-            .then(function(r) { return r.json(); })
-            .then(function(d) {
-                loading.classList.add('hidden');
-                if (!d.success || !d.jobs || d.jobs.length === 0) {
-                    empty.classList.remove('hidden');
-                    count.textContent = '';
-                    return;
-                }
-                count.textContent = d.count + ' job' + (d.count !== 1 ? 's' : '') + ' found';
-                viewAllWrap.style.display = '';
-                viewAllLink.href = '<?= e(base_url("freelancer/skill_jobs.php?id=")) ?>' + encodeURIComponent(skillId);
-
-                d.jobs.forEach(function(job) {
-                    var logoHtml = job.logo_url
-                        ? '<img src="' + escHtml(job.logo_url) + '" alt="" class="w-10 h-10 rounded-lg object-cover">'
-                        : '<div class="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">' + escHtml(job.company_name.charAt(0).toUpperCase()) + '</div>';
-
-                    var expLabel = job.experience_level === 'beginner' ? 'Beginner' : job.experience_level === 'expert' ? 'Expert' : 'Intermediate';
-                    var timeAgo = timeSince(job.created_at);
-
-                    grid.innerHTML +=
-                        '<div class="job-card bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-gray-700/50 p-6 hover:border-indigo-300 dark:hover:border-indigo-600 transition-all">' +
-                            '<div class="flex items-start gap-3 mb-4">' +
-                                logoHtml +
-                                '<div class="flex-1 min-w-0">' +
-                                    '<p class="text-xs text-gray-400 mb-0.5">' + escHtml(job.company_name) + '</p>' +
-                                    '<h3 class="font-bold text-gray-900 dark:text-white text-sm leading-snug line-clamp-2">' + escHtml(job.title) + '</h3>' +
-                                '</div>' +
-                            '</div>' +
-                            '<p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed mb-4 line-clamp-3">' + escHtml(job.description) + '</p>' +
-                            '<div class="flex flex-wrap gap-1.5 mb-4">' +
-                                '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400">' + escHtml(expLabel) + '</span>' +
-                                (job.duration ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">' + escHtml(job.duration) + '</span>' : '') +
-                            '</div>' +
-                            '<div class="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700/50">' +
-                                '<span class="text-sm font-bold text-emerald-600 dark:text-emerald-400">$' + Number(job.budget).toLocaleString() + '</span>' +
-                                '<a href="<?= e(base_url("freelancer/view_job.php?id=")) ?>' + job.id + '" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 transition-colors">View Details →</a>' +
-                            '</div>' +
-                        '</div>';
-                });
-            })
-            .catch(function() {
-                loading.classList.add('hidden');
-                empty.classList.remove('hidden');
-            });
-    };
-
-    function escHtml(s) {
-        var d = document.createElement('div');
-        d.appendChild(document.createTextNode(s || ''));
-        return d.innerHTML;
-    }
-
-    function timeSince(dateStr) {
-        var now = new Date();
-        var d = new Date(dateStr);
-        var diff = Math.floor((now - d) / 1000);
-        if (diff < 60) return 'just now';
-        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-        if (diff < 2592000) return Math.floor(diff / 86400) + 'd ago';
-        return d.toLocaleDateString();
-    }
-})();
-</script>
 
 
     <!-- ===== FOOTER ===== -->

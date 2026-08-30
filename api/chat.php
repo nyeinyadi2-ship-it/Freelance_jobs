@@ -152,7 +152,7 @@ if ($method === 'POST') {
 
     if ($action === 'send_message' || $action === 'send_file') {
         $receiver_id = (int) ($input['receiver_id'] ?? 0);
-        $message = trim($input['message'] ?? '');
+        $message = trim((string) ($input['message'] ?? ''));
         $message_type = $input['message_type'] ?? ($action === 'send_file' ? 'file' : 'text');
 
         if ($receiver_id <= 0 || ($message === '' && empty($_FILES['attachment']))) {
@@ -197,6 +197,8 @@ if ($method === 'POST') {
             $msgs = get_messages_enhanced($conn, $user_id, $receiver_id, 0, 1);
             echo json_encode(['success' => true, 'message_id' => $message_id, 'message' => $msgs[0] ?? null]);
         } else {
+            // send_message_with_attachment returns null when message + file are both empty,
+            // or when the DB insert failed. Never echo a raw execute() result (0/1) here.
             http_response_code(500);
             echo json_encode(['error' => 'Failed to send message']);
         }
@@ -275,6 +277,30 @@ if ($method === 'POST') {
         } else {
             http_response_code(403);
             echo json_encode(['error' => 'Cannot edit this message']);
+        }
+        exit;
+    }
+
+    if ($action === 'delete_message') {
+        $msg_id = (int) ($input['message_id'] ?? 0);
+        if ($msg_id <= 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid message ID']);
+            exit;
+        }
+        // Soft-delete: only the sender can delete their own message.
+        // The WHERE clause targets exactly one row by its unique ID + the authenticated sender_id,
+        // so no other messages, attachments, or conversations are affected.
+        $stmt = $conn->prepare("UPDATE messages SET is_deleted = 1 WHERE id = ? AND sender_id = ? AND is_deleted = 0");
+        $stmt->bind_param('ii', $msg_id, $user_id);
+        $stmt->execute();
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+        if ($affected > 0) {
+            echo json_encode(['success' => true]);
+        } else {
+            http_response_code(403);
+            echo json_encode(['error' => 'Cannot delete this message']);
         }
         exit;
     }

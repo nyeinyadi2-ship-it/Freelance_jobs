@@ -8,11 +8,11 @@ require_role('admin');
 
 $page_title = 'Password Recovery';
 
-// Fetch recovery requests
+// Fetch recovery requests with verification question info
 $requests = [];
 try {
     $r = $conn->query("
-        SELECT u.id, u.username, u.email,
+        SELECT u.id, u.username, u.email, u.security_question,
                (SELECT created_at FROM messages WHERE sender_id = u.id AND JSON_EXTRACT(message_meta, '$.is_recovery_request') = true ORDER BY id DESC LIMIT 1) as request_date,
                (SELECT message_meta FROM messages WHERE sender_id = u.id AND JSON_EXTRACT(message_meta, '$.is_recovery_request') = true ORDER BY id DESC LIMIT 1) as latest_meta
         FROM users u
@@ -26,6 +26,7 @@ try {
                 $meta = json_decode($row['latest_meta'], true) ?? [];
             }
             $row['status'] = $meta['status'] ?? 'Pending';
+            $row['verification_completed'] = !empty($meta['verification_completed']);
             $requests[] = $row;
         }
     } else {
@@ -47,7 +48,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $admin_id = (int) $_SESSION['user_id'];
     
     if ($action === 'resolve' && $target_user_id > 0) {
-        // Find latest temp password and invalidate it
         $stmt = $conn->prepare("SELECT id, message_meta FROM messages WHERE (sender_id = ? OR receiver_id = ?) AND message_meta LIKE '%temp_password_hash%' ORDER BY id DESC LIMIT 1");
         $stmt->bind_param('ii', $target_user_id, $target_user_id);
         $stmt->execute();
@@ -65,7 +65,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $stmt->close();
         }
         
-        // Also send a system message to indicate resolution
         $msg = "Password recovery request has been marked as resolved by Admin.";
         $meta = json_encode(["is_system" => true]);
         $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message, message_type, message_meta) VALUES (?, ?, ?, 'system', ?)");
@@ -108,6 +107,7 @@ require __DIR__ . '/includes/admin_header.php';
             <thead>
                 <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
                     <th class="px-6 py-4">User</th>
+                    <th class="px-6 py-4">Verification Question</th>
                     <th class="px-6 py-4">Request Date</th>
                     <th class="px-6 py-4">Status</th>
                     <th class="px-6 py-4 text-right">Actions</th>
@@ -116,7 +116,7 @@ require __DIR__ . '/includes/admin_header.php';
             <tbody class="divide-y divide-slate-100 dark:divide-slate-700/50">
                 <?php if (empty($requests)): ?>
                 <tr>
-                    <td colspan="4" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                    <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
                         No password recovery requests found.
                     </td>
                 </tr>
@@ -134,6 +134,15 @@ require __DIR__ . '/includes/admin_header.php';
                                 </div>
                             </div>
                         </td>
+                        <td class="px-6 py-4">
+                            <?php if (!empty($req['security_question'])): ?>
+                                <div class="text-sm text-slate-700 dark:text-slate-300 max-w-xs">
+                                    <?= e($req['security_question']) ?>
+                                </div>
+                            <?php else: ?>
+                                <span class="text-xs text-slate-400 italic">No question set</span>
+                            <?php endif; ?>
+                        </td>
                         <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
                             <?= date('M j, Y g:i A', strtotime($req['request_date'])) ?>
                         </td>
@@ -141,6 +150,7 @@ require __DIR__ . '/includes/admin_header.php';
                             <?php 
                                 $status_color = match($req['status']) {
                                     'Pending' => 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                                    'Verified' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
                                     'In Progress' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
                                     'Temporary Password Generated' => 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
                                     'Resolved' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -151,13 +161,18 @@ require __DIR__ . '/includes/admin_header.php';
                             <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium <?= $status_color ?>">
                                 <?= e($req['status']) ?>
                             </span>
+                            <?php if ($req['verification_completed']): ?>
+                                <span class="inline-flex items-center ml-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400">
+                                    Verified
+                                </span>
+                            <?php endif; ?>
                         </td>
                         <td class="px-6 py-4 text-right">
                             <div class="flex items-center justify-end gap-2">
                                 <a href="<?= e(base_url('chat/index.php?user_id=' . $req['id'])) ?>" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 rounded-lg text-sm font-medium transition-colors">
                                     Open Chat
                                 </a>
-                                <?php if ($req['status'] !== 'Resolved'): ?>
+                                <?php if ($req['status'] !== 'Resolved' && $req['status'] !== 'Temporary Password Generated'): ?>
                                 <button type="button" onclick="generateTempPassword(<?= $req['id'] ?>)" class="px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50 rounded-lg text-sm font-medium transition-colors">
                                     Generate Temporary Password
                                 </button>
@@ -189,7 +204,6 @@ function generateTempPassword(userId) {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            // Show password to admin
             prompt("Temporary Password Generated successfully! Please copy and send it to the user:", data.temp_password);
             window.location.reload();
         } else {

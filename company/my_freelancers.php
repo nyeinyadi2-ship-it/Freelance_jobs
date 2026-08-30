@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $stmt->close();
 
             if (!$is_completed) {
-                set_flash('error', 'This assignment is not completed yet, or does not belong to you.');
+                set_flash('error', 'This project is not completed yet, or does not belong to you.');
             } else {
                 // Check duplicate
                 $stmt = $conn->prepare("SELECT id FROM reviews WHERE assignment_id = ? AND company_user_id = ?");
@@ -72,7 +72,7 @@ $stmt = $conn->prepare("
         f.id AS freelancer_id,
         f.full_name,
         f.title AS freelancer_title,
-        f.location,
+
         u.email,
         u.profile_image,
         c.company_name,
@@ -210,7 +210,7 @@ foreach ($raw_rows as $row) {
             'freelancer_id'    => $fid,
             'full_name'        => $row['full_name'],
             'freelancer_title' => $row['freelancer_title'],
-            'location'         => $row['location'],
+
             'email'            => $row['email'],
             'profile_image'    => $row['profile_image'],
             'company_name'     => $row['company_name'],

@@ -37,10 +37,8 @@ $results = [];
 
 // 1. Search Jobs
 try {
-    $has_visibility = search_column_exists($conn, 'jobs', 'visibility');
-    $visibility_col = $has_visibility ? 'j.visibility,' : '';
     $stmt = $conn->prepare("
-        SELECT j.id, j.title, j.budget, j.status, {$visibility_col} c.company_name
+        SELECT j.id, j.title, j.budget, j.status, c.company_name
         FROM jobs j
         JOIN companies c ON j.company_id = c.id
         WHERE j.title LIKE ? OR j.description LIKE ? OR j.category LIKE ?
@@ -51,7 +49,7 @@ try {
     $stmt->execute();
     $r = $stmt->get_result();
     while ($row = $r->fetch_assoc()) {
-        $vis = $row['visibility'] ?? 'public';
+
         $results[] = [
             'type' => 'job',
             'icon' => 'M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
@@ -97,7 +95,7 @@ try {
     $has_status = has_account_status_column();
     $status_col = $has_status ? 'u.account_status,' : "'active' AS account_status,";
     $stmt = $conn->prepare("
-        SELECT f.id, f.full_name, f.title, f.experience_years, u.email, u.username, u.id AS user_id, {$status_col} u.role
+        SELECT f.id, f.full_name, f.title, u.email, u.username, u.id AS user_id, {$status_col} u.role
         FROM freelancers f
         JOIN users u ON f.user_id = u.id
         WHERE f.full_name LIKE ? OR f.title LIKE ? OR u.username LIKE ? OR u.email LIKE ?

@@ -1,19 +1,32 @@
 <?php
 function check_and_update_expired_jobs($conn) {
-    // Throttle: only run once per hour per session to avoid heavy UPDATE on every page load
-    $now = time();
-    $last_run = $_SESSION['_expired_jobs_check'] ?? 0;
-    if ($now - $last_run < 3600) return;
-    $_SESSION['_expired_jobs_check'] = $now;
+    if (!$conn) return;
 
-    // Mark jobs as expired when deadline has passed (based on date AND time)
-    $sql = "UPDATE jobs j 
-            SET j.status = 'expired' 
-            WHERE j.status = 'open' 
-            AND j.deadline IS NOT NULL 
-            AND j.deadline < NOW()
-            LIMIT 500";
-    $conn->query($sql);
+    try {
+        $tz = new DateTimeZone('Asia/Yangon');
+        $now = new DateTime('now', $tz);
+        $now_str = $now->format('Y-m-d H:i:s');
+
+        // Mark jobs as expired when deadline has passed in Asia/Yangon timezone
+        // Handles DATE-only deadlines (00:00:00) by expiring them after 23:59:59 of that date
+        $sql = "UPDATE jobs 
+                SET status = 'expired' 
+                WHERE status IN ('open', 'in_review', 'approved') 
+                AND deadline IS NOT NULL 
+                AND (
+                    (TIME(deadline) = '00:00:00' AND TIMESTAMP(DATE(deadline), '23:59:59') < ?)
+                    OR
+                    (TIME(deadline) != '00:00:00' AND deadline < ?)
+                )";
+        $stmt = $conn->prepare($sql);
+        if ($stmt) {
+            $stmt->bind_param('ss', $now_str, $now_str);
+            $stmt->execute();
+            $stmt->close();
+        }
+    } catch (Throwable $e) {
+        error_log("check_and_update_expired_jobs error: " . $e->getMessage());
+    }
 }
 
 function _dl_notification_exists($conn, $user_id, $type) {
@@ -170,14 +183,13 @@ function check_milestone_overdue($conn) {
     $tz = new DateTimeZone('Asia/Yangon');
     $now = new DateTime('now', $tz);
 
-    // Only target milestones that are active and have a pending extension request handled
-    // Milestones in funded, in_progress, or revision_requested with a past deadline become overdue
+    // Only target milestones that are active and not yet submitted/completed
     $sql_ms = "SELECT m.id, m.deadline, m.status, m.job_id, m.freelancer_id, m.title as milestone_title,
                       j.company_id, f.user_id as freelancer_user_id
                FROM milestones m
                JOIN jobs j ON m.job_id = j.id
                JOIN freelancers f ON m.freelancer_id = f.id
-               WHERE m.status IN ('funded', 'in_progress', 'revision_requested')
+               WHERE m.status IN ('draft', 'funded', 'in_progress', 'pending', 'revision_requested')
                AND m.deadline IS NOT NULL";
 
     $result_ms = $conn->query($sql_ms);
@@ -190,7 +202,7 @@ function check_milestone_overdue($conn) {
             $freelancer_id = (int)$row['freelancer_user_id'];
             $milestone_title = $row['milestone_title'];
 
-            $update = $conn->prepare("UPDATE milestones SET status = 'overdue' WHERE id = ? AND status NOT IN ('overdue', 'cancelled', 'paid', 'approved')");
+            $update = $conn->prepare("UPDATE milestones SET status = 'overdue' WHERE id = ? AND status NOT IN ('overdue', 'cancelled', 'completed', 'submitted')");
             $update->bind_param('i', $milestone_id);
             $update->execute();
             $affected = $update->affected_rows;
@@ -227,4 +239,74 @@ function check_milestone_overdue($conn) {
     }
 }
 
+/**
+ * Check if ALL required milestones for an assignment/job are completed.
+ * Automatically updates assignment status to 'completed' ONLY when all milestones are done.
+ */
+function check_and_update_assignment_completion($conn, int $assignment_id): bool {
+    if (!$conn || $assignment_id <= 0) return false;
+
+    $stmt = $conn->prepare("SELECT id, job_id, status FROM assignments WHERE id = ?");
+    $stmt->bind_param('i', $assignment_id);
+    $stmt->execute();
+    $asgn = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$asgn) return false;
+
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN status IN ('approved', 'paid', 'payment_pending', 'completed') THEN 1 ELSE 0 END) AS done
+        FROM milestones WHERE job_id = ? AND status NOT IN ('cancelled', 'rejected')
+    ");
+    $stmt->bind_param('i', $asgn['job_id']);
+    $stmt->execute();
+    $ms_info = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    $total = (int) ($ms_info['total'] ?? 0);
+    $done = (int) ($ms_info['done'] ?? 0);
+
+    if ($total > 0 && $done === $total) {
+        $upd = $conn->prepare("UPDATE assignments SET status = 'completed' WHERE id = ?");
+        $upd->bind_param('i', $assignment_id);
+        $upd->execute();
+        $upd->close();
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Helper to check if a deadline has passed.
+ * - Handles DATE strings e.g. "2026-08-28" or "2026-08-28 00:00:00" as valid until 23:59:59 of that date.
+ * - Handles DATETIME strings e.g. "2026-08-28 17:00:00".
+ * - Uses application configured timezone (Asia/Yangon).
+ * - Returns true if the deadline has passed, false if still valid.
+ */
+function is_deadline_passed(?string $deadline_str): bool {
+    if (empty($deadline_str)) {
+        return false;
+    }
+
+    try {
+        $tz = new DateTimeZone('Asia/Yangon');
+        $now = new DateTime('now', $tz);
+        
+        $dl_str = trim($deadline_str);
+        
+        if (preg_match('/^\d{4}-\d{2}-\d{2}( 00:00:00)?$/', $dl_str)) {
+            $date_part = substr($dl_str, 0, 10);
+            $deadline = new DateTime($date_part . ' 23:59:59', $tz);
+        } else {
+            $deadline = new DateTime($dl_str, $tz);
+        }
+
+        return $deadline < $now;
+    } catch (Throwable $e) {
+        error_log("is_deadline_passed parse error for '{$deadline_str}': " . $e->getMessage());
+        return false;
+    }
+}
 

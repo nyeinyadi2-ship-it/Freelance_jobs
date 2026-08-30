@@ -31,15 +31,13 @@ if (!$proposal) {
 
 // Fetch existing submission if any
 $submission = null;
-if (in_array($proposal['status'], ['submitted', 'approved', 'rejected'])) {
-    $stmt = $conn->prepare("SELECT * FROM proposal_project_submissions WHERE proposal_project_id = ? AND freelancer_id = ?");
-    $stmt->bind_param('ii', $proposal_id, $freelancer_id);
-    $stmt->execute();
-    $submission = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-}
+$stmt = $conn->prepare("SELECT * FROM proposal_project_submissions WHERE proposal_project_id = ? AND freelancer_id = ? ORDER BY submitted_at DESC LIMIT 1");
+$stmt->bind_param('ii', $proposal_id, $freelancer_id);
+$stmt->execute();
+$submission = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
-$page_title = 'Trial Task: ' . $proposal['title'];
+$page_title = 'My Trial Task: ' . $proposal['title'];
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -132,6 +130,8 @@ require __DIR__ . '/../includes/header.php';
                             <input type="file" name="file" required oninvalid="this.setCustomValidity('Please upload your completed work before submitting the Trial Task.')" oninput="this.setCustomValidity('')" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700">
                         </div>
 
+
+
                         <div class="mb-4">
                             <label class="block text-sm font-medium mb-1">Comments</label>
                             <textarea name="comment" rows="3" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:border-gray-600" placeholder="Any comments for the company?"></textarea>
@@ -150,17 +150,17 @@ require __DIR__ . '/../includes/header.php';
                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <h3 class="text-xl font-bold mb-4">Your Submission</h3>
                     <p class="text-sm text-gray-500 mb-4">Submitted on <?= e($submission['submitted_at']) ?></p>
-                    
 
 
-                    <?php if ($submission['file']): ?>
+
+                    <?php if (!empty($submission['file'])): ?>
                         <div class="mb-4">
                             <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Uploaded File:</p>
                             <a href="<?= e(base_url($submission['file'])) ?>" target="_blank" class="inline-flex items-center gap-2 text-indigo-600 hover:underline bg-indigo-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg text-sm">Download File</a>
                         </div>
                     <?php endif; ?>
 
-                    <?php if ($submission['comment']): ?>
+                    <?php if (!empty($submission['comment'])): ?>
                         <div>
                             <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Comments:</p>
                             <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap"><?= e($submission['comment']) ?></div>

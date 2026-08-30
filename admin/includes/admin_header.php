@@ -364,9 +364,10 @@ if (isset($admin_user['user_id'])) {
                                     <?php if (!empty($n['sender_name'])): ?>
                                         <div class="mt-0.5 flex-shrink-0">
                                             <?php if (!empty($n['sender_image'])): ?>
-                                                <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-7 h-7 rounded-full object-cover">
+                                                <img src="<?= e(base_url('uploads/images/' . $n['sender_image'])) ?>" alt="Avatar" class="w-7 h-7 rounded-full object-cover" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                                                <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-[10px]" style="display:none"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                                             <?php else: ?>
-                                                <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-[10px]"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                                                <div class="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-[10px]"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                                             <?php endif; ?>
                                         </div>
                                     <?php else: ?>

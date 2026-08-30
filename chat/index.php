@@ -496,7 +496,7 @@ $unread_total = get_unread_count($conn, $user_id);
                                     style="max-height:120px; background:rgba(255,255,255,0.7); border:1px solid rgba(99,102,241,0.08); color:var(--color-text-primary); backdrop-filter:blur(8px);"
                                     oninput="autoResize(this)"></textarea>
                             </div>
-                            <button type="submit" class="send-btn" id="sendBtn">
+                            <button type="submit" class="send-btn" id="sendBtn" disabled>
                                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
                             </button>
                         </div>
@@ -531,6 +531,11 @@ $unread_total = get_unread_count($conn, $user_id);
         <button onclick="triggerEdit()" class="flex items-center gap-3 w-full p-4 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-left" style="color:var(--color-text-primary)">
             <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
             <span class="font-medium">Edit Message</span>
+        </button>
+
+        <button onclick="triggerDeleteMessage()" class="flex items-center gap-3 w-full p-4 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-left text-red-600">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            <span class="font-medium">Delete Message</span>
         </button>
 
         <button onclick="closeActionMenu()" class="mt-2 p-3 text-center text-sm font-medium w-full text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Cancel</button>
@@ -689,7 +694,7 @@ $unread_total = get_unread_count($conn, $user_id);
             if (hasAttachments) {
                 html += buildAttachmentHtml(msg);
             }
-            if (msg.message) {
+            if (msg.message && typeof msg.message === 'string' && msg.message.trim() !== '') {
                 html += '<div class="text-[15px] leading-relaxed ' + (hasAttachments ? 'mt-2' : '') + ' msg-text-content">' + escapeHtml(msg.message) + '</div>';
             }
         }
@@ -822,7 +827,12 @@ $unread_total = get_unread_count($conn, $user_id);
         var fileInput = document.getElementById('fileInput');
         var file = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
 
-        if (!message && !file) return;
+        if (!message && !file) {
+            // Truly empty — reset button state and abort silently
+            btn.innerHTML = '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>';
+            btn.disabled = true;
+            return;
+        }
 
         var sentMessage = message;
         var sentFile = file;
@@ -1055,6 +1065,59 @@ $unread_total = get_unread_count($conn, $user_id);
         autoResize(input);
         input.focus();
     };
+
+    window.triggerDeleteMessage = function() {
+        if (!actionMenuTargetId) return;
+        var msgId = actionMenuTargetId;
+        closeActionMenu();
+
+        if (!confirm('Are you sure you want to delete this message?')) return;
+
+        fetch('<?= e(base_url('api/chat.php')) ?>', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify({ action: 'delete_message', message_id: msgId, csrf_token: csrfToken })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                // Immediately update the deleted message bubble in-place for instant visual feedback.
+                // Use a safe querySelector with properly escaped Tailwind bracket class.
+                var bubble = document.querySelector('[data-id="' + msgId + '"]');
+                if (bubble) {
+                    var inner = bubble.querySelector('.msg-bubble');
+                    if (inner) {
+                        // Read the timestamp BEFORE overwriting innerHTML.
+                        // The Tailwind class text-[11px] must be escaped as text-\[11px\] in querySelector.
+                        var timeEl = inner.querySelector('span.text-\\[11px\\]');
+                        var timeText = timeEl ? timeEl.textContent : '';
+
+                        inner.innerHTML =
+                            '<div class="text-[15px] leading-relaxed msg-deleted-text flex items-center gap-2">' +
+                            '<svg class="w-4 h-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 11-12.728 0m12.728 0L5.636 18.364"/></svg>' +
+                            'This message was deleted</div>' +
+                            '<div class="flex items-center gap-1.5 mt-2 justify-end">' +
+                            '<span class="text-[11px] opacity-50">' + timeText + '</span>' +
+                            '</div>';
+
+                        // Strip click/context handlers so the deleted bubble can't be tapped again
+                        bubble.removeAttribute('onclick');
+                        bubble.removeAttribute('oncontextmenu');
+                        bubble.classList.remove('msg-bubble-sent-interactive');
+                    }
+                }
+                // Reload in the background to sync the exact server state for both sides
+                loadMessages(false);
+            } else {
+                alert(data.error || 'Failed to delete message. Please try again.');
+            }
+        })
+        .catch(function(err) {
+            console.error('Delete error:', err);
+            alert('Could not delete message. Please check your connection and try again.');
+        });
+    };
+
 
     window.cancelEdit = function() {
         editingMessageId = null;

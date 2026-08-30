@@ -35,17 +35,16 @@ $r = $conn->query("SELECT COUNT(*) AS cnt FROM users WHERE role != 'admin'");
 $stats['total_users'] = (int) $r->fetch_assoc()['cnt'];
 
 try {
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status = 'completed'");
+    $r = $conn->query("SELECT COUNT(*) AS cnt FROM jobs WHERE status IN ('completed', 'closed')");
     $stats['completed_jobs'] = (int) $r->fetch_assoc()['cnt'];
 } catch (mysqli_sql_exception $e) {}
 
-// Recent jobs (exclude direct hire)
+// Recent jobs
 $recent_jobs = [];
 try {
     $r = $conn->query("
         SELECT j.id, j.title, j.budget, j.status, j.created_at, c.company_name
         FROM jobs j JOIN companies c ON j.company_id = c.id
-        WHERE j.category != 'Direct Hire'
         ORDER BY j.created_at DESC LIMIT 5
     ");
     if ($r) { while ($row = $r->fetch_assoc()) $recent_jobs[] = $row; }

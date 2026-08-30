@@ -32,13 +32,11 @@ if (!$proposal) {
 }
 
 $submission = null;
-if (in_array($proposal['status'], ['submitted', 'reviewed', 'hired'])) {
-    $stmt = $conn->prepare("SELECT * FROM proposal_project_submissions WHERE proposal_project_id = ?");
-    $stmt->bind_param('i', $proposal_id);
-    $stmt->execute();
-    $submission = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-}
+$stmt = $conn->prepare("SELECT * FROM proposal_project_submissions WHERE proposal_project_id = ? AND freelancer_id = ? ORDER BY submitted_at DESC LIMIT 1");
+$stmt->bind_param('ii', $proposal_id, $proposal['freelancer_id']);
+$stmt->execute();
+$submission = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 $page_title = 'Review Trial Task: ' . $proposal['title'];
 require __DIR__ . '/../includes/header.php';
@@ -68,21 +66,16 @@ require __DIR__ . '/../includes/header.php';
                     <h3 class="text-xl font-bold mb-4">Freelancer Submission</h3>
                     <p class="text-sm text-gray-500 mb-4">Submitted on <?= e($submission['submitted_at']) ?></p>
                     
-                    <?php if ($submission['github_link']): ?>
-                        <div class="mb-4">
-                            <p class="text-sm font-medium text-gray-700 dark:text-gray-300">External Link:</p>
-                            <a href="<?= e($submission['github_link']) ?>" target="_blank" class="text-indigo-600 hover:underline"><?= e($submission['github_link']) ?></a>
-                        </div>
-                    <?php endif; ?>
 
-                    <?php if ($submission['file']): ?>
+
+                    <?php if (!empty($submission['file'])): ?>
                         <div class="mb-4">
                             <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Uploaded File:</p>
                             <a href="<?= e(base_url($submission['file'])) ?>" target="_blank" class="inline-flex items-center gap-2 text-indigo-600 hover:underline bg-indigo-50 dark:bg-gray-700 px-3 py-1.5 rounded-lg text-sm">Download File</a>
                         </div>
                     <?php endif; ?>
 
-                    <?php if ($submission['comment']): ?>
+                    <?php if (!empty($submission['comment'])): ?>
                         <div>
                             <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Comments:</p>
                             <div class="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap"><?= e($submission['comment']) ?></div>
@@ -90,7 +83,7 @@ require __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                 </div>
 
-                <?php if ($proposal['status'] === 'submitted'): ?>
+                <?php if (in_array($proposal['status'], ['submitted', 'reviewed'])): ?>
                     <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 border-t-4 border-t-indigo-500">
                         <h3 class="text-xl font-bold mb-4">Evaluation</h3>
                         <div class="flex gap-4">

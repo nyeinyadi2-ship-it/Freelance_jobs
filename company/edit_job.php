@@ -61,12 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $description = trim($_POST['description'] ?? '');
         $requirements = trim($_POST['requirements'] ?? '');
         $budget = (float) ($_POST['budget'] ?? 0);
-        $experience_level = $_POST['experience_level'] ?? 'intermediate';
-        $gender_requirement = $_POST['gender_requirement'] ?? 'any';
-        $deadline = trim($_POST['deadline'] ?? '') ?: null;
+        $experience_level = $_POST['experience_level'] ?? 'intermediate';        $deadline = trim($_POST['deadline'] ?? '') ?: null;
         $duration = trim($_POST['duration'] ?? '');
-        $freelancers_needed = 1;
-        $visibility = 'public';
         $selected_skills = $_POST['skills'] ?? [];
 
         if ($title === '' || $category === '') {
@@ -106,8 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$error) {
                 $conn->begin_transaction();
                 try {
-                    $stmt = $conn->prepare('UPDATE jobs SET title=?, category=?, experience_level=?, gender_requirement=?, description=?, requirements=?, budget=?, deadline=?, duration=?, freelancers_needed=?, visibility=?, attachment=? WHERE id=? AND company_id=?');
-                    $stmt->bind_param('ssssssdssissii', $title, $category, $experience_level, $gender_requirement, $description, $requirements, $budget, $deadline, $duration, $freelancers_needed, $visibility, $attachment_name, $job_id, $company_id);
+                    $stmt = $conn->prepare('UPDATE jobs SET title=?, category=?, experience_level=?, description=?, requirements=?, budget=?, deadline=?, duration=?, attachment=? WHERE id=? AND company_id=?');
+                    $stmt->bind_param('sssssdssii', $title, $category, $experience_level, $description, $requirements, $budget, $deadline, $duration, $attachment_name, $job_id, $company_id);
                     $stmt->execute();
                     $stmt->close();
 
@@ -194,7 +190,7 @@ require __DIR__ . '/../includes/header.php';
                             <option value="">Select a category</option>
                             <?php
                             $cats = [];
-                            $res = $conn->query("SELECT name FROM categories ORDER BY name ASC");
+                            $res = $conn->query("SELECT name FROM categories WHERE LOWER(name) NOT IN ('direct hire', 'direct offer') ORDER BY CASE WHEN LOWER(name) = 'other' THEN 1 ELSE 0 END, name ASC");
                             if ($res) {
                                 while ($row = $res->fetch_assoc()) {
                                     $cats[] = $row['name'];
@@ -240,15 +236,7 @@ require __DIR__ . '/../includes/header.php';
                             <option value="expert" <?= $cur_el === 'expert' ? 'selected' : '' ?>>Expert</option>
                         </select>
                     </div>
-                    <div>
-                        <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Gender Requirement</label>
-                        <select name="gender_requirement" class="w-full px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)">
-                            <?php $cur_gr = $_POST['gender_requirement'] ?? $job['gender_requirement'] ?? 'any'; ?>
-                            <option value="any" <?= $cur_gr === 'any' ? 'selected' : '' ?>>Any</option>
-                            <option value="male" <?= $cur_gr === 'male' ? 'selected' : '' ?>>Male</option>
-                            <option value="female" <?= $cur_gr === 'female' ? 'selected' : '' ?>>Female</option>
-                        </select>
-                    </div>
+
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <div>

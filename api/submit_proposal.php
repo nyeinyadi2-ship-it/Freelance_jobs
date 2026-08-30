@@ -13,8 +13,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !verify_csrf()) {
 
 $user = current_user();
 $freelancer_id = get_freelancer_id($conn, (int) $user['user_id']);
-$proposal_id = (int) ($_POST['proposal_id'] ?? 0);
-$comment = trim($_POST['comment'] ?? '');
+$proposal_id   = (int) ($_POST['proposal_id'] ?? 0);
+$comment       = trim($_POST['comment'] ?? '');
+$github_link   = null;
 
 if (!$freelancer_id || $proposal_id <= 0) {
     set_flash('error', 'Invalid input.');
@@ -56,10 +57,11 @@ if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
 }
 
 $stmt = $conn->prepare("
-    INSERT INTO proposal_project_submissions (proposal_project_id, freelancer_id, file, comment)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO proposal_project_submissions
+        (proposal_project_id, freelancer_id, file, github_link, comment)
+    VALUES (?, ?, ?, ?, ?)
 ");
-$stmt->bind_param('iiss', $proposal_id, $freelancer_id, $file_path, $comment);
+$stmt->bind_param('iisss', $proposal_id, $freelancer_id, $file_path, $github_link, $comment);
 
 if ($stmt->execute()) {
     // Update proposal status to 'submitted'

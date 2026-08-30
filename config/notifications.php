@@ -234,7 +234,7 @@ function notification_type_label(string $type): string
         'revision_requested' => 'Revision Requested',
         'payment' => 'Payment',
         'payment_released' => 'Payment Released',
-        'escrow_funded' => 'Escrow Funded',
+        'escrow_funded' => 'Milestone Started',
         'refund_completed' => 'Refund Completed',
         'withdrawal_approved' => 'Withdrawal Approved',
         'withdrawal_rejected' => 'Withdrawal Rejected',

@@ -35,12 +35,11 @@ $params = [];
 $types = '';
 
 if ($search !== '') {
-    $where[] = '(f.full_name LIKE ? OR f.title LIKE ? OR f.location LIKE ?)';
+    $where[] = '(f.full_name LIKE ? OR f.title LIKE ?)';
     $search_param = '%' . $search . '%';
     $params[] = $search_param;
     $params[] = $search_param;
-    $params[] = $search_param;
-    $types .= 'sss';
+    $types .= 'ss';
 }
 
 if ($skill_filter !== '') {
@@ -54,14 +53,13 @@ if ($skill_filter !== '') {
 $where_sql = implode(' AND ', $where);
 
 $order_by = match($sort) {
-    'rate_low' => 'f.hourly_rate ASC',
-    'rate_high' => 'f.hourly_rate DESC',
-    'experience' => 'f.experience_years DESC',
+    
+    
     'name' => 'f.full_name ASC',
     default => 'avg_rating DESC, review_count DESC'
 };
 
-$sql = "SELECT f.id, f.full_name, f.title, f.hourly_rate, f.experience_years, f.location, f.bio,
+$sql = "SELECT f.id, f.full_name, f.title, f.bio,
                u.id AS user_id, u.profile_image, u.created_at,
                GROUP_CONCAT(DISTINCT s.skill_name ORDER BY s.skill_name SEPARATOR ', ') AS skills,
                COALESCE(AVG(r.rating), 0) AS avg_rating,
@@ -696,9 +694,9 @@ html.dark .ff-post-cta {
                     <span style="font-size:0.8125rem;color:var(--ff-text-sec)">Sort by</span>
                     <select class="ff-sort-sel" onchange="ffSort(this.value)">
                         <option value="rating" <?= $sort === 'rating' ? 'selected' : '' ?>>Best Match</option>
-                        <option value="rate_low" <?= $sort === 'rate_low' ? 'selected' : '' ?>>Rate: Low to High</option>
-                        <option value="rate_high" <?= $sort === 'rate_high' ? 'selected' : '' ?>>Rate: High to Low</option>
-                        <option value="experience" <?= $sort === 'experience' ? 'selected' : '' ?>>Most Experienced</option>
+                        
+                        
+                        
                         <option value="name" <?= $sort === 'name' ? 'selected' : '' ?>>Name A-Z</option>
                     </select>
 
@@ -744,12 +742,7 @@ html.dark .ff-post-cta {
                                     <span class="ff-verified" title="Verified"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></span>
                                 </div>
                                 <div class="ff-fl-title"><?= e($fl['title'] ?? 'Freelancer') ?></div>
-                                <?php if ($fl['location']): ?>
-                                    <div class="ff-fl-location">
-                                        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                        <?= e($fl['location']) ?>
-                                    </div>
-                                <?php endif; ?>
+
                                 <div class="ff-fl-skills">
                                     <?php foreach ($skills as $sk): ?>
                                         <span class="ff-fl-skill"><?= e($sk) ?></span>

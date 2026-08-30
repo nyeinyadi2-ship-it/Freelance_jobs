@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
+require_once __DIR__ . '/../includes/job_helpers.php';
 
 require_role('company');
 
@@ -12,16 +13,30 @@ if (!$company_id) {
     redirect('auth/login.php');
 }
 
+// Automatically update jobs whose deadline has passed to 'expired'
+check_and_update_expired_jobs($conn);
+
 $active_jobs = [];
 $expired_jobs = [];
 $closed_jobs = [];
-$expired_ids_to_update = [];
+
 $stmt = $conn->prepare('
-    SELECT j.id, j.title, j.category, j.experience_level, j.budget, j.status, j.created_at,
-           j.deadline, j.freelancers_needed, j.visibility, j.attachment,
+    SELECT j.id, 
+           COALESCE(NULLIF(a.project_title, \'\'), j.title) AS title, 
+           j.category, 
+           j.experience_level, 
+           COALESCE(a.budget, j.budget) AS budget, 
+           j.status AS job_status, 
+           a.status AS assignment_status, 
+           a.assignment_type,
+           a.freelancer_response,
+           j.created_at,
+           COALESCE(a.deadline, j.deadline) AS deadline, 
+           j.attachment,
            COUNT(DISTINCT ja.id) AS app_count,
            GROUP_CONCAT(DISTINCT s.skill_name SEPARATOR \',\') AS skills_concat
     FROM jobs j
+    LEFT JOIN assignments a ON a.job_id = j.id
     LEFT JOIN job_applications ja ON ja.job_id = j.id
     LEFT JOIN job_skills js ON js.job_id = j.id
     LEFT JOIN skills s ON s.id = js.skill_id
@@ -32,36 +47,46 @@ $stmt = $conn->prepare('
 $stmt->bind_param('i', $company_id);
 $stmt->execute();
 $result = $stmt->get_result();
-$now = new DateTime();
+$now_ts = time();
+
 while ($row = $result->fetch_assoc()) {
     $row['skills'] = !empty($row['skills_concat']) ? explode(',', $row['skills_concat']) : [];
-    // Check if job should be treated as expired based on deadline date and time
-    $is_expired = false;
-    if ($row['status'] === 'expired') {
-        $is_expired = true;
-    } elseif ($row['status'] === 'open' && !empty($row['deadline'])) {
-        $deadline = new DateTime($row['deadline']);
-        if ($deadline <= $now) {
-            $is_expired = true;
-            $expired_ids_to_update[] = $row['id'];
-            $row['status'] = 'expired';
+    
+    $job_status = $row['job_status'];
+    $asgn_status = $row['assignment_status'];
+
+    // Determine effective status considering assignment status (for direct hire or assigned jobs)
+    if (in_array($asgn_status, ['completed', 'cancelled', 'rejected']) || in_array($job_status, ['closed', 'completed', 'cancelled'])) {
+        $effective_status = 'closed';
+    } elseif ($asgn_status === 'overdue' || $job_status === 'expired') {
+        $effective_status = 'expired';
+    } else {
+        $effective_status = $job_status;
+    }
+
+    $is_expired_by_deadline = false;
+    if (!empty($row['deadline'])) {
+        $deadline_ts = strtotime($row['deadline']);
+        if (date('H:i:s', $deadline_ts) === '00:00:00') {
+            $deadline_ts = strtotime(date('Y-m-d 23:59:59', $deadline_ts));
+        }
+        if ($deadline_ts < $now_ts) {
+            $is_expired_by_deadline = true;
         }
     }
-    if ($is_expired) {
-        $expired_jobs[] = $row;
-    } elseif ($row['status'] === 'closed') {
+
+    if ($effective_status === 'closed') {
+        $row['status'] = 'closed';
         $closed_jobs[] = $row;
+    } elseif ($effective_status === 'expired' || $is_expired_by_deadline) {
+        $row['status'] = 'expired';
+        $expired_jobs[] = $row;
     } else {
+        $row['status'] = $effective_status;
         $active_jobs[] = $row;
     }
 }
 $stmt->close();
-
-// Batch update expired jobs in a single query instead of per-row UPDATE
-if (!empty($expired_ids_to_update)) {
-    $ids_str = implode(',', array_map('intval', $expired_ids_to_update));
-    $conn->query("UPDATE jobs SET status = 'expired' WHERE id IN ($ids_str)");
-}
 
 $page_title = 'My Jobs';
 require __DIR__ . '/../includes/header.php';
@@ -158,6 +183,12 @@ function closeExtendModal() {
                                 <div class="flex items-center gap-3 mb-2 flex-wrap">
                                     <h3 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($job['title']) ?></h3>
                                     <?= status_badge($job['status']) ?>
+                                    <?php if (!empty($job['assignment_type']) && $job['assignment_type'] === 'direct_hire'): ?>
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50">
+                                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                            Direct Hire
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
 
                                 <div class="flex items-center gap-4 text-sm mb-3 flex-wrap" style="color:var(--color-text-muted)">

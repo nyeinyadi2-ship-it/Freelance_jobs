@@ -39,6 +39,26 @@ if ($action === 'generate_temp_password') {
         exit;
     }
 
+    // Check if user has a verified recovery request before allowing temp password generation
+    $stmt = $conn->prepare("SELECT message_meta FROM messages WHERE sender_id = ? AND JSON_EXTRACT(message_meta, '$.is_recovery_request') = true ORDER BY id DESC LIMIT 1");
+    $stmt->bind_param('i', $user_id);
+    $stmt->execute();
+    $meta_result = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$meta_result) {
+        http_response_code(400);
+        echo json_encode(['error' => 'No recovery request found for this user.']);
+        exit;
+    }
+
+    $request_meta = json_decode($meta_result['message_meta'], true) ?? [];
+    if (empty($request_meta['verification_completed'])) {
+        http_response_code(400);
+        echo json_encode(['error' => 'The user has not yet completed identity verification. They must answer their verification question first.']);
+        exit;
+    }
+
     function generateSecureTempPassword() {
         $uppers = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         $lowers = 'abcdefghijklmnopqrstuvwxyz';
@@ -62,13 +82,12 @@ if ($action === 'generate_temp_password') {
     $temp_password = generateSecureTempPassword();
     $temp_hash = password_hash($temp_password, PASSWORD_DEFAULT);
     
-    // Update users.password
     $stmt = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
     $stmt->bind_param('si', $temp_hash, $user_id);
     $stmt->execute();
     $stmt->close();
     
-    // Mark latest recovery request as Resolved and inject temp password flags
+    // Update recovery request with temp password flags
     $stmt = $conn->prepare("SELECT id, message_meta FROM messages WHERE sender_id = ? AND JSON_EXTRACT(message_meta, '$.is_recovery_request') = true ORDER BY id DESC LIMIT 1");
     $stmt->bind_param('i', $user_id);
     $stmt->execute();
@@ -77,7 +96,7 @@ if ($action === 'generate_temp_password') {
         $meta = json_decode($row['message_meta'], true) ?? [];
         $meta['status'] = 'Resolved';
         $meta['must_change_password'] = true;
-        $meta['expires_at'] = time() + (24 * 3600); // 24 hours
+        $meta['expires_at'] = time() + (24 * 3600);
         $new_meta = json_encode($meta);
         
         $update_stmt = $conn->prepare("UPDATE messages SET message_meta = ? WHERE id = ?");

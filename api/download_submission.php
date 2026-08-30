@@ -78,8 +78,11 @@ if (empty($file_name)) {
     die('No file attached');
 }
 
-$file_path = __DIR__ . '/../uploads/attachments/' . $file_name;
-if (!file_exists($file_path)) {
+$clean_name = basename($file_name);
+$upload_dir = realpath(__DIR__ . '/../uploads/attachments');
+$file_path = $upload_dir ? $upload_dir . DIRECTORY_SEPARATOR . $clean_name : __DIR__ . '/../uploads/attachments/' . $clean_name;
+
+if (!file_exists($file_path) || ($upload_dir && strpos(realpath($file_path), $upload_dir) !== 0)) {
     http_response_code(404);
     die('Attached file not found on server');
 }

@@ -17,7 +17,7 @@ if (!$company_id) {
 }
 
 $stmt = $conn->prepare("
-    SELECT c.*, u.email, u.profile_image, u.created_at
+    SELECT c.*, u.email, u.profile_image, u.created_at, u.security_question
     FROM companies c
     JOIN users u ON u.id = c.user_id
     WHERE c.id = ?
@@ -73,10 +73,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
             }
 
             if ($error === '') {
+                // Handle verification question
+                $sec_question = trim($_POST['security_question'] ?? '');
+                $sec_answer_raw = trim($_POST['security_answer'] ?? '');
+
                 $conn->begin_transaction();
                 try {
-                    $stmt = $conn->prepare("UPDATE users SET profile_image = ? WHERE id = ?");
-                    $stmt->bind_param('si', $new_profile_image, $user['user_id']);
+                    $new_profile_image_val = $new_profile_image;
+                    // Build users UPDATE dynamically
+                    if ($sec_question !== '' && $sec_answer_raw !== '') {
+                        $sec_answer_hash = password_hash(strtolower($sec_answer_raw), PASSWORD_DEFAULT);
+                        $stmt = $conn->prepare("UPDATE users SET profile_image = ?, security_question = ?, security_answer_hash = ? WHERE id = ?");
+                        $stmt->bind_param('sssi', $new_profile_image_val, $sec_question, $sec_answer_hash, $user['user_id']);
+                    } elseif ($sec_question !== '') {
+                        // Update question only, keep existing answer hash
+                        $stmt = $conn->prepare("UPDATE users SET profile_image = ?, security_question = ? WHERE id = ?");
+                        $stmt->bind_param('ssi', $new_profile_image_val, $sec_question, $user['user_id']);
+                    } else {
+                        $stmt = $conn->prepare("UPDATE users SET profile_image = ? WHERE id = ?");
+                        $stmt->bind_param('si', $new_profile_image_val, $user['user_id']);
+                    }
                     $stmt->execute();
                     $stmt->close();
 
@@ -103,6 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['edit'])) {
                     $profile['logo_image'] = $new_logo;
                     $profile['profile_image'] = $new_profile_image;
                     $profile['established_year'] = $ey;
+                    if ($sec_question !== '') $profile['security_question'] = $sec_question;
                 } catch (Exception $e) {
                     $conn->rollback();
                     $error = $e->getMessage();
@@ -215,6 +232,41 @@ require __DIR__ . '/../includes/header.php';
                             <input type="file" name="logo_image" accept="image/jpeg,image/png,image/gif,image/webp" class="text-sm" onchange="previewImage(this, 'logoPreview')">
                         </div>
                         <p class="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WebP. Max 2MB.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="border-top: 3px solid #6366f1;">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:rgba(99,102,241,0.1)">
+                        <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold">Verification Question</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">Used to verify your identity during password recovery.</p>
+                    </div>
+                </div>
+                <div class="p-4 rounded-xl mb-4 text-sm" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);color:var(--color-text-secondary)">
+                    💡 Create a question that only you can answer. Avoid information that can be easily guessed or found online.
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Verification Question</label>
+                        <input type="text" name="security_question" class="form-input"
+                               placeholder="e.g. What was the name of my first school?"
+                               value="<?= e($profile['security_question'] ?? '') ?>">
+                        <p class="text-xs text-gray-400 mt-1">Write your own unique question.</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Verification Answer
+                            <?php if (!empty($profile['security_question'])): ?>
+                                <span class="ml-2 text-xs font-normal text-emerald-600">✔ Already set — leave blank to keep unchanged</span>
+                            <?php endif; ?>
+                        </label>
+                        <input type="password" name="security_answer" class="form-input" autocomplete="new-password"
+                               placeholder="<?= !empty($profile['security_question']) ? 'Leave blank to keep current answer' : 'Your secret answer' ?>">
+                        <p class="text-xs text-gray-400 mt-1">Answers are case-insensitive and stored securely.</p>
                     </div>
                 </div>
             </div>

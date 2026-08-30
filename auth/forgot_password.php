@@ -4,7 +4,6 @@ require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/chat.php';
 require_once __DIR__ . '/../config/notifications.php';
 
-// Set CSRF cookie early
 csrf_cookie();
 
 if (!empty($_SESSION['user_id'])) {
@@ -16,58 +15,89 @@ if (!empty($_SESSION['user_id'])) {
 
 $error = '';
 $success = false;
+$step = (int) ($_POST['step'] ?? 1);
+$recovery_email = $_SESSION['recovery_email'] ?? '';
+$verification_question = $_SESSION['recovery_question'] ?? '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
         $error = 'Invalid request. Please try again.';
+        $step = 1;
     } else {
-        $username = trim($_POST['username'] ?? '');
-        $email = trim($_POST['email'] ?? '');
-        $message_text = trim($_POST['message'] ?? '');
-
-        if ($username === '' || $email === '' || $message_text === '') {
-            $error = 'All fields are required.';
-        } else {
-            // Find user and email
-            $stmt = $conn->prepare("
-                SELECT id, username, email
-                FROM users
-                WHERE username = ?
-            ");
-            $stmt->bind_param('s', $username);
-            $stmt->execute();
-            $user = $stmt->get_result()->fetch_assoc();
-            $stmt->close();
-
-            if ($user && $user['email'] !== null && $user['email'] !== '' && strtolower($user['email']) === strtolower($email)) {
-                // Info is valid. Set up recovery session.
-                $_SESSION['recovery_user_id'] = (int) $user['id'];
-                $_SESSION['recovery_token'] = bin2hex(random_bytes(16));
-                
-                // Send the initial recovery message to Admin
-                $admin_id = get_admin_user_id($conn);
-                if ($admin_id) {
-                    $user_id = (int) $user['id'];
-                    $meta = json_encode(["is_recovery_request" => true, "status" => "Pending"]);
-                    
-                    $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message, message_type, message_meta) VALUES (?, ?, ?, 'text', ?)");
-                    $stmt->bind_param('iiss', $user_id, $admin_id, $message_text, $meta);
-                    $stmt->execute();
-                    $msg_id = $stmt->insert_id;
-                    $stmt->close();
-                    
-                    // Update conversation
-                    $u1 = min($user_id, $admin_id);
-                    $u2 = max($user_id, $admin_id);
-                    $stmt = $conn->prepare('INSERT INTO conversations (user_one_id, user_two_id, last_message_id, last_activity) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE last_message_id = VALUES(last_message_id), last_activity = NOW()');
-                    $stmt->bind_param('iii', $u1, $u2, $msg_id);
-                    $stmt->execute();
-                    $stmt->close();
-                }
-
-                redirect('auth/recovery_chat.php');
+        if ($step === 1) {
+            $username = trim($_POST['username'] ?? '');
+            $email = trim($_POST['email'] ?? '');
+            if ($username === '' || $email === '') {
+                $error = 'Please enter both your username and registered email address.';
             } else {
-                $error = 'Please check your username and registered email address and try again.';
+                $stmt = $conn->prepare("SELECT id, username, email, security_question FROM users WHERE username = ? AND email = ?");
+                $stmt->bind_param('ss', $username, $email);
+                $stmt->execute();
+                $user = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+
+                if ($user && !empty($user['security_question'])) {
+                    $_SESSION['recovery_user_id'] = (int) $user['id'];
+                    $_SESSION['recovery_email'] = $user['email'];
+                    $_SESSION['recovery_question'] = $user['security_question'];
+                    $_SESSION['recovery_token'] = bin2hex(random_bytes(16));
+                    $recovery_email = $user['email'];
+                    $verification_question = $user['security_question'];
+                    $step = 2;
+                } else {
+                    $error = 'No account found with that username and email combination. Please check and try again.';
+                }
+            }
+        } elseif ($step === 2) {
+            $answer = trim($_POST['verification_answer'] ?? '');
+            if ($answer === '') {
+                $error = 'Please enter your verification answer.';
+                $step = 2;
+            } elseif (empty($_SESSION['recovery_user_id'])) {
+                $error = 'Session expired. Please start over.';
+                $step = 1;
+            } else {
+                $user_id = (int) $_SESSION['recovery_user_id'];
+
+                $stmt = $conn->prepare("SELECT security_answer_hash FROM users WHERE id = ?");
+                $stmt->bind_param('i', $user_id);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+
+                $stored_hash = $row['security_answer_hash'] ?? '';
+                if ($stored_hash && password_verify(strtolower(trim($answer)), $stored_hash)) {
+                    $message_text = trim($_POST['message'] ?? '');
+
+                    $admin_id = get_admin_user_id($conn);
+                    if ($admin_id) {
+                        $meta = json_encode([
+                            "is_recovery_request" => true,
+                            "status" => "Verified",
+                            "verification_completed" => true
+                        ]);
+
+                        $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, message, message_type, message_meta) VALUES (?, ?, ?, 'text', ?)");
+                        $msg_display = $message_text !== '' ? $message_text : 'Password recovery request - identity verified via security question.';
+                        $stmt->bind_param('iiss', $user_id, $admin_id, $msg_display, $meta);
+                        $stmt->execute();
+                        $msg_id = $stmt->insert_id;
+                        $stmt->close();
+
+                        $u1 = min($user_id, $admin_id);
+                        $u2 = max($user_id, $admin_id);
+                        $stmt = $conn->prepare('INSERT INTO conversations (user_one_id, user_two_id, last_message_id, last_activity) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE last_message_id = VALUES(last_message_id), last_activity = NOW()');
+                        $stmt->bind_param('iii', $u1, $u2, $msg_id);
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+
+                    unset($_SESSION['recovery_email'], $_SESSION['recovery_question']);
+                    redirect('auth/recovery_chat.php');
+                } else {
+                    $error = 'Incorrect verification answer. Please try again.';
+                    $step = 2;
+                }
             }
         }
     }
@@ -193,7 +223,13 @@ require __DIR__ . '/../includes/header.php';
         </span>
         <span class="gradient-text"><?= e('Forgot Your Password?') ?></span>
       </a>
-      <p class="mt-3 text-sm" style="color:var(--color-text-muted)"><?= e('Enter your username and registered email address to contact Admin for password recovery.') ?></p>
+      <p class="mt-3 text-sm" style="color:var(--color-text-muted)">
+        <?php if ($step === 1): ?>
+          <?= e('Enter your username and registered email address to begin password recovery.') ?>
+        <?php else: ?>
+          <?= e('Answer your verification question to continue.') ?>
+        <?php endif; ?>
+      </p>
     </div>
 
     <div class="rounded-2xl p-6 sm:p-8" style="background:var(--color-card);border:1px solid var(--color-border);box-shadow:0 4px 24px rgba(0,0,0,0.06);">
@@ -207,40 +243,70 @@ require __DIR__ . '/../includes/header.php';
 
       <form method="POST" class="space-y-5" novalidate>
         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+        <input type="hidden" name="step" value="<?= $step ?>">
 
-        <!-- Username -->
-        <div class="auth-input-group">
-          <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Username') ?></label>
-          <div class="relative">
-            <svg class="auth-input-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-            <input type="text" name="username" required class="auth-input" placeholder="Your username" value="<?= e($_POST['username'] ?? '') ?>">
+        <?php if ($step === 1): ?>
+          <!-- Step 1: Enter Username and Email -->
+          <div class="auth-input-group">
+            <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Username') ?></label>
+            <div class="relative">
+              <svg class="auth-input-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+              <input type="text" name="username" required class="auth-input" placeholder="Your username" value="<?= e($_POST['username'] ?? '') ?>" autocomplete="username">
+            </div>
           </div>
-        </div>
 
-        <!-- Email -->
-        <div class="auth-input-group">
-          <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Registered Email') ?></label>
-          <div class="relative">
-            <svg class="auth-input-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            <input type="email" name="email" required class="auth-input" placeholder="you@example.com" value="<?= e($_POST['email'] ?? '') ?>">
+          <div class="auth-input-group">
+            <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Registered Email') ?></label>
+            <div class="relative">
+              <svg class="auth-input-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              <input type="email" name="email" required class="auth-input" placeholder="you@example.com" value="<?= e($_POST['email'] ?? '') ?>">
+            </div>
           </div>
-        </div>
 
-        <!-- Message -->
-        <div class="auth-input-group">
-          <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Message') ?></label>
-          <div class="relative">
-            <svg class="auth-input-icon" style="top:1.5rem" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-            <textarea name="message" required class="auth-input" rows="3" placeholder="I forgot my password. Please help me reset it." style="resize:none; padding-top: 0.75rem; min-height: 80px;"><?= e($_POST['message'] ?? '') ?></textarea>
+          <button type="submit" class="auth-submit">
+            <span class="relative z-10 flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <?= e('Continue') ?>
+            </span>
+          </button>
+
+        <?php elseif ($step === 2): ?>
+          <!-- Step 2: Answer Verification Question -->
+          <div class="p-4 rounded-xl text-sm" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);color:var(--color-text-secondary)">
+            <div class="flex items-start gap-2.5">
+              <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <div>
+                <strong>Account Verification</strong><br>
+                Please answer your verification question to continue.
+              </div>
+            </div>
           </div>
-        </div>
 
-        <button type="submit" class="auth-submit">
-          <span class="relative z-10 flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-            <?= e('Contact Admin') ?>
-          </span>
-        </button>
+          <div class="auth-input-group">
+            <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-primary)">
+              <?= e($verification_question) ?>
+            </label>
+            <div class="relative">
+              <svg class="auth-input-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+              <input type="text" name="verification_answer" required class="auth-input" placeholder="Your answer" autocomplete="off">
+            </div>
+          </div>
+
+          <div class="auth-input-group">
+            <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= e('Additional Message (Optional)') ?></label>
+            <div class="relative">
+              <svg class="auth-input-icon" style="top:1.5rem" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+              <textarea name="message" class="auth-input" rows="2" placeholder="Any additional info for Admin..." style="resize:none; padding-top: 0.75rem; min-height: 60px;"></textarea>
+            </div>
+          </div>
+
+          <button type="submit" class="auth-submit">
+            <span class="relative z-10 flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+              <?= e('Verify & Contact Admin') ?>
+            </span>
+          </button>
+        <?php endif; ?>
       </form>
     </div>
 

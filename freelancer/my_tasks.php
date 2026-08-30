@@ -1,7 +1,8 @@
 <?php
-$page_title = 'My Tasks';
+$page_title = 'My Projects';
 require __DIR__ . '/../includes/freelancer_init.php';
 require_once __DIR__ . '/../config/upload.php';
+require_once __DIR__ . '/../includes/job_helpers.php';
 
 // Handle milestone actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -19,65 +20,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $milestone_id = (int) ($_POST['milestone_id'] ?? 0);
 
     if ($ms_action === 'submit' && $milestone_id > 0) {
-        // In Progress / Revision Requested → Submitted
+        // In Progress → Submitted (Rejection blocks resubmissions)
         $st = $conn->prepare("
-            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, j.deadline as job_deadline
+            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, j.deadline as job_deadline, a.id as assignment_id, a.freelancer_id as asgn_fl_id, m.freelancer_id as ms_fl_id
             FROM milestones m
-            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
+            LEFT JOIN assignments a ON a.job_id = m.job_id AND (a.freelancer_id = m.freelancer_id OR a.freelancer_id = ?)
             JOIN jobs j ON j.id = m.job_id
-            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'revision_requested', 'overdue')
+            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'overdue', 'revision_requested')
+              AND (m.freelancer_id = ? OR a.freelancer_id = ? OR m.freelancer_id IN (SELECT id FROM freelancers WHERE user_id = ?))
         ");
-        $st->bind_param('ii', $fl_freelancer_id, $milestone_id);
+        $st->bind_param('iiiii', $fl_freelancer_id, $milestone_id, $fl_freelancer_id, $fl_freelancer_id, $fl_uid);
         $st->execute();
         $ms = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($ms) {
-            $now_dt = new DateTime();
-            $ms_dl = !empty($ms['ms_deadline']) ? new DateTime($ms['ms_deadline']) : null;
-            if ($ms_dl && $ms_dl <= $now_dt) {
+            if (is_deadline_passed($ms['ms_deadline']) || is_deadline_passed($ms['job_deadline'])) {
                 set_flash('error', 'Submission blocked: Deadline has passed.');
                 redirect('freelancer/my_tasks.php');
             }
 
-            foreach (['submission_file', 'submission_note'] as $col) {
-                $chk = $conn->query("SHOW COLUMNS FROM milestones LIKE '$col'");
-                if (!$chk || $chk->num_rows === 0) {
-                    $type = $col === 'submission_note' ? 'TEXT DEFAULT NULL' : 'VARCHAR(255) DEFAULT NULL AFTER submission_link';
-                    $conn->query("ALTER TABLE milestones ADD COLUMN $col $type");
-                }
-            }
-
-            $submission_link = '';
             $submission_note = trim($_POST['submission_note'] ?? '');
             $submission_file = null;
 
+            $upload_err = null;
             if (!empty($_FILES['submission_file']['name'])) {
-                $submission_file = upload_attachment($_FILES['submission_file']);
+                $submission_file = upload_attachment($_FILES['submission_file'], 500 * 1024 * 1024, $upload_err);
                 if ($submission_file === null) {
-                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.');
-                    redirect('freelancer/milestone.php?id=' . $milestone_id);
+                    $msg = $upload_err ? 'File upload error: ' . $upload_err : 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.';
+                    set_flash('error', $msg);
+                    redirect('freelancer/my_tasks.php');
                 }
             }
 
-            if ($submission_file === null) {
-                set_flash('error', 'Please upload your completed work before submitting.');
-                redirect('freelancer/milestone.php?id=' . $milestone_id);
+            if (empty($submission_file)) {
+                set_flash('error', 'Please upload a file to submit your work.');
+                redirect('freelancer/my_tasks.php');
             }
 
             $conn->begin_transaction();
             try {
                 $now = date('Y-m-d H:i:s');
                 $file_for_db = $submission_file ?? '';
+                $link_for_db = '';
+
                 $st = $conn->prepare("UPDATE milestones SET submission_link=?, submission_file=?, submission_note=?, status='submitted', submitted_at=? WHERE id=?");
-                $st->bind_param('ssssi', $submission_link, $file_for_db, $submission_note, $now, $milestone_id);
+                $st->bind_param('ssssi', $link_for_db, $file_for_db, $submission_note, $now, $milestone_id);
                 $st->execute();
                 $st->close();
 
-                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND status IN ('working', 'assigned')");
-                $st->bind_param('i', $ms['job_id']);
-                $st->execute();
-                $st->close();
+                $assignment_id = (int) ($ms['assignment_id'] ?? 0);
+                if ($assignment_id > 0) {
+                    $v_stmt = $conn->prepare("SELECT COALESCE(MAX(version), 0) + 1 FROM submissions WHERE assignment_id = ?");
+                    $v_stmt->bind_param('i', $assignment_id);
+                    $v_stmt->execute();
+                    $version = (int) ($v_stmt->get_result()->fetch_row()[0] ?? 1);
+                    $v_stmt->close();
+
+                    $sub_file = !empty($submission_file) ? $submission_file : null;
+                    $sub_link = null;
+                    $sub_notes = !empty($submission_note) ? $submission_note : null;
+                    $sub_fl_id = (int) ($ms['asgn_fl_id'] ?: ($ms['ms_fl_id'] ?: $fl_freelancer_id));
+
+                    $sub_st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, file_path, github_link, notes, version, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
+                    $sub_st->bind_param('iisssi', $assignment_id, $sub_fl_id, $sub_file, $sub_link, $sub_notes, $version);
+                    $sub_st->execute();
+                    $sub_st->close();
+
+                    $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE id=? AND status IN ('working', 'assigned', 'overdue', 'revision_requested') AND status != 'completed'");
+                    $st->bind_param('i', $assignment_id);
+                    $st->execute();
+                    $st->close();
+                }
 
                 $conn->commit();
 
@@ -89,19 +103,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id'], $user_id);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id'], $fl_uid);
                     }
-                } catch (Exception $ne) {
+                } catch (Throwable $ne) {
                     error_log("Notification failed after submission: " . $ne->getMessage());
                 }
 
                 set_flash('success', 'Work submitted for review!');
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $conn->rollback();
                 if ($submission_file !== null) {
                     delete_attachment($submission_file);
                 }
-                set_flash('error', 'Failed to submit work. Please try again.');
+                error_log('Submission error: ' . $e->getMessage());
+                set_flash('error', 'Failed to submit your work. Please check your submission details and try again.');
             }
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
@@ -115,35 +130,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('freelancer/my_tasks.php');
         }
 
-        $st = $conn->prepare("SELECT m.id, m.freelancer_id, m.deadline, m.status, j.title AS job_title, j.id AS job_id FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.freelancer_id = ? AND m.status IN ('overdue', 'in_progress', 'funded')");
+        $st = $conn->prepare("SELECT m.id, m.freelancer_id, m.deadline, m.status, m.extension_requested, j.title AS job_title, j.id AS job_id FROM milestones m JOIN jobs j ON m.job_id = j.id WHERE m.id = ? AND m.freelancer_id = ? AND m.status IN ('overdue', 'in_progress', 'funded')");
         $st->bind_param('ii', $milestone_id, $fl_freelancer_id);
         $st->execute();
         $ms = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($ms) {
-            $chk = $conn->prepare("SELECT id FROM milestone_extensions WHERE milestone_id = ? AND status = 'pending'");
-            $chk->bind_param('i', $milestone_id);
-            $chk->execute();
-            if ($chk->get_result()->num_rows > 0) {
-                $chk->close();
-                set_flash('error', 'You already have a pending extension request for this milestone.');
+            // One-time extension rule
+            if ((int)$ms['extension_requested'] === 1) {
+                set_flash('error', 'You have already submitted an extension request for this milestone. Only one request is allowed.');
                 redirect('freelancer/my_tasks.php');
             }
-            $chk->close();
 
             $current_deadline = $ms['deadline'] ?? date('Y-m-d H:i:s');
-            $requested_dt = date('Y-m-d H:i:s', strtotime($requested_deadline));
+            $requested_dt     = date('Y-m-d H:i:s', strtotime($requested_deadline));
+            $now_ts           = date('Y-m-d H:i:s');
 
-            $ins = $conn->prepare("INSERT INTO milestone_extensions (milestone_id, freelancer_id, current_deadline, requested_deadline, reason) VALUES (?, ?, ?, ?, ?)");
-            $ins->bind_param('iiisss', $milestone_id, $fl_freelancer_id, $current_deadline, $requested_dt, $reason);
-            $ins->execute();
-            $ins->close();
+            // Atomic update — prevents double-click
+            $upd = $conn->prepare("
+                UPDATE milestones
+                SET extension_requested    = 1,
+                    extension_deadline     = ?,
+                    extension_reason       = ?,
+                    extension_status       = 'pending',
+                    extension_requested_at = ?
+                WHERE id = ? AND extension_requested = 0
+            ");
+            $upd->bind_param('sssi', $requested_dt, $reason, $now_ts, $milestone_id);
+            $upd->execute();
+            $affected = $upd->affected_rows;
+            $upd->close();
 
-            $up = $conn->prepare("UPDATE milestones SET extension_reason = ? WHERE id = ?");
-            $up->bind_param('si', $reason, $milestone_id);
-            $up->execute();
-            $up->close();
+            if ($affected === 0) {
+                set_flash('error', 'Extension request already submitted for this milestone.');
+                redirect('freelancer/my_tasks.php');
+            }
+
+            // Record history
+            record_milestone_history(
+                $conn,
+                $milestone_id,
+                $fl_freelancer_id,
+                null,
+                $fl_user['id'] ?? null,
+                $ms['status'],
+                $ms['status'],
+                'EXTENSION_REQUESTED',
+                'Requested extension to ' . date('Y-m-d', strtotime($requested_dt)) . '. Reason: ' . $reason,
+                $current_deadline,
+                $requested_dt
+            );
 
             try {
                 $ns = $conn->prepare("SELECT c.user_id FROM milestones m JOIN jobs j ON m.job_id = j.id JOIN companies c ON j.company_id = c.id WHERE m.id = ?");
@@ -152,10 +189,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ni = $ns->get_result()->fetch_assoc();
                 $ns->close();
                 if ($ni) {
-                    create_notification($conn, (int) $ni['user_id'], 'admin_announcement', "Requested a deadline extension for a milestone in \"{$ms['job_title']}\".", 'company/view_applications.php?id=' . $ms['job_id'], $user_id);
+                    create_notification($conn, (int)$ni['user_id'], 'admin_announcement', "Requested a deadline extension for a milestone in \"{$ms['job_title']}\".", 'company/view_applications.php?id=' . $ms['job_id'], $fl_uid);
                 }
-            } catch (Exception $ne) {
-                error_log("Notification failed: " . $ne->getMessage());
+            } catch (Throwable $ne) {
+                error_log('Notification failed: ' . $ne->getMessage());
             }
 
             set_flash('success', 'Extension request submitted. Waiting for company approval.');
@@ -163,24 +200,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_flash('error', 'Milestone not found or not eligible for extension.');
         }
     } elseif ($ms_action === 'quick_submit' && $milestone_id > 0) {
-        // Quick submit: change status to submitted without requiring link/file
         $st = $conn->prepare("
-            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, j.deadline as job_deadline
+            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, j.deadline as job_deadline, a.id as assignment_id, a.freelancer_id as asgn_fl_id, m.freelancer_id as ms_fl_id
             FROM milestones m
-            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
+            LEFT JOIN assignments a ON a.job_id = m.job_id AND (a.freelancer_id = m.freelancer_id OR a.freelancer_id = ?)
             JOIN jobs j ON j.id = m.job_id
             WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'revision_requested', 'overdue')
-              AND m.freelancer_id = ?
+              AND (m.freelancer_id = ? OR a.freelancer_id = ? OR m.freelancer_id IN (SELECT id FROM freelancers WHERE user_id = ?))
         ");
-        $st->bind_param('iii', $fl_freelancer_id, $milestone_id, $fl_freelancer_id);
+        $st->bind_param('iiiii', $fl_freelancer_id, $milestone_id, $fl_freelancer_id, $fl_freelancer_id, $fl_uid);
         $st->execute();
         $ms = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($ms) {
-            $now_dt = new DateTime();
-            $ms_dl = !empty($ms['ms_deadline']) ? new DateTime($ms['ms_deadline']) : null;
-            if ($ms_dl && $ms_dl <= $now_dt) {
+            if (is_deadline_passed($ms['ms_deadline']) || is_deadline_passed($ms['job_deadline'])) {
                 set_flash('error', 'Submission blocked: Deadline has passed.');
                 redirect('freelancer/my_tasks.php');
             }
@@ -193,10 +227,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st->execute();
                 $st->close();
 
-                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
-                $st->bind_param('ii', $ms['job_id'], $fl_freelancer_id);
-                $st->execute();
-                $st->close();
+                $assignment_id = (int) ($ms['assignment_id'] ?? 0);
+                if ($assignment_id > 0) {
+                    $v_stmt = $conn->prepare("SELECT COALESCE(MAX(version), 0) + 1 FROM submissions WHERE assignment_id = ?");
+                    $v_stmt->bind_param('i', $assignment_id);
+                    $v_stmt->execute();
+                    $version = (int) ($v_stmt->get_result()->fetch_row()[0] ?? 1);
+                    $v_stmt->close();
+
+                    $quick_note = "Quick submission for milestone #" . $ms['id'];
+                    $sub_fl_id = (int) ($ms['asgn_fl_id'] ?: ($ms['ms_fl_id'] ?: $fl_freelancer_id));
+
+                    $sub_st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, notes, version, status) VALUES (?, ?, ?, ?, 'pending')");
+                    $sub_st->bind_param('iisi', $assignment_id, $sub_fl_id, $quick_note, $version);
+                    $sub_st->execute();
+                    $sub_st->close();
+
+                    $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE id=? AND status IN ('working', 'assigned', 'overdue', 'revision_requested')");
+                    $st->bind_param('i', $assignment_id);
+                    $st->execute();
+                    $st->close();
+                }
 
                 $conn->commit();
 
@@ -207,30 +258,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id'], $user_id);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms['job_id'], $fl_uid);
                     }
-                } catch (Exception $ne) {
+                } catch (Throwable $ne) {
                     error_log("Notification failed after submission: " . $ne->getMessage());
                 }
 
                 set_flash('success', 'Milestone submitted for review!');
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $conn->rollback();
-                set_flash('error', 'Failed to submit milestone. Please try again.');
+                error_log('Submission error: ' . $e->getMessage());
+                set_flash('error', 'Failed to submit your work. Please check your submission details and try again.');
             }
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
         }
     } elseif ($ms_action === 'submit_fixed_task') {
         $assignment_id = (int) ($_POST['assignment_id'] ?? 0);
-        $st = $conn->prepare("SELECT id, job_id, status, deadline FROM assignments WHERE id = ? AND freelancer_id = ? AND status IN ('assigned', 'working', 'overdue')");
-        $st->bind_param('ii', $assignment_id, $fl_freelancer_id);
+
+        // Check if assignment or any submission is rejected
+        $chk_rej = $conn->prepare("SELECT status FROM assignments WHERE id = ?");
+        $chk_rej->bind_param('i', $assignment_id);
+        $chk_rej->execute();
+        $asgn_row = $chk_rej->get_result()->fetch_assoc();
+        $chk_rej->close();
+
+        if ($asgn_row && $asgn_row['status'] === 'rejected') {
+            set_flash('error', 'Submissions are permanently disabled because this project has been rejected.');
+            redirect('freelancer/my_tasks.php');
+        }
+
+        $st = $conn->prepare("SELECT id, job_id, status, deadline, freelancer_id FROM assignments WHERE id = ? AND (freelancer_id = ? OR freelancer_id IN (SELECT id FROM freelancers WHERE user_id = ?)) AND status IN ('assigned', 'working', 'overdue', 'revision_requested') AND status != 'completed'");
+        $st->bind_param('iii', $assignment_id, $fl_freelancer_id, $fl_uid);
         $st->execute();
         $assignment = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($assignment) {
-            if (!empty($assignment['deadline']) && new DateTime($assignment['deadline']) <= new DateTime()) {
+            if (is_deadline_passed($assignment['deadline'])) {
                 set_flash('error', 'Submission blocked: Deadline has passed.');
                 redirect('freelancer/my_tasks.php');
             }
@@ -238,31 +303,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $submission_note = trim($_POST['submission_note'] ?? '');
             $submission_file = null;
 
+            $upload_err = null;
             if (!empty($_FILES['submission_file']['name'])) {
-                $submission_file = upload_attachment($_FILES['submission_file']);
+                $submission_file = upload_attachment($_FILES['submission_file'], 500 * 1024 * 1024, $upload_err);
                 if ($submission_file === null) {
-                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.');
+                    $msg = $upload_err ? 'File upload error: ' . $upload_err : 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.';
+                    set_flash('error', $msg);
                     redirect('freelancer/my_tasks.php');
                 }
             }
 
-            if ($submission_note === '' && $submission_file === null) {
-                set_flash('error', 'Please provide a submission note or upload a file.');
+            if (empty($submission_file)) {
+                set_flash('error', 'Please upload a file to submit your work.');
                 redirect('freelancer/my_tasks.php');
             }
 
             $conn->begin_transaction();
             try {
+                // Calculate next version
+                $v_stmt = $conn->prepare("SELECT COALESCE(MAX(version), 0) + 1 FROM submissions WHERE assignment_id = ?");
+                $v_stmt->bind_param('i', $assignment_id);
+                $v_stmt->execute();
+                $version = (int) ($v_stmt->get_result()->fetch_row()[0] ?? 1);
+                $v_stmt->close();
+
                 // Update assignment status
-                $st = $conn->prepare("UPDATE assignments SET status = 'submitted' WHERE id = ?");
+                $st = $conn->prepare("UPDATE assignments SET status = 'submitted' WHERE id = ? AND status != 'completed'");
                 $st->bind_param('i', $assignment_id);
                 $st->execute();
                 $st->close();
 
-                // Insert into submissions
-                $file_for_db = $submission_file ?? null;
-                $st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, file_path, notes, status) VALUES (?, ?, ?, ?, 'pending')");
-                $st->bind_param('iiss', $assignment_id, $fl_freelancer_id, $file_for_db, $submission_note);
+                // Insert into unified submissions
+                $file_for_db = !empty($submission_file) ? $submission_file : null;
+                $link_for_db = null;
+                $notes_for_db = !empty($submission_note) ? $submission_note : null;
+                $sub_fl_id = (int) ($assignment['freelancer_id'] ?: $fl_freelancer_id);
+
+                $st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, file_path, github_link, notes, version, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
+                $st->bind_param('iisssi', $assignment_id, $sub_fl_id, $file_for_db, $link_for_db, $notes_for_db, $version);
                 $st->execute();
                 $st->close();
 
@@ -276,22 +354,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for " . $ni['title'], 'company/view_applications.php?id=' . $assignment['job_id'], $user_id);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for " . $ni['title'], 'company/view_applications.php?id=' . $assignment['job_id'], $fl_uid);
                     }
-                } catch (Exception $ne) {
+                } catch (Throwable $ne) {
                     error_log("Notification failed: " . $ne->getMessage());
                 }
 
                 set_flash('success', 'Work submitted for review!');
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $conn->rollback();
                 if ($submission_file !== null) {
                     delete_attachment($submission_file);
                 }
-                set_flash('error', 'Failed to submit work.');
+                error_log('Submission error: ' . $e->getMessage());
+                set_flash('error', 'Failed to submit your work. Please check your submission details and try again.');
             }
         } else {
-            set_flash('error', 'Task not found or already submitted.');
+            set_flash('error', 'Task not found or not ready for submission.');
         }
     }
     redirect('freelancer/my_tasks.php');
@@ -300,8 +379,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Fetch assigned jobs with milestones
 $tasks = [];
 $st = $conn->prepare("
-    SELECT a.id AS assignment_id, a.status AS assignment_status, a.assigned_at, a.deadline,
-           a.budget, a.payment_type,
+    SELECT a.id AS assignment_id, a.status AS assignment_status, a.assignment_type, a.assigned_at, a.deadline,
+           a.budget, a.payment_type, a.rejection_reason,
            j.id AS job_id, j.title, j.description, j.status AS job_status,
            c.company_name, c.logo_image
     FROM assignments a
@@ -331,6 +410,22 @@ foreach ($tasks as &$task) {
     $mr = $ms->get_result();
     while ($m = $mr->fetch_assoc()) { $task['milestones'][] = $m; }
     $ms->close();
+
+    // Fetch submissions for assignment
+    $task['submissions'] = [];
+    $sub_st = $conn->prepare("
+        SELECT id, file_path, github_link, notes, version, status, revision_notes, created_at
+        FROM submissions
+        WHERE assignment_id = ?
+        ORDER BY version DESC
+    ");
+    $sub_st->bind_param('i', $task['assignment_id']);
+    $sub_st->execute();
+    $sub_res = $sub_st->get_result();
+    while ($sub_row = $sub_res->fetch_assoc()) {
+        $task['submissions'][] = $sub_row;
+    }
+    $sub_st->close();
 }
 unset($task);
 
@@ -370,7 +465,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 <?php if (empty($tasks)): ?>
     <div class="glass rounded-2xl text-center py-20" style="color:var(--color-text-placeholder)">
         <svg class="w-24 h-24 mx-auto mb-6 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        <p class="text-xl font-semibold mb-2">No assigned tasks yet.</p>
+        <p class="text-xl font-semibold mb-2">No assigned projects yet.</p>
         <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="btn-grad inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-xl text-white mt-3">Browse available jobs</a>
     </div>
 <?php else: ?>
@@ -394,18 +489,19 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <h2 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= e($task['title']) ?></h2>
                         </div>
                     </div>
-                    <?php if ($all_approved): ?>
-                        <span class="ms-status ms-approved">
-                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                            Project Completed
-                        </span>
-                    <?php elseif (!empty($task['deadline']) && new DateTime($task['deadline']) <= new DateTime() && in_array($task['assignment_status'], ['working', 'assigned'])): ?>
-                        <span class="ms-status ms-revision_requested">
-                            Deadline Passed
-                        </span>
-                    <?php else: ?>
-                        <?= status_badge($task['assignment_status']) ?>
-                    <?php endif; ?>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <?php if (!empty($task['assignment_type']) && $task['assignment_type'] === 'direct_hire'): ?>
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                Direct Hire
+                            </span>
+                        <?php endif; ?>
+                        <?php if ($task['assignment_status'] === 'completed' || $all_approved): ?>
+                            <?= project_status_badge('completed') ?>
+                        <?php else: ?>
+                            <?= project_status_badge($task['assignment_status']) ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
                 <p class="text-sm mb-3 leading-relaxed" style="color:var(--color-text-secondary)"><?= e(mb_strimwidth($task['description'] ?? '', 0, 200, '...')) ?></p>
@@ -504,13 +600,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                     <span class="text-xs font-medium" style="color:var(--color-text-muted)"><?= $ms['status'] === 'revision_requested' ? 'Revision needed — resubmit work' : 'Working on this milestone' ?></span>
                                     <div class="flex items-center gap-2">
                                         <?php 
-                                        $ms_dl = !empty($ms['deadline']) ? new DateTime($ms['deadline']) : null;
-                                        $job_dl = !empty($task['deadline']) ? new DateTime($task['deadline']) : null;
-                                        $now = new DateTime();
-                                        $can_submit = true;
-                                        if (($ms_dl && $ms_dl <= $now) || ($job_dl && $job_dl <= $now)) {
-                                            $can_submit = false;
-                                        }
+                                        $can_submit = !is_deadline_passed($ms['deadline'] ?? null) && !is_deadline_passed($task['deadline'] ?? null);
                                         ?>
                                         <?php if ($can_submit): ?>
                                         <form method="POST" style="display:inline" onsubmit="return confirm('Submit this milestone for review?')">
@@ -560,18 +650,14 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <div class="pt-4 border-t" style="border-color:var(--color-border)">
                     <h3 class="text-sm font-bold mb-4" style="color:var(--color-text-primary)">Assignment Delivery</h3>
                     
-                    <?php if ($task['assignment_status'] === 'working' || $task['assignment_status'] === 'assigned'): ?>
+                    <?php if (in_array($task['assignment_status'], ['working', 'assigned', 'overdue', 'revision_requested']) && $task['assignment_status'] !== 'completed'): ?>
                         <?php 
-                        $can_submit_fixed = true;
-                        $job_dl = !empty($task['deadline']) ? new DateTime($task['deadline']) : null;
-                        if ($job_dl && $job_dl <= new DateTime()) {
-                            $can_submit_fixed = false;
-                        }
+                        $can_submit_fixed = !is_deadline_passed($task['deadline'] ?? null);
                         ?>
                         <?php if ($can_submit_fixed): ?>
                         <div class="p-5 rounded-xl border" style="background:var(--color-bg);border-color:var(--color-border)">
                             <h4 class="text-sm font-semibold mb-2" style="color:var(--color-text-primary)">Submit Your Work</h4>
-                            <p class="text-xs mb-4" style="color:var(--color-text-secondary)">Please provide your completed work or a link to the project files. Add a note explaining what you have done.</p>
+                            <p class="text-xs mb-4" style="color:var(--color-text-secondary)">Please upload your completed work file and optional submission notes.</p>
                             
                             <form method="POST" enctype="multipart/form-data" onsubmit="return confirm('Submit this work for review?')">
                                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
@@ -579,13 +665,13 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <input type="hidden" name="assignment_id" value="<?= (int) $task['assignment_id'] ?>">
                                 
                                 <div class="mb-4">
-                                    <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Submission Note / Message</label>
-                                    <textarea name="submission_note" rows="3" required class="w-full px-3 py-2 rounded-lg text-sm border focus:ring-2 focus:ring-primary-500" style="background:var(--color-card);border-color:var(--color-border);color:var(--color-text-primary)" placeholder="I have completed the requested work..."></textarea>
+                                    <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Upload Work File <span class="text-red-500">*</span></label>
+                                    <input type="file" name="submission_file" required class="w-full text-sm">
                                 </div>
                                 
                                 <div class="mb-4">
-                                    <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Attachment (Optional)</label>
-                                    <input type="file" name="submission_file" class="w-full text-sm">
+                                    <label class="block text-xs font-semibold mb-1" style="color:var(--color-text-secondary)">Submission Note / Message (Optional)</label>
+                                    <textarea name="submission_note" rows="3" class="w-full px-3 py-2 rounded-lg text-sm border focus:ring-2 focus:ring-primary-500" style="background:var(--color-card);border-color:var(--color-border);color:var(--color-text-primary)" placeholder="I have completed the requested work..."></textarea>
                                 </div>
                                 
                                 <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white shadow-lg" style="background:linear-gradient(135deg,#10b981,#059669)">
@@ -614,6 +700,50 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <div class="p-4 rounded-xl border flex items-center gap-3" style="background:rgba(16,185,129,0.05);border-color:rgba(16,185,129,0.2)">
                             <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                             <span class="text-sm font-semibold text-emerald-600">Project completed and payment processed.</span>
+                        </div>
+                    <?php elseif ($task['assignment_status'] === 'rejected'): ?>
+                        <div class="p-4 rounded-xl border border-red-200 dark:border-red-800 bg-red-50/40 dark:bg-red-900/10">
+                            <div class="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-red-200 dark:border-red-800">
+                                <h4 class="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">Assignment Permanently Rejected</h4>
+                                <?= status_badge('rejected') ?>
+                            </div>
+
+                            <?php if (!empty($task['rejection_reason'])): ?>
+                                <div class="mb-3 p-3 rounded-lg bg-red-100/60 dark:bg-red-900/30 text-xs text-red-700 dark:text-red-300">
+                                    <span class="font-bold block mb-1">Company Rejection Reason:</span>
+                                    <p class="leading-relaxed"><?= nl2br(e($task['rejection_reason'])) ?></p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Submitted Work Results Details (Displayed ONLY AFTER freelancer submits work) -->
+                    <?php if (!empty($task['submissions'])): ?>
+                        <div class="mt-4 p-4 rounded-xl border" style="background:var(--color-bg);border-color:var(--color-border)">
+                            <h4 class="text-xs font-bold uppercase tracking-wider mb-3" style="color:var(--color-text-muted)">Submitted Work & Results History</h4>
+                            <div class="space-y-3">
+                                <?php foreach ($task['submissions'] as $sub): ?>
+                                    <div class="p-3 rounded-lg border text-xs" style="background:var(--color-card);border-color:var(--color-border)">
+                                        <div class="flex items-center justify-between gap-2 mb-2">
+                                            <span class="font-bold text-gray-800 dark:text-gray-200">Submission v<?= (int)$sub['version'] ?></span>
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-gray-400"><?= date('M j, Y, g:i A', strtotime($sub['created_at'])) ?></span>
+                                                <?= status_badge($sub['status']) ?>
+                                            </div>
+                                        </div>
+                                        <?php if (!empty($sub['notes'])): ?>
+                                            <p class="text-gray-700 dark:text-gray-300 mb-2"><?= nl2br(e($sub['notes'])) ?></p>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($sub['file_path'])): ?>
+                                            <a href="<?= e(base_url('api/download_submission.php?submission_id=' . (int)$sub['id'])) ?>" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 font-semibold hover:underline">
+                                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                                Download Attached File
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>

@@ -136,7 +136,7 @@ if ($target_user['role'] === 'company') {
         }
 
         try {
-            $stmt = $conn->prepare('SELECT id, title, budget, status, created_at FROM jobs WHERE company_id = ? AND category != \'Direct Hire\' ORDER BY created_at DESC LIMIT 5');
+            $stmt = $conn->prepare('SELECT id, title, budget, status, created_at FROM jobs WHERE company_id = ? ORDER BY created_at DESC LIMIT 5');
             $stmt->bind_param('i', $profile['id']);
             $stmt->execute();
             $profile_extra['recent_jobs'] = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -355,24 +355,9 @@ require __DIR__ . '/includes/admin_header.php';
                             <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['phone']) ?></p>
                         </div>
                     <?php endif; ?>
-                    <?php if ($profile['location']): ?>
-                        <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Location') ?></p>
-                            <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['location']) ?></p>
-                        </div>
-                    <?php endif; ?>
-                    <?php if ($profile['experience_years']): ?>
-                        <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Experience (Years)') ?></p>
-                            <p class="text-sm" style="color:var(--color-text-primary)"><?= e($profile['experience_years']) ?> years</p>
-                        </div>
-                    <?php endif; ?>
-                    <?php if ($profile['hourly_rate']): ?>
-                        <div>
-                            <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Hourly Rate (MMK)') ?></p>
-                            <p class="text-sm" style="color:var(--color-text-primary)"><?= e(number_format((float) $profile['hourly_rate'], 2)) ?> MMK</p>
-                        </div>
-                    <?php endif; ?>
+
+                    
+                    
                     <div>
                         <p class="text-xs font-medium" style="color:var(--color-text-muted)"><?= e('Applications Sent') ?></p>
                         <p class="text-sm font-semibold" style="color:var(--color-text-primary)"><?= $profile_extra['applications_count'] ?? 0 ?></p>

@@ -4,23 +4,35 @@ require_once __DIR__ . '/../config/auth.php';
 
 require_role('company');
 
+$redirect_to = trim($_POST['redirect_to'] ?? '');
+
+function get_delete_dest_url(string $fallback, string $custom): string {
+    if (!empty($custom) && (strpos($custom, 'company/') === 0 || strpos($custom, 'index.php') === 0)) {
+        return $custom;
+    }
+    return $fallback;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     set_flash('error', 'Invalid request method.');
-    redirect('company/manage_jobs.php');
+    redirect(get_delete_dest_url('company/manage_jobs.php', $redirect_to));
 }
 
 if (!verify_csrf()) {
-    set_flash('error', 'Invalid CSRF token.');
-    redirect('company/manage_jobs.php');
+    set_flash('error', 'Invalid or expired CSRF token.');
+    redirect(get_delete_dest_url('company/manage_jobs.php', $redirect_to));
 }
 
 $user = current_user();
 $company_id = get_company_id($conn, (int) $user['user_id']);
 $job_id = (int) ($_POST['job_id'] ?? 0);
 
+$fallback_url = $job_id > 0 ? 'company/view_job.php?id=' . $job_id : 'company/manage_jobs.php';
+$dest_url = get_delete_dest_url($fallback_url, $redirect_to);
+
 if (!$company_id || $job_id <= 0) {
     set_flash('error', 'Invalid input.');
-    redirect('company/manage_jobs.php');
+    redirect($dest_url);
 }
 
 // Verify ownership
@@ -35,22 +47,22 @@ if (!$job) {
     redirect('company/manage_jobs.php');
 }
 
-    // Safely handle jobs with applications/assignments to prevent breaking existing data
-    $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM job_applications WHERE job_id = ?");
-    $stmt->bind_param('i', $job_id);
-    $stmt->execute();
-    $apps_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
-    $stmt->close();
-    
-    $stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM assignments WHERE job_id = ?");
-    $stmt->bind_param('i', $job_id);
-    $stmt->execute();
-    $assignments_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
-    $stmt->close();
+// Safely handle jobs with applications/assignments to prevent breaking existing data
+$stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM job_applications WHERE job_id = ?");
+$stmt->bind_param('i', $job_id);
+$stmt->execute();
+$apps_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+$stmt->close();
+
+$stmt = $conn->prepare("SELECT COUNT(*) as cnt FROM assignments WHERE job_id = ?");
+$stmt->bind_param('i', $job_id);
+$stmt->execute();
+$assignments_count = (int) $stmt->get_result()->fetch_assoc()['cnt'];
+$stmt->close();
 
 if ($apps_count > 0 || $assignments_count > 0) {
     set_flash('error', 'Cannot delete this job because it has existing applications or assignments. Please close the job instead to preserve records.');
-    redirect('company/manage_jobs.php');
+    redirect($dest_url);
 }
 
 // Proceed to delete related records first to avoid foreign key constraints

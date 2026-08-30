@@ -21,7 +21,7 @@ if (!$application_id) {
 
 $stmt = $conn->prepare("
     SELECT ja.id, ja.job_id, ja.freelancer_id, ja.status,
-           j.title, j.payment_type, j.budget, j.freelancers_needed,
+           j.title, j.payment_type, j.budget,
            f.full_name AS freelancer_name
     FROM job_applications ja
     JOIN jobs j ON ja.job_id = j.id

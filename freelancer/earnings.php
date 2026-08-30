@@ -35,7 +35,7 @@ try {
 
 $active_submissions = [];
 try {
-    $s = $conn->prepare("SELECT s.assignment_id, s.project_url, s.notes, s.status AS sub_status, s.revision_notes, s.version, s.created_at AS submitted_at FROM submissions s JOIN assignments a ON s.assignment_id = a.id WHERE a.freelancer_id = ? ORDER BY s.version DESC");
+    $s = $conn->prepare("SELECT s.assignment_id, s.notes, s.status AS sub_status, s.revision_notes, s.version, s.created_at AS submitted_at FROM submissions s JOIN assignments a ON s.assignment_id = a.id WHERE a.freelancer_id = ? ORDER BY s.version DESC");
     $s->bind_param('i', $fl_freelancer_id);
     $s->execute();
     $r = $s->get_result();
@@ -116,7 +116,7 @@ try {
     <?php if (empty($escrow_active)): ?>
         <div class="glass rounded-2xl text-center py-16" style="color:var(--color-text-placeholder)">
             <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <p class="mb-3">No active escrow payments.</p>
+            <p class="mb-3">No pending payments.</p>
             <a href="<?= e(base_url('freelancer/browse_jobs.php')) ?>" class="btn-grad inline-flex items-center gap-1.5 px-5 py-2.5 text-sm font-semibold rounded-xl text-white">Browse Jobs</a>
         </div>
     <?php else: ?>
@@ -145,7 +145,7 @@ try {
                                 </span>
                                 <span class="flex items-center gap-1.5">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                    Funded <?= date('M j, Y', strtotime($ep['funded_at'])) ?>
+                                    Created <?= date('M j, Y', strtotime($ep['funded_at'])) ?>
                                 </span>
                             </div>
 
@@ -165,12 +165,6 @@ try {
                                         <svg class="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                         <span class="text-xs font-semibold text-purple-700 dark:text-purple-300">Submission (v<?= $sub['version'] ?>)</span>
                                     </div>
-                                    <?php if ($sub['project_url']): ?>
-                                        <a href="<?= e($sub['project_url']) ?>" target="_blank" rel="noopener" class="text-sm text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1">
-                                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                            <?= e(mb_strimwidth($sub['project_url'], 0, 60, '...')) ?>
-                                        </a>
-                                    <?php endif; ?>
                                     <?php if ($sub['notes']): ?>
                                         <p class="text-sm mt-1" style="color:var(--color-text-secondary)"><?= e($sub['notes']) ?></p>
                                     <?php endif; ?>

@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         redirect('auth/login.php');
     }
 
-    $st = $conn->prepare("SELECT id, company_id FROM jobs WHERE id = ? AND status = 'open'");
+    $st = $conn->prepare("SELECT j.id, j.company_id FROM jobs j WHERE j.id = ? AND j.status = 'open' AND NOT EXISTS (SELECT 1 FROM assignments a WHERE a.job_id = j.id AND a.assignment_type = 'direct_hire')");
     $st->bind_param('i', $job_id); $st->execute();
     $job_check = $st->get_result()->fetch_assoc(); $st->close();
 
@@ -65,9 +65,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // Fetch job details
 $stmt = $conn->prepare("
-    SELECT j.*, c.company_name, c.logo_image, c.location AS company_location, c.website, c.industry, c.company_size, c.description AS company_description, c.phone AS client_phone,
+    SELECT j.*, c.company_name, c.logo_image, c.location AS company_location, c.website, c.industry, c.description AS company_description, c.phone AS client_phone,
            u.id AS client_user_id, u.username AS client_username, u.profile_image AS client_profile_image, u.email AS client_email,
-           COALESCE(c.company_name, u.username) AS client_display_name
+           COALESCE(c.company_name, u.username) AS client_display_name,
+           (SELECT assignment_type FROM assignments WHERE job_id = j.id LIMIT 1) AS assignment_type,
+           (SELECT freelancer_id FROM assignments WHERE job_id = j.id AND assignment_type = 'direct_hire' LIMIT 1) AS dh_freelancer_id
     FROM jobs j
     JOIN companies c ON j.company_id = c.id
     JOIN users u ON c.user_id = u.id
@@ -77,6 +79,14 @@ $stmt->bind_param('i', $job_id);
 $stmt->execute();
 $job = $stmt->get_result()->fetch_assoc();
 $stmt->close();
+
+if ($job) {
+    $job['is_direct_hire'] = (!empty($job['assignment_type']) && $job['assignment_type'] === 'direct_hire');
+    // Privacy protection: Direct hire jobs are visible ONLY to the assigned freelancer and hiring company
+    if ($job['is_direct_hire'] && (!isset($fl_freelancer_id) || (int)$job['dh_freelancer_id'] !== (int)$fl_freelancer_id)) {
+        $job = null;
+    }
+}
 
 // Job not found
 if (!$job) {
@@ -489,6 +499,12 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                             <?= e($job['category'] ?: 'General') ?>
                         </span>
+                        <?php if (!empty($job['is_direct_hire'])): ?>
+                            <span class="hero-badge" style="background:rgba(147,51,234,0.3);border-color:rgba(147,51,234,0.4);">
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                Direct Hire
+                            </span>
+                        <?php endif; ?>
                         <?php if ($job['experience_level']): ?>
                             <span class="hero-badge">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
@@ -497,7 +513,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                         <?php endif; ?>
                         <?php if ($job['status'] !== 'open'): ?>
                             <span class="hero-badge" style="background:rgba(245,158,11,0.3);border-color:rgba(245,158,11,0.3)">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 00-2-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                                 <?= e(str_replace('_', ' ', ucfirst($job['status']))) ?>
                             </span>
                         <?php endif; ?>
@@ -864,7 +880,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                                 <p class="text-sm font-medium capitalize" style="color:var(--color-text-primary)"><?= e($job['experience_level'] ?: 'Not specified') ?></p>
                             </div>
                         </div>
-                        <?php if ($job['gender_requirement'] !== 'any'): ?>
+                        <?php if (!empty($job['gender_requirement']) && $job['gender_requirement'] !== 'any'): ?>
                         <div class="detail-row">
                             <div class="detail-icon" style="background:rgba(236,72,153,0.08)">
                                 <svg class="w-4 h-4 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>

@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
     if (in_array($action, ['hide', 'restore', 'remove'], true)) {
         try {
             if ($action === 'hide') {
-                $stmt = $conn->prepare("UPDATE jobs SET status = 'rejected' WHERE id = ? AND status = 'open'");
+                $stmt = $conn->prepare("UPDATE jobs SET status = 'closed' WHERE id = ? AND status NOT IN ('closed', 'cancelled')");
                 $stmt->bind_param('i', $job_id);
                 $stmt->execute();
 
@@ -36,12 +36,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     }
                     set_flash('success', 'Job has been hidden successfully.');
                 } else {
-                    set_flash('error', 'Could not hide this job.');
+                    set_flash('error', 'Could not hide this job or it is already hidden.');
                 }
                 $stmt->close();
 
             } elseif ($action === 'restore') {
-                $stmt = $conn->prepare("UPDATE jobs SET status = 'open' WHERE id = ? AND status = 'rejected'");
+                $stmt = $conn->prepare("UPDATE jobs SET status = 'open' WHERE id = ? AND status IN ('closed', 'cancelled')");
                 $stmt->bind_param('i', $job_id);
                 $stmt->execute();
 
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
                     }
                     set_flash('success', 'Job has been restored successfully.');
                 } else {
-                    set_flash('error', 'Could not restore this job.');
+                    set_flash('error', 'Could not restore this job or it is not hidden.');
                 }
                 $stmt->close();
 
@@ -88,7 +88,7 @@ $job = null;
 try {
     $stmt = $conn->prepare("
         SELECT j.*, c.company_name, c.logo_image, c.location AS company_location,
-               c.website, c.industry, c.company_size, c.description AS company_description,
+               c.website, c.industry, c.description AS company_description,
                c.established_year, c.phone AS company_phone,
                u.username AS posted_by_name, u.profile_image AS posted_by_image
         FROM jobs j
@@ -310,7 +310,7 @@ require __DIR__ . '/includes/admin_header.php';
         <div class="card admin-fade">
             <h2 class="text-sm font-semibold mb-3" style="color:var(--color-text-primary)">Moderation Actions</h2>
             <div class="space-y-2">
-                <?php if ($job['status'] === 'open' || $job['status'] === 'approved'): ?>
+                <?php if (!in_array($job['status'], ['closed', 'cancelled'])): ?>
                     <form method="POST" id="hideForm">
                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="hide">
@@ -319,13 +319,13 @@ require __DIR__ . '/includes/admin_header.php';
                             Hide Job
                         </button>
                     </form>
-                <?php elseif ($job['status'] === 'rejected'): ?>
+                <?php else: ?>
                     <form method="POST">
                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                         <input type="hidden" name="action" value="restore">
                         <button type="submit" class="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40 transition-colors">
                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            Restore Job
+                            Unhide / Restore Job
                         </button>
                     </form>
 
@@ -367,14 +367,7 @@ require __DIR__ . '/includes/admin_header.php';
                     <span style="color:var(--color-text-muted)">Duration</span>
                     <span style="color:var(--color-text-primary)"><?= e($job['duration'] ?: '—') ?></span>
                 </div>
-                <div class="flex justify-between">
-                    <span style="color:var(--color-text-muted)">Gender</span>
-                    <span class="capitalize" style="color:var(--color-text-primary)"><?= e(ucfirst($job['gender_requirement'] ?? 'any')) ?></span>
-                </div>
-                <div class="flex justify-between">
-                    <span style="color:var(--color-text-muted)">Visibility</span>
-                    <span class="capitalize" style="color:var(--color-text-primary)"><?= e(ucfirst($job['visibility'] ?? 'public')) ?></span>
-                </div>
+
                 <div class="flex justify-between">
                     <span style="color:var(--color-text-muted)">Applications</span>
                     <span style="color:var(--color-text-primary)"><?= $app_count ?></span>
@@ -421,12 +414,7 @@ require __DIR__ . '/includes/admin_header.php';
                         <a href="<?= e($job['website']) ?>" target="_blank" class="text-indigo-600 hover:underline" style="font-size:0.8125rem"><?= e($job['website']) ?></a>
                     </div>
                 <?php endif; ?>
-                <?php if ($job['company_size']): ?>
-                    <div class="flex items-center gap-2">
-                        <svg class="w-3.5 h-3.5 flex-shrink-0" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                        <span style="color:var(--color-text-secondary)"><?= e($job['company_size']) ?></span>
-                    </div>
-                <?php endif; ?>
+                
             </div>
             <?php if ($job['company_description']): ?>
                 <div class="mt-3 pt-3 border-t" style="border-color:var(--color-border)">

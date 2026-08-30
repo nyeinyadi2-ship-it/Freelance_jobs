@@ -7,6 +7,7 @@ if (session_status() === PHP_SESSION_NONE) { session_start(); }
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/auth.php';
 require_once __DIR__ . '/../config/notifications.php';
+require_once __DIR__ . '/../includes/job_helpers.php';
 
 $user = current_user();
 $fl_user = null;
@@ -65,9 +66,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && verify_csrf()) {
 $search = trim(urldecode($_GET['q'] ?? ''));
 $filter_cat = trim(urldecode($_GET['category'] ?? ''));
 $filter_exp = trim(urldecode($_GET['experience'] ?? ''));
-$filter_skill = (int) ($_GET['skill'] ?? 0);
+$filter_skill_raw = trim(urldecode($_GET['skill'] ?? ''));
+$filter_skill = $filter_skill_raw;
 
-$where = "j.status IN ('open', 'in_review', 'hired', 'in_progress', 'completed', 'cancelled', 'closed') AND (j.category != 'Direct Hire' OR j.category IS NULL)";
+$filter_skill_id = 0;
+$filter_skill_name = '';
+
+if ($filter_skill_raw !== '') {
+    if (is_numeric($filter_skill_raw) && (int)$filter_skill_raw > 0) {
+        $filter_skill_id = (int)$filter_skill_raw;
+        $st_sk = $conn->prepare('SELECT skill_name FROM skills WHERE id = ?');
+        $st_sk->bind_param('i', $filter_skill_id);
+        $st_sk->execute();
+        $res_sk = $st_sk->get_result()->fetch_assoc();
+        if ($res_sk) {
+            $filter_skill_name = $res_sk['skill_name'];
+        }
+        $st_sk->close();
+    } else {
+        $st_sk = $conn->prepare('SELECT id, skill_name FROM skills WHERE LOWER(skill_name) = LOWER(?) LIMIT 1');
+        $st_sk->bind_param('s', $filter_skill_raw);
+        $st_sk->execute();
+        $res_sk = $st_sk->get_result()->fetch_assoc();
+        $st_sk->close();
+        if (!$res_sk) {
+            $like = '%' . $filter_skill_raw . '%';
+            $st_sk = $conn->prepare('SELECT id, skill_name FROM skills WHERE LOWER(skill_name) LIKE LOWER(?) LIMIT 1');
+            $st_sk->bind_param('s', $like);
+            $st_sk->execute();
+            $res_sk = $st_sk->get_result()->fetch_assoc();
+            $st_sk->close();
+        }
+        if ($res_sk) {
+            $filter_skill_id = (int)$res_sk['id'];
+            $filter_skill_name = $res_sk['skill_name'];
+        } else {
+            $filter_skill_name = $filter_skill_raw;
+        }
+    }
+}
+
+check_and_update_expired_jobs($conn);
+
+$where = "j.status NOT IN ('closed', 'cancelled', 'expired') AND NOT EXISTS (SELECT 1 FROM assignments a_dh WHERE a_dh.job_id = j.id AND a_dh.assignment_type = 'direct_hire')";
 $params = [$fl_freelancer_id];
 $types = 'i';
 
@@ -87,14 +128,17 @@ if ($filter_exp !== '') {
     $params[] = $filter_exp;
     $types .= 's';
 }
-if ($filter_skill > 0) {
-    $where .= " AND EXISTS (SELECT 1 FROM job_skills js_filter WHERE js_filter.job_id = j.id AND js_filter.skill_id = ?)";
-    $params[] = $filter_skill;
-    $types .= 'i';
+if ($filter_skill_id > 0 || $filter_skill_name !== '') {
+    $where .= " AND ((? > 0 AND EXISTS (SELECT 1 FROM job_skills js_filter WHERE js_filter.job_id = j.id AND js_filter.skill_id = ?)) OR (? != '' AND LOWER(j.category) = LOWER(?)))";
+    $params[] = $filter_skill_id;
+    $params[] = $filter_skill_id;
+    $params[] = $filter_skill_name;
+    $params[] = $filter_skill_name;
+    $types .= 'iiss';
 }
 
 
-$sql = "SELECT j.id,j.title,j.description,j.budget,j.created_at,j.category,j.experience_level,j.gender_requirement,j.deadline,j.duration,j.visibility,j.attachment,j.status,
+$sql = "SELECT j.id,j.title,j.description,j.budget,j.created_at,j.category,j.experience_level,j.deadline,j.duration,j.attachment,j.status,
         c.company_name,c.logo_image,
         ja.status AS my_status,
         (SELECT COUNT(*) FROM assignments a WHERE a.job_id = j.id AND a.status NOT IN ('rejected', 'cancelled')) AS assigned_count,
@@ -111,6 +155,9 @@ $st->execute(); $r = $st->get_result();
 $jobs = [];
 $completed_count = 0;
 while ($row = $r->fetch_assoc()) {
+    if ($row['status'] === 'expired' || is_deadline_passed($row['deadline'])) {
+        continue;
+    }
     if ($row['status'] === 'completed') {
         if ($completed_count >= 1) continue;
         $completed_count++;
@@ -375,7 +422,7 @@ require __DIR__ . '/../includes/freelancer_layout.php';
             <select name="skill" id="skill-filter" class="w-full pl-4 pr-10 py-3 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer appearance-none" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-primary)">
                 <option value="">All Skills</option>
                 <?php foreach ($all_skills as $sk): ?>
-                    <option value="<?= e($sk['skill_name']) ?>" <?= $filter_skill === $sk['skill_name'] ? 'selected' : '' ?>><?= e($sk['skill_name']) ?></option>
+                    <option value="<?= e($sk['skill_name']) ?>" <?= ($filter_skill_name === $sk['skill_name'] || $filter_skill === $sk['skill_name'] || $filter_skill == $sk['id']) ? 'selected' : '' ?>><?= e($sk['skill_name']) ?></option>
                 <?php endforeach; ?>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
@@ -385,10 +432,10 @@ require __DIR__ . '/../includes/freelancer_layout.php';
 
         <!-- Category Filter -->
         <div class="flex flex-wrap gap-2">
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'experience'=>$filter_exp,'skill'=>$filter_skill > 0 ? $filter_skill : ''])))) ?>" class="filter-chip <?= $filter_cat === '' ? 'active' : '' ?>">All Categories</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'experience'=>$filter_exp,'skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_cat === '' ? 'active' : '' ?>">All Categories</a>
             <?php
             $cats = [];
-            $res = $conn->query("SELECT name FROM categories ORDER BY name ASC");
+            $res = $conn->query("SELECT name FROM categories WHERE LOWER(name) NOT IN ('direct hire', 'direct offer') ORDER BY CASE WHEN LOWER(name) = 'other' THEN 1 ELSE 0 END, name ASC");
             if ($res) {
                 while ($row = $res->fetch_assoc()) {
                     $cats[] = $row['name'];
@@ -396,16 +443,16 @@ require __DIR__ . '/../includes/freelancer_layout.php';
             }
             foreach ($cats as $cat):
             ?>
-                <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$cat,'experience'=>$filter_exp,'skill'=>$filter_skill > 0 ? $filter_skill : ''])))) ?>" class="filter-chip <?= $filter_cat === $cat ? 'active' : '' ?>"><?= e($cat) ?></a>
+                <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$cat,'experience'=>$filter_exp,'skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_cat === $cat ? 'active' : '' ?>"><?= e($cat) ?></a>
             <?php endforeach; ?>
         </div>
 
         <!-- Experience Filter -->
         <div class="flex flex-wrap gap-2">
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'skill'=>$filter_skill > 0 ? $filter_skill : ''])))) ?>" class="filter-chip <?= $filter_exp === '' ? 'active' : '' ?>">All Levels</a>
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'beginner','skill'=>$filter_skill > 0 ? $filter_skill : ''])))) ?>" class="filter-chip <?= $filter_exp === 'beginner' ? 'active' : '' ?>">Beginner</a>
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'intermediate','skill'=>$filter_skill > 0 ? $filter_skill : ''])))) ?>" class="filter-chip <?= $filter_exp === 'intermediate' ? 'active' : '' ?>">Intermediate</a>
-            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'expert','skill'=>$filter_skill > 0 ? $filter_skill : ''])))) ?>" class="filter-chip <?= $filter_exp === 'expert' ? 'active' : '' ?>">Expert</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === '' ? 'active' : '' ?>">All Levels</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'beginner','skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === 'beginner' ? 'active' : '' ?>">Beginner</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'intermediate','skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === 'intermediate' ? 'active' : '' ?>">Intermediate</a>
+            <a href="<?= e(base_url('freelancer/browse_jobs.php?' . http_build_query(array_filter(['q'=>$search,'category'=>$filter_cat,'experience'=>'expert','skill'=>$filter_skill])))) ?>" class="filter-chip <?= $filter_exp === 'expert' ? 'active' : '' ?>">Expert</a>
         </div>
     </form>
 </div>

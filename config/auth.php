@@ -172,9 +172,9 @@ function get_company_id(mysqli $conn, int $user_id): ?int
 
 function get_freelancer_id(mysqli $conn, int $user_id): ?int
 {
-    // Cache in session to avoid DB query on every page load
+    if ($user_id <= 0) return null;
     $cache_key = 'freelancer_id_' . $user_id;
-    if (isset($_SESSION[$cache_key])) {
+    if (isset($_SESSION[$cache_key]) && $_SESSION[$cache_key] > 0) {
         return (int) $_SESSION[$cache_key];
     }
     $stmt = $conn->prepare('SELECT id FROM freelancers WHERE user_id = ?');
@@ -182,8 +182,28 @@ function get_freelancer_id(mysqli $conn, int $user_id): ?int
     $stmt->execute();
     $result = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+    
     $id = $result ? (int) $result['id'] : null;
-    $_SESSION[$cache_key] = $id;
+
+    if (!$id) {
+        $u_stmt = $conn->prepare('SELECT full_name, email FROM users WHERE id = ? AND role = "freelancer"');
+        $u_stmt->bind_param('i', $user_id);
+        $u_stmt->execute();
+        $u_res = $u_stmt->get_result()->fetch_assoc();
+        $u_stmt->close();
+        if ($u_res) {
+            $name = !empty($u_res['full_name']) ? $u_res['full_name'] : 'Freelancer #' . $user_id;
+            $ins = $conn->prepare('INSERT INTO freelancers (user_id, full_name) VALUES (?, ?)');
+            $ins->bind_param('is', $user_id, $name);
+            $ins->execute();
+            $id = $ins->insert_id;
+            $ins->close();
+        }
+    }
+
+    if ($id) {
+        $_SESSION[$cache_key] = $id;
+    }
     return $id;
 }
 
@@ -392,40 +412,54 @@ function has_account_status_column(): bool
 function status_badge(string $status): string
 {
     $classes = [
+        // Job Statuses
         'open' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
-        'in_review' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
         'hired' => 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300',
-        'pending' => 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
-        'approved' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
-        'rejected' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
-        'completed' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
-        'position_filled' => 'bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300',
-        'accepted' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
-        'assigned' => 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300',
-        'working' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
-        'in_progress' => 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300',
+        'closed' => 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400',
+
+        // Project / Assignment Statuses
+        'not_started' => 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300',
+        'in_progress' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+        'completed' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
+
+        // Milestone Statuses
+        'pending' => 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
         'submitted' => 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300',
-        'payment_pending' => 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+        'revision_requested' => 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300',
+        'overdue' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+        'cancelled' => 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400',
+        'rejected' => 'bg-red-200 dark:bg-red-900/40 text-red-800 dark:text-red-300',
+
+        // Application & Submission Statuses
+        'accepted' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
+        'approved' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
         'paid' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
-        'active' => 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+        'active' => 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
         'suspended' => 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
         'blocked' => 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
-        'expired' => 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300',
-        'closed' => 'bg-gray-300 dark:bg-gray-800 text-gray-900 dark:text-gray-400',
-        'overdue' => 'bg-red-600/10 text-red-700 dark:text-red-400',
-        'extended' => 'bg-blue-600/10 text-blue-700 dark:text-blue-400',
-        'cancelled' => 'bg-gray-600/10 text-gray-700 dark:text-gray-400',
     ];
 
     $class = $classes[$status] ?? 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';
 
     $display = match($status) {
-        'in_review' => 'In Review',
+        'not_started' => 'Not Started',
         'in_progress' => 'In Progress',
-        'position_filled' => 'Position Filled',
+        'revision_requested' => 'Revision Requested',
+        'in_review' => 'In Review',
         'payment_pending' => 'Payment Pending',
         default => ucwords(str_replace('_', ' ', $status))
     };
 
     return '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ' . $class . '">' . e($display) . '</span>';
+}
+
+function project_status_badge(string $status): string
+{
+    if ($status === 'completed') {
+        return '<span class="inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">Completed</span>';
+    }
+    if (in_array($status, ['cancelled', 'rejected'], true)) {
+        return '<span class="inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-400">' . e(ucfirst($status)) . '</span>';
+    }
+    return '<span class="inline-flex px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">Ongoing</span>';
 }

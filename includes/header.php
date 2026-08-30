@@ -4,6 +4,8 @@ require_once __DIR__ . '/job_helpers.php';
 if (isset($conn)) {
     check_and_update_expired_jobs($conn);
 }
+$user = current_user();
+$role = $user['role'] ?? ($_SESSION['role'] ?? null);
 ?>
 <!DOCTYPE html>
 <html lang="<?= e('en') ?>" data-theme>
@@ -21,7 +23,9 @@ if (isset($conn)) {
     <link rel="stylesheet" href="<?= e(base_url('assets/css/custom.css')) ?>">
 </head>
 <body>
+<?php if (empty($hide_navbar)): ?>
 <?php require __DIR__ . '/navbar.php'; ?>
+<?php endif; ?>
 <?php if ($role === 'admin'): ?>
 <!-- Mobile sidebar overlay -->
 <div id="admin-sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden lg:!hidden"></div>
@@ -33,6 +37,8 @@ if (isset($conn)) {
 </aside>
 <main class="flex-1 lg:ml-64 min-h-[calc(100vh-4rem)]">
     <div class="container mx-auto px-4 py-8 max-w-6xl">
+<?php elseif (!empty($hide_navbar)): ?>
+<main class="flex-1 min-h-screen">
 <?php else: ?>
 <main class="flex-1 container mx-auto px-4 py-8 max-w-6xl">
 <?php endif; ?>

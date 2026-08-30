@@ -69,19 +69,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$hide_navbar = true;
 $page_title = 'Admin Login';
 require __DIR__ . '/../includes/header.php';
 ?>
 <style>
     .auth-wrapper {
-        min-height: calc(100vh - 4rem);
+        min-height: 100vh;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 2rem 1rem;
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
-        border-radius: 16px; /* slightly round the edges inside the main container */
-        margin: -2rem -1rem; /* counteract main padding to fill */
     }
     .auth-card {
         width: 100%;

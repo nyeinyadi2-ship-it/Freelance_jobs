@@ -118,9 +118,10 @@ require __DIR__ . '/includes/header.php';
                     <?php if (!empty($n['sender_name'])): ?>
                         <div class="mt-1 flex-shrink-0">
                             <?php if (!empty($n['sender_image'])): ?>
-                                <img src="<?= e(base_url('uploads/profiles/' . $n['sender_image'])) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover shadow-sm">
+                                <img src="<?= e(base_url('uploads/images/' . $n['sender_image'])) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover shadow-sm" onerror="this.onerror=null; this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                                <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm" style="display:none"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                             <?php else: ?>
-                                <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm"><?= strtoupper(substr($n['sender_name'], 0, 1)) ?></div>
+                                <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shadow-sm"><?= e(strtoupper(substr($n['sender_name'], 0, 1))) ?></div>
                             <?php endif; ?>
                         </div>
                     <?php else: ?>

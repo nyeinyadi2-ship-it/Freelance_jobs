@@ -9,15 +9,15 @@
 
                     $ms_labels = [
                         'draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress',
-                        'submitted'=>'Submitted','approved'=>'Approved','revision_requested'=>'Revision',
-                        'payment_pending'=>'Payment Pending','paid'=>'Paid',
-                        'overdue'=>'Overdue','cancelled'=>'Cancelled'
+                        'submitted'=>'Submitted','approved'=>'Approved','completed'=>'Completed','paid'=>'Paid','payment_pending'=>'Payment Pending',
+                        'pending'=>'Pending','revision_requested'=>'Revision Requested',
+                        'overdue'=>'Overdue','cancelled'=>'Cancelled','rejected'=>'Rejected'
                     ];
                     $ms_colors = [
                         'draft'=>'#6b7280','funded'=>'#3b82f6','in_progress'=>'#6366f1',
-                        'submitted'=>'#8b5cf6','approved'=>'#10b981','revision_requested'=>'#ef4444',
-                        'payment_pending'=>'#3b82f6','paid'=>'#10b981',
-                        'overdue'=>'#dc2626','cancelled'=>'#6b7280'
+                        'submitted'=>'#8b5cf6','approved'=>'#10b981','completed'=>'#10b981','paid'=>'#10b981','payment_pending'=>'#f59e0b',
+                        'pending'=>'#f59e0b','revision_requested'=>'#f97316',
+                        'overdue'=>'#dc2626','cancelled'=>'#6b7280','rejected'=>'#ef4444'
                     ];
                     $ms_label = $ms_labels[$ms['status']] ?? $ms['status'];
                     $ms_color = $ms_colors[$ms['status']] ?? '#6b7280';
@@ -151,10 +151,10 @@
                                 </div>
                                 <div class="p-5 border-t flex flex-col gap-3" style="border-color:var(--color-border)">
                                     <div class="w-full">
-                                        <button type="button" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 2px 8px rgba(16,185,129,0.3)" onclick="openPaymentModal(true, <?= (int) $ms['id'] ?>, <?= (float) $ms['amount'] ?>, '<?= e(addslashes($ms_asgn['payment_account_name'] ?? '')) ?>', '<?= e(addslashes($ms_asgn['payment_account_number'] ?? '')) ?>')">
+                                        <a href="<?= e(base_url('company/pay_freelancer.php?milestone_id=' . $ms['id'])) ?>" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:-translate-y-0.5" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 2px 8px rgba(16,185,129,0.3)">
                                             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                             Approve & Pay <?= number_format((float) $ms['amount'], 2) ?> MMK
-                                        </button>
+                                        </a>
                                     </div>
                                     <form method="POST" class="w-full mt-2 border-t pt-4" style="border-color:var(--color-border)">
                                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
@@ -206,21 +206,10 @@
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                 View Submission & Review
                             </button>
-                            <?php if ($ms_asgn && $ms_asgn['status'] !== 'rejected'): ?>
-                            <button type="button" onclick="document.getElementById('rejectModal-<?= $ms_asgn['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 transition-all border border-red-200">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                Reject Project
-                            </button>
-                            <?php endif; ?>
-                        <?php elseif ($ms['status'] === 'approved'): ?>
-                            <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#10b981">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                Payment released <?= $ms['approved_at'] ? date('M j', strtotime($ms['approved_at'])) : '' ?>
-                            </span>
-                        <?php elseif ($ms['status'] === 'payment_pending'): ?>
-                            <a href="<?= e(base_url('company/pay_freelancer.php?milestone_id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:-translate-y-0.5" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)">
+                        <?php elseif (in_array($ms['status'], ['approved', 'payment_pending'])): ?>
+                            <a href="<?= e(base_url('company/pay_freelancer.php?milestone_id=' . $ms['id'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:-translate-y-0.5" style="background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 2px 8px rgba(16,185,129,0.3)">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                                Make Payment
+                                Pay / Release Milestone
                             </a>
                         <?php elseif ($ms['status'] === 'paid'): ?>
                             <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#10b981">
@@ -238,14 +227,48 @@
                                 </button>
                             </div>
                         <?php elseif ($ms['status'] === 'overdue'): ?>
-                            <button type="button" onclick="document.getElementById('extendMsModal-<?= $ms['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                Extend Deadline
-                            </button>
-                            <button type="button" onclick="document.getElementById('rejectExtModal-<?= $ms['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all bg-red-500 hover:bg-red-600">
-                                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                                Reject Extension
-                            </button>
+                            <?php
+                            $ms_ext_req    = (int)($ms['extension_requested'] ?? 0);
+                            $ms_ext_status = $ms['extension_status'] ?? 'none';
+                            ?>
+                            <?php if ($ms_ext_req === 1 && $ms_ext_status === 'pending'): ?>
+                                <!-- Freelancer has a pending extension request -->
+                                <div class="flex items-center justify-between w-full">
+                                    <span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
+                                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        Extension Requested
+                                    </span>
+                                    <div class="flex gap-1.5">
+                                        <form method="POST" style="display:inline">
+                                            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                            <input type="hidden" name="ms_action" value="approve_extension">
+                                            <input type="hidden" name="milestone_id" value="<?= $ms['id'] ?>">
+                                            <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                            <button type="button" onclick="document.getElementById('approveExtModal-<?= $ms['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 transition-all">
+                                                Approve Extension
+                                            </button>
+                                        </form>
+                                        <button type="button" onclick="document.getElementById('rejectExtModal-<?= $ms['id'] ?>').classList.remove('hidden')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 hover:bg-red-600 transition-all">
+                                            Reject Extension
+                                        </button>
+                                    </div>
+                                </div>
+                            <?php elseif ($ms_ext_req === 1 && $ms_ext_status === 'approved'): ?>
+                                <span class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    Extension Approved
+                                </span>
+                            <?php elseif ($ms_ext_req === 1 && $ms_ext_status === 'rejected'): ?>
+                                <span class="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    Extension Rejected
+                                </span>
+                            <?php else: ?>
+                                <span class="inline-flex items-center gap-1 text-xs font-semibold text-red-500">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    Overdue — awaiting freelancer action
+                                </span>
+                            <?php endif; ?>
                         <?php elseif ($ms['status'] === 'cancelled'): ?>
                             <span class="inline-flex items-center gap-1 text-xs font-semibold" style="color:#6b7280">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -328,6 +351,93 @@
                         </div>
                     </div>
 
+                    <!-- Extension Request Info Panel (shown when freelancer has requested extension) -->
+                    <?php
+                    $ms_ext_req2    = (int)($ms['extension_requested'] ?? 0);
+                    $ms_ext_status2 = $ms['extension_status'] ?? 'none';
+                    ?>
+                    <?php if ($ms_ext_req2 === 1): ?>
+                    <div class="mt-3 p-3 rounded-xl" style="background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2)">
+                        <p class="text-xs font-bold uppercase tracking-wider mb-2" style="color:#b45309">Extension Request</p>
+                        <div class="space-y-1 text-xs" style="color:var(--color-text-secondary)">
+                            <?php if (!empty($ms['deadline'])): ?>
+                            <div class="flex justify-between">
+                                <span style="color:var(--color-text-muted)">Current Deadline</span>
+                                <span class="font-semibold"><?= date('M j, Y', strtotime($ms['deadline'])) ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <?php if (!empty($ms['extension_deadline'])): ?>
+                            <div class="flex justify-between">
+                                <span style="color:var(--color-text-muted)">Requested Deadline</span>
+                                <span class="font-semibold text-amber-600"><?= date('M j, Y', strtotime($ms['extension_deadline'])) ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <?php if (!empty($ms['extension_reason'])): ?>
+                            <div class="mt-1">
+                                <span style="color:var(--color-text-muted)">Reason: </span>
+                                <span><?= e($ms['extension_reason']) ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <?php if (!empty($ms['extension_requested_at'])): ?>
+                            <div class="flex justify-between">
+                                <span style="color:var(--color-text-muted)">Requested</span>
+                                <span><?= date('M j, Y g:ia', strtotime($ms['extension_requested_at'])) ?></span>
+                            </div>
+                            <?php endif; ?>
+                            <div class="flex justify-between mt-1">
+                                <span style="color:var(--color-text-muted)">Status</span>
+                                <?php if ($ms_ext_status2 === 'pending'): ?>
+                                    <span class="font-bold text-amber-600">Pending</span>
+                                <?php elseif ($ms_ext_status2 === 'approved'): ?>
+                                    <span class="font-bold text-emerald-600">Approved</span>
+                                <?php elseif ($ms_ext_status2 === 'rejected'): ?>
+                                    <span class="font-bold text-red-500">Rejected</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Approve Extension Modal -->
+                    <?php if (($ms['extension_status'] ?? 'none') === 'pending'): ?>
+                    <div id="approveExtModal-<?= $ms['id'] ?>" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+                        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('approveExtModal-<?= $ms['id'] ?>').classList.add('hidden')"></div>
+                        <div class="relative w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" style="background:var(--color-card);border:1px solid var(--color-border)">
+                            <div class="flex items-center justify-between p-5 border-b" style="border-color:var(--color-border)">
+                                <h3 class="text-base font-bold text-emerald-600">Approve Extension Request</h3>
+                                <button type="button" onclick="document.getElementById('approveExtModal-<?= $ms['id'] ?>').classList.add('hidden')" class="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                                    <svg class="w-5 h-5" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+                            <div class="p-5">
+                                <div class="mb-4 p-3 rounded-lg space-y-1 text-sm" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                                    <p><strong>Milestone:</strong> <?= e($ms['title']) ?></p>
+                                    <?php if (!empty($ms['deadline'])): ?>
+                                    <p><strong>Current Deadline:</strong> <?= date('M j, Y', strtotime($ms['deadline'])) ?></p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($ms['extension_deadline'])): ?>
+                                    <p><strong>New Deadline:</strong> <span class="text-emerald-600 font-bold"><?= date('M j, Y', strtotime($ms['extension_deadline'])) ?></span></p>
+                                    <?php endif; ?>
+                                    <?php if (!empty($ms['extension_reason'])): ?>
+                                    <p><strong>Reason:</strong> <?= e($ms['extension_reason']) ?></p>
+                                    <?php endif; ?>
+                                </div>
+                                <p class="text-sm text-emerald-600 mb-4">Approving will update the deadline and restore the milestone to <strong>In Progress</strong>.</p>
+                                <form method="POST">
+                                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                    <input type="hidden" name="ms_action" value="approve_extension">
+                                    <input type="hidden" name="milestone_id" value="<?= $ms['id'] ?>">
+                                    <input type="hidden" name="job_id" value="<?= $job_id ?>">
+                                    <div class="flex gap-2 justify-end">
+                                        <button type="button" onclick="document.getElementById('approveExtModal-<?= $ms['id'] ?>').classList.add('hidden')" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
+                                        <button type="submit" class="px-4 py-2 text-sm font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-all" onclick="return confirm('Approve this extension request?')">Approve Extension</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
                     <!-- Reject Extension Modal -->
                     <div id="rejectExtModal-<?= $ms['id'] ?>" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
                         <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('rejectExtModal-<?= $ms['id'] ?>').classList.add('hidden')"></div>
@@ -339,22 +449,23 @@
                                 </button>
                             </div>
                             <div class="p-5">
+                                <?php if (!empty($ms['extension_reason'])): ?>
+                                <div class="mb-3 p-3 rounded-lg text-sm" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                                    <p><strong>Freelancer's Reason:</strong> <?= e($ms['extension_reason']) ?></p>
+                                </div>
+                                <?php endif; ?>
                                 <form method="POST">
                                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                     <input type="hidden" name="ms_action" value="reject_extension">
                                     <input type="hidden" name="milestone_id" value="<?= $ms['id'] ?>">
-
-                                    <div class="mb-4">
-                                        <label class="block text-sm font-medium mb-1" style="color:var(--color-text-secondary)">Rejection Reason <span class="text-red-500">*</span></label>
-                                        <textarea name="rejection_reason" required rows="3" placeholder="Explain why the extension request is rejected..." class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow"></textarea>
-                                    </div>
-
+                                    <input type="hidden" name="job_id" value="<?= $job_id ?>">
                                     <div class="flex gap-2 justify-end">
                                         <button type="button" onclick="document.getElementById('rejectExtModal-<?= $ms['id'] ?>').classList.add('hidden')" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
-                                        <button type="submit" class="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-all">Reject Extension</button>
+                                        <button type="submit" class="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition-all" onclick="return confirm('Reject this extension request?')">Reject Extension</button>
                                     </div>
                                 </form>
                             </div>
                         </div>
                     </div>
                 </div>
+

@@ -207,6 +207,7 @@ function get_messages(mysqli $conn, int $user_id, int $other_user_id, int $offse
     if ($role === 'admin') {
         $stmt = $conn->prepare("
             SELECT m.id, m.sender_id, m.receiver_id, m.message, m.message_type, m.message_meta, m.status, m.created_at, m.is_edited, m.is_deleted, m.hidden_for,
+                   m.attachment_name, m.attachment_path, m.attachment_size, m.attachment_type,
                    u_sender.username AS sender_username, u_sender.profile_image AS sender_profile_image,
                    u_receiver.username AS receiver_username
             FROM messages m
@@ -220,6 +221,7 @@ function get_messages(mysqli $conn, int $user_id, int $other_user_id, int $offse
     } else {
         $stmt = $conn->prepare("
             SELECT m.id, m.sender_id, m.receiver_id, m.message, m.message_type, m.message_meta, m.status, m.created_at, m.is_edited, m.is_deleted, m.hidden_for,
+                   m.attachment_name, m.attachment_path, m.attachment_size, m.attachment_type,
                    u_sender.username AS sender_username, u_sender.profile_image AS sender_profile_image,
                    u_receiver.username AS receiver_username
             FROM messages m
@@ -349,35 +351,42 @@ function format_message_date(string $datetime): string
 
 // ============ ENHANCED FUNCTIONS ============
 
-function message_attachments_table_exists(mysqli $conn): bool
-{
-    static $exists = null;
-    if ($exists === null) {
-        $result = $conn->query("SHOW TABLES LIKE 'message_attachments'");
-        $exists = $result && $result->num_rows > 0;
-    }
-    return $exists;
-}
-
 function send_message_with_attachment(mysqli $conn, int $sender_id, int $receiver_id, string $message, ?array $file = null, string $message_type = 'text'): ?int
 {
     if (!messages_table_exists($conn)) return null;
 
-    $stmt = $conn->prepare('INSERT INTO messages (sender_id, receiver_id, message, message_type) VALUES (?, ?, ?, ?)');
-    $stmt->bind_param('iiss', $sender_id, $receiver_id, $message, $message_type);
+    $att_name = null;
+    $att_path = null;
+    $att_size = null;
+    $att_type = null;
+
+    if ($file !== null && !empty($file['name'])) {
+        $att = upload_chat_attachment($file);
+        if ($att !== null) {
+            $att_name = $att['name'];
+            $att_path = $att['path'];
+            $att_size = $att['size'];
+            $att_type = $att['type'];
+        }
+    }
+
+    // Reject if there is neither message text nor a valid attachment
+    if ($message === '' && $att_name === null) {
+        return null;
+    }
+
+    // Store NULL instead of empty string for attachment-only messages so that
+    // the JS `if (msg.message)` check correctly suppresses the text bubble.
+    $msg_text = ($message !== '') ? $message : null;
+
+    // Fix: type string must be 'iissssss' — $message is a string (s), not integer (i).
+    // The old 'iiisssis' had 'i' at position 3 for $message, which cast empty strings
+    // to integer 0 and stored the literal "0" in the database.
+    $stmt = $conn->prepare('INSERT INTO messages (sender_id, receiver_id, message, message_type, attachment_name, attachment_path, attachment_size, attachment_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->bind_param('iissssss', $sender_id, $receiver_id, $msg_text, $message_type, $att_name, $att_path, $att_size, $att_type);
     $stmt->execute();
     $message_id = (int) $stmt->insert_id;
     $stmt->close();
-
-    if ($message_id > 0 && $file !== null && !empty($file['name'])) {
-        $att = upload_chat_attachment($file);
-        if ($att !== null) {
-            $stmt = $conn->prepare('INSERT INTO message_attachments (message_id, file_name, file_path, file_size, file_type) VALUES (?, ?, ?, ?, ?)');
-            $stmt->bind_param('issis', $message_id, $att['name'], $att['path'], $att['size'], $att['type']);
-            $stmt->execute();
-            $stmt->close();
-        }
-    }
 
     // Update or create conversation
     $u1 = min($sender_id, $receiver_id);
@@ -416,30 +425,6 @@ function upload_chat_attachment(array $file): ?array
         'size' => $file['size'],
         'type' => $ext,
     ];
-}
-
-function get_message_attachments(mysqli $conn, int $message_id): array
-{
-    if (!message_attachments_table_exists($conn)) return [];
-    $stmt = $conn->prepare('SELECT id, file_name, file_path, file_size, file_type FROM message_attachments WHERE message_id = ?');
-    $stmt->bind_param('i', $message_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $attachments = [];
-    while ($row = $result->fetch_assoc()) {
-        $row['file_url'] = chat_file_url($row['file_path']);
-        $size = (int) $row['file_size'];
-        if ($size > 1048576) {
-            $row['file_size_formatted'] = round($size / 1048576, 1) . ' MB';
-        } elseif ($size > 1024) {
-            $row['file_size_formatted'] = round($size / 1024, 1) . ' KB';
-        } else {
-            $row['file_size_formatted'] = $size . ' B';
-        }
-        $attachments[] = $row;
-    }
-    $stmt->close();
-    return $attachments;
 }
 
 function set_typing_status(mysqli $conn, int $user_id, int $partner_id, bool $is_typing): void
@@ -483,14 +468,31 @@ function get_messages_enhanced(mysqli $conn, int $user_id, int $other_user_id, i
 {
     $msgs = get_messages($conn, $user_id, $other_user_id, $offset, $limit);
 
-    // Attach attachment data
-    if (!empty($msgs) && message_attachments_table_exists($conn)) {
+    if (!empty($msgs)) {
         foreach ($msgs as &$msg) {
             if ($msg['is_deleted']) {
                 $msg['message'] = 'This message was deleted';
                 $msg['attachments'] = [];
             } else {
-                $msg['attachments'] = get_message_attachments($conn, (int) $msg['id']);
+                $msg['attachments'] = [];
+                if (!empty($msg['attachment_name'])) {
+                    $size = (int) ($msg['attachment_size'] ?? 0);
+                    if ($size > 1048576) {
+                        $size_formatted = round($size / 1048576, 1) . ' MB';
+                    } elseif ($size > 1024) {
+                        $size_formatted = round($size / 1024, 1) . ' KB';
+                    } else {
+                        $size_formatted = $size . ' B';
+                    }
+                    $msg['attachments'][] = [
+                        'file_name' => $msg['attachment_name'],
+                        'file_path' => $msg['attachment_path'],
+                        'file_url' => chat_file_url($msg['attachment_path']),
+                        'file_size' => $msg['attachment_size'],
+                        'file_size_formatted' => $size_formatted,
+                        'file_type' => $msg['attachment_type'],
+                    ];
+                }
             }
         }
     }

@@ -70,7 +70,8 @@ if ($payment) {
     }
 
     if (!empty($payment['transaction_slip'])) {
-        $slip_path = base_url('uploads/slips/' . $payment['transaction_slip']);
+        $slip_path = base_url('api/view_slip.php?payment_id=' . $payment['id']);
+        $download_path = base_url('api/download_slip.php?payment_id=' . $payment['id']);
         $slip_ext = strtolower(pathinfo($payment['transaction_slip'], PATHINFO_EXTENSION));
     }
 }
@@ -174,7 +175,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 </svg>
                                 View Full Size
                             </a>
-                            <a href="<?= $slip_path ?>" download class="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            <a href="<?= $download_path ?>" download class="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                                 <svg class="-ml-0.5 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                                 </svg>
@@ -186,10 +187,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex items-center justify-center min-h-[300px]">
                         <?php if ($slip_ext === 'pdf'): ?>
                             <object data="<?= $slip_path ?>" type="application/pdf" width="100%" height="500px" class="rounded-lg">
-                                <p>Your browser does not support PDFs. <a href="<?= $slip_path ?>" class="text-indigo-600 hover:underline">Download the PDF</a>.</p>
+                                <p>Your browser does not support PDFs. <a href="<?= $download_path ?>" class="text-indigo-600 hover:underline">Download the PDF</a>.</p>
                             </object>
                         <?php elseif (in_array($slip_ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'])): ?>
-                            <img src="<?= $slip_path ?>" alt="Transaction Slip" class="max-w-full max-h-[600px] object-contain rounded-lg shadow-sm">
+                            <img src="<?= $slip_path ?>" alt="Transaction Slip" class="max-w-full max-h-[600px] object-contain rounded-lg shadow-sm" onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'text-center p-6\'><svg class=\'mx-auto h-12 w-12 text-slate-400 mb-2\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'currentColor\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z\'/></svg><h3 class=\'text-sm font-medium text-slate-900 dark:text-white\'>Image Unavailable</h3><p class=\'text-xs text-slate-500 mt-1\'>The slip image could not be loaded or is missing.</p></div>';">
                         <?php else: ?>
                             <div class="text-center">
                                 <svg class="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

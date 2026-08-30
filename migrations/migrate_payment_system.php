@@ -35,19 +35,7 @@ try {
 
     $conn->query("ALTER TABLE payments MODIFY COLUMN status ENUM('pending','paid', 'failed') DEFAULT 'pending'");
 
-    // 6. Create freelancer_payment_settings
-    $conn->query("CREATE TABLE IF NOT EXISTS freelancer_payment_settings (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        freelancer_id INT NOT NULL,
-        method ENUM('kpay', 'wavepay', 'bank_transfer') NOT NULL,
-        account_name VARCHAR(100) NOT NULL,
-        account_number VARCHAR(100) NOT NULL,
-        bank_name VARCHAR(100) DEFAULT NULL,
-        is_default TINYINT(1) DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_freelancer_method (freelancer_id, method)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+    // 6. Removed freelancer_payment_settings creation
 
     $conn->commit();
     echo "Migration completed successfully.\n";

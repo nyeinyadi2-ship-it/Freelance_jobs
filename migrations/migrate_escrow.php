@@ -118,7 +118,6 @@ if (tableExists($conn, 'submissions')) {
             `assignment_id` INT NOT NULL,
             `freelancer_id` INT NOT NULL,
             `file_path` VARCHAR(255) DEFAULT NULL,
-            `project_url` VARCHAR(500) DEFAULT NULL,
             `notes` TEXT,
             `version` INT DEFAULT 1,
             `status` ENUM('pending','revision_requested','approved') DEFAULT 'pending',

@@ -8,23 +8,34 @@ if (!$user) {
     die('Unauthorized');
 }
 
+$payment_id = (int)($_GET['payment_id'] ?? 0);
 $milestone_id = (int)($_GET['milestone_id'] ?? 0);
 $assignment_id = (int)($_GET['assignment_id'] ?? 0);
 
-if ($milestone_id <= 0 && $assignment_id <= 0) {
+if ($payment_id <= 0 && $milestone_id <= 0 && $assignment_id <= 0) {
     http_response_code(400);
     die('Invalid request');
 }
 
-$file_name = '';
-$company_user_id = 0;
-$freelancer_user_id = 0;
+$payment = null;
 
-if ($milestone_id > 0) {
+if ($payment_id > 0) {
     $stmt = $conn->prepare("
         SELECT p.transaction_slip, c.user_id AS company_user_id, f.user_id AS freelancer_user_id
         FROM payments p
-        JOIN companies c ON p.company_id = c.id
+        LEFT JOIN companies c ON p.company_id = c.id
+        LEFT JOIN freelancers f ON p.freelancer_id = f.id
+        WHERE p.id = ?
+    ");
+    $stmt->bind_param('i', $payment_id);
+    $stmt->execute();
+    $payment = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+} elseif ($milestone_id > 0) {
+    $stmt = $conn->prepare("
+        SELECT p.transaction_slip, c.user_id AS company_user_id, f.user_id AS freelancer_user_id
+        FROM payments p
+        LEFT JOIN companies c ON p.company_id = c.id
         LEFT JOIN freelancers f ON p.freelancer_id = f.id
         WHERE p.milestone_id = ?
         ORDER BY p.id DESC LIMIT 1
@@ -37,7 +48,7 @@ if ($milestone_id > 0) {
     $stmt = $conn->prepare("
         SELECT p.transaction_slip, c.user_id AS company_user_id, f.user_id AS freelancer_user_id
         FROM payments p
-        JOIN companies c ON p.company_id = c.id
+        LEFT JOIN companies c ON p.company_id = c.id
         LEFT JOIN freelancers f ON p.freelancer_id = f.id
         WHERE p.assignment_id = ?
         ORDER BY p.id DESC LIMIT 1
@@ -58,7 +69,7 @@ $company_user_id = $payment['company_user_id'];
 $freelancer_user_id = $payment['freelancer_user_id'];
 
 if ($company_user_id != $user['user_id'] && $freelancer_user_id != $user['user_id']) {
-    if ($user['role'] !== 'admin') {
+    if (($user['role'] ?? '') !== 'admin') {
         http_response_code(403);
         die('Forbidden');
     }
@@ -75,17 +86,26 @@ if (!file_exists($file_path)) {
     die('Slip file not found on server');
 }
 
-$mime = mime_content_type($file_path);
+$mime = function_exists('mime_content_type') ? @mime_content_type($file_path) : null;
 if (!$mime) {
-    $mime = 'application/octet-stream';
+    $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+    $mime = match($ext) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'pdf' => 'application/pdf',
+        default => 'application/octet-stream'
+    };
 }
 
 header('Content-Description: File Transfer');
 header('Content-Type: ' . $mime);
-header('Content-Disposition: inline; filename="' . basename($file_name) . '"');
+header('Content-Disposition: attachment; filename="' . basename($file_name) . '"');
 header('Content-Transfer-Encoding: binary');
 header('Expires: 0');
 header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
 header('Pragma: public');
 header('Content-Length: ' . filesize($file_path));
 readfile($file_path);
+exit;

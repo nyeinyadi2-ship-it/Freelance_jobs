@@ -26,47 +26,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($ms_action === 'submit' && $post_milestone_id > 0) {
         $st = $conn->prepare("
-            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline
+            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, a.id as assignment_id, a.freelancer_id as asgn_fl_id, m.freelancer_id as ms_fl_id
             FROM milestones m
-            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
-            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'revision_requested', 'overdue')
-              AND m.freelancer_id = ?
+            LEFT JOIN assignments a ON a.job_id = m.job_id AND (a.freelancer_id = m.freelancer_id OR a.freelancer_id = ?)
+            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'overdue', 'revision_requested')
+              AND (m.freelancer_id = ? OR a.freelancer_id = ? OR m.freelancer_id IN (SELECT id FROM freelancers WHERE user_id = ?))
         ");
-        $st->bind_param('iii', $fl_freelancer_id, $post_milestone_id, $fl_freelancer_id);
+        $st->bind_param('iiiii', $fl_freelancer_id, $post_milestone_id, $fl_freelancer_id, $fl_freelancer_id, $fl_uid);
         $st->execute();
         $ms_check = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($ms_check) {
-            $now_dt = new DateTime();
-            $ms_dl = !empty($ms_check['ms_deadline']) ? new DateTime($ms_check['ms_deadline']) : null;
-            if ($ms_dl && $ms_dl <= $now_dt) {
+            if (is_deadline_passed($ms_check['ms_deadline'])) {
                 set_flash('error', 'Submission blocked: Deadline has passed.');
                 redirect('freelancer/milestone.php?id=' . $post_milestone_id);
             }
 
-            foreach (['submission_file', 'submission_note'] as $col) {
-                $chk = $conn->query("SHOW COLUMNS FROM milestones LIKE '$col'");
-                if (!$chk || $chk->num_rows === 0) {
-                    $type = $col === 'submission_note' ? 'TEXT DEFAULT NULL' : 'VARCHAR(255) DEFAULT NULL AFTER submission_link';
-                    $conn->query("ALTER TABLE milestones ADD COLUMN $col $type");
-                }
-            }
-
-            $submission_link = ''; // No longer used
             $submission_note = trim($_POST['submission_note'] ?? '');
             $submission_file = null;
 
+            $upload_err = null;
             if (!empty($_FILES['submission_file']['name'])) {
-                $submission_file = upload_attachment($_FILES['submission_file']);
+                $submission_file = upload_attachment($_FILES['submission_file'], 500 * 1024 * 1024, $upload_err);
                 if ($submission_file === null) {
-                    set_flash('error', 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.');
+                    $msg = $upload_err ? 'File upload error: ' . $upload_err : 'Invalid file. Allowed: JPG, PNG, GIF, WebP, PDF, DOCX, ZIP, RAR. Max 500MB.';
+                    set_flash('error', $msg);
                     redirect('freelancer/milestone.php?id=' . $post_milestone_id);
                 }
             }
 
-            if ($submission_file === null) {
-                set_flash('error', 'Please upload your completed work before submitting.');
+            if (empty($submission_file)) {
+                set_flash('error', 'Please upload a file to submit your work.');
                 redirect('freelancer/milestone.php?id=' . $post_milestone_id);
             }
 
@@ -74,15 +65,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 $now = date('Y-m-d H:i:s');
                 $file_for_db = $submission_file ?? '';
+                $link_for_db = '';
                 $st = $conn->prepare("UPDATE milestones SET submission_link=?, submission_file=?, submission_note=?, status='submitted', submitted_at=? WHERE id=?");
-                $st->bind_param('ssssi', $submission_link, $file_for_db, $submission_note, $now, $post_milestone_id);
+                $st->bind_param('ssssi', $link_for_db, $file_for_db, $submission_note, $now, $post_milestone_id);
                 $st->execute();
                 $st->close();
 
-                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
-                $st->bind_param('ii', $ms_check['job_id'], $fl_freelancer_id);
-                $st->execute();
-                $st->close();
+                $assignment_id = (int) ($ms_check['assignment_id'] ?? 0);
+                if ($assignment_id > 0) {
+                    $v_stmt = $conn->prepare("SELECT COALESCE(MAX(version), 0) + 1 FROM submissions WHERE assignment_id = ?");
+                    $v_stmt->bind_param('i', $assignment_id);
+                    $v_stmt->execute();
+                    $version = (int) ($v_stmt->get_result()->fetch_row()[0] ?? 1);
+                    $v_stmt->close();
+
+                    $sub_file = !empty($submission_file) ? $submission_file : null;
+                    $sub_link = null;
+                    $sub_notes = !empty($submission_note) ? $submission_note : null;
+                    $sub_fl_id = (int) ($ms_check['asgn_fl_id'] ?: ($ms_check['ms_fl_id'] ?: $fl_freelancer_id));
+
+                    $sub_st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, file_path, github_link, notes, version, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
+                    $sub_st->bind_param('iisssi', $assignment_id, $sub_fl_id, $sub_file, $sub_link, $sub_notes, $version);
+                    $sub_st->execute();
+                    $sub_st->close();
+
+                    $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE id=? AND status IN ('working', 'assigned', 'overdue', 'revision_requested')");
+                    $st->bind_param('i', $assignment_id);
+                    $st->execute();
+                    $st->close();
+                }
 
                 $conn->commit();
 
@@ -94,19 +105,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms_check['job_id'], $user_id);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms_check['job_id'], $fl_uid);
                     }
-                } catch (Exception $ne) {
+                } catch (Throwable $ne) {
                     error_log("Notification failed after submission: " . $ne->getMessage());
                 }
 
                 set_flash('success', 'Work submitted for review!');
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $conn->rollback();
                 if ($submission_file !== null) {
                     delete_attachment($submission_file);
                 }
-                set_flash('error', 'Failed to submit work. Please try again.');
+                error_log('Submission error: ' . $e->getMessage());
+                set_flash('error', 'Failed to submit your work. Please check your submission details and try again.');
             }
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
@@ -121,39 +133,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('freelancer/milestone.php?id=' . $post_milestone_id);
         }
 
-        $st = $conn->prepare("SELECT m.id, m.freelancer_id, m.deadline FROM milestones m WHERE m.id = ? AND m.freelancer_id = ? AND m.status IN ('overdue', 'in_progress', 'funded')");
+        // Fetch milestone — must belong to this freelancer and be in an eligible status
+        $st = $conn->prepare("
+            SELECT m.id, m.freelancer_id, m.deadline, m.status, m.extension_requested, m.job_id
+            FROM milestones m
+            WHERE m.id = ? AND m.freelancer_id = ?
+              AND m.status IN ('overdue', 'in_progress', 'funded')
+        ");
         $st->bind_param('ii', $post_milestone_id, $fl_freelancer_id);
         $st->execute();
         $ms = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($ms) {
-            // Check if there's already a pending request
-            $chk = $conn->prepare("SELECT id FROM milestone_extensions WHERE milestone_id = ? AND status = 'pending'");
-            $chk->bind_param('i', $post_milestone_id);
-            $chk->execute();
-            if ($chk->get_result()->num_rows > 0) {
-                $chk->close();
-                set_flash('error', 'You already have a pending extension request for this milestone.');
+            // One-time extension rule: if already requested (pending/approved/rejected), block
+            if ((int)$ms['extension_requested'] === 1) {
+                set_flash('error', 'You have already submitted an extension request for this milestone. Only one request is allowed.');
                 redirect('freelancer/milestone.php?id=' . $post_milestone_id);
             }
-            $chk->close();
 
             $current_deadline = $ms['deadline'] ?? date('Y-m-d H:i:s');
-            $requested_dt = date('Y-m-d H:i:s', strtotime($requested_deadline));
+            $requested_dt    = date('Y-m-d H:i:s', strtotime($requested_deadline));
+            $now_ts          = date('Y-m-d H:i:s');
 
-            $ins = $conn->prepare("INSERT INTO milestone_extensions (milestone_id, freelancer_id, current_deadline, requested_deadline, reason) VALUES (?, ?, ?, ?, ?)");
-            $ins->bind_param('iiisss', $post_milestone_id, $fl_freelancer_id, $current_deadline, $requested_dt, $reason);
-            $ins->execute();
-            $ins->close();
+            // Atomic update — only succeeds if extension_requested is still 0 (prevents double-click)
+            $upd = $conn->prepare("
+                UPDATE milestones
+                SET extension_requested    = 1,
+                    extension_deadline     = ?,
+                    extension_reason       = ?,
+                    extension_status       = 'pending',
+                    extension_requested_at = ?
+                WHERE id = ? AND extension_requested = 0
+            ");
+            $upd->bind_param('sssi', $requested_dt, $reason, $now_ts, $post_milestone_id);
+            $upd->execute();
+            $affected = $upd->affected_rows;
+            $upd->close();
 
-            // Update milestone extension_reason
-            $up = $conn->prepare("UPDATE milestones SET extension_reason = ? WHERE id = ?");
-            $up->bind_param('si', $reason, $post_milestone_id);
-            $up->execute();
-            $up->close();
+            if ($affected === 0) {
+                set_flash('error', 'Extension request already submitted for this milestone.');
+                redirect('freelancer/milestone.php?id=' . $post_milestone_id);
+            }
 
-            // Record history (EXTENSION_REQUESTED)
+            // Record history — EXTENSION_REQUESTED
             record_milestone_history(
                 $conn,
                 $post_milestone_id,
@@ -163,23 +186,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ms['status'],
                 $ms['status'],
                 'EXTENSION_REQUESTED',
-                "Requested extension to " . date('Y-m-d H:i:s', strtotime($requested_dt)) . ". Reason: $reason",
+                'Requested extension to ' . date('Y-m-d', strtotime($requested_dt)) . '. Reason: ' . $reason,
                 $current_deadline,
                 $requested_dt
             );
 
             // Notify company
             try {
-                $ns = $conn->prepare("SELECT j.title, c.user_id FROM milestones m JOIN jobs j ON m.job_id = j.id JOIN companies c ON j.company_id = c.id WHERE m.id = ?");
+                $ns = $conn->prepare("SELECT j.title, j.id AS job_id, c.user_id FROM milestones m JOIN jobs j ON m.job_id = j.id JOIN companies c ON j.company_id = c.id WHERE m.id = ?");
                 $ns->bind_param('i', $post_milestone_id);
                 $ns->execute();
                 $ni = $ns->get_result()->fetch_assoc();
                 $ns->close();
                 if ($ni) {
-                    create_notification($conn, (int) $ni['user_id'], 'admin_announcement', "Requested a deadline extension for a milestone in \"{$ni['title']}\".", 'company/view_applications.php?id=' . $ms['job_id'], $user_id);
+                    create_notification($conn, (int)$ni['user_id'], 'admin_announcement', "Requested a deadline extension for a milestone in \"{$ni['title']}\".", 'company/view_applications.php?id=' . $ni['job_id'], $fl_uid);
                 }
             } catch (Exception $ne) {
-                error_log("Notification failed: " . $ne->getMessage());
+                error_log('Notification failed: ' . $ne->getMessage());
             }
 
             set_flash('success', 'Extension request submitted. Waiting for company approval.');
@@ -190,21 +213,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($ms_action === 'quick_submit' && $post_milestone_id > 0) {
         // Quick submit: change status to submitted without requiring link/file
         $st = $conn->prepare("
-            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline
+            SELECT m.id, m.job_id, m.status, m.deadline as ms_deadline, a.id as assignment_id, a.freelancer_id as asgn_fl_id, m.freelancer_id as ms_fl_id
             FROM milestones m
-            JOIN assignments a ON a.job_id = m.job_id AND a.freelancer_id = ?
-            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'revision_requested', 'overdue')
-              AND m.freelancer_id = ?
+            LEFT JOIN assignments a ON a.job_id = m.job_id AND (a.freelancer_id = m.freelancer_id OR a.freelancer_id = ?)
+            WHERE m.id = ? AND m.status IN ('funded', 'in_progress', 'overdue', 'revision_requested')
+              AND (m.freelancer_id = ? OR a.freelancer_id = ? OR m.freelancer_id IN (SELECT id FROM freelancers WHERE user_id = ?))
         ");
-        $st->bind_param('iii', $fl_freelancer_id, $post_milestone_id, $fl_freelancer_id);
+        $st->bind_param('iiiii', $fl_freelancer_id, $post_milestone_id, $fl_freelancer_id, $fl_freelancer_id, $fl_uid);
         $st->execute();
         $ms_check = $st->get_result()->fetch_assoc();
         $st->close();
 
         if ($ms_check) {
-            $now_dt = new DateTime();
-            $ms_dl = !empty($ms_check['ms_deadline']) ? new DateTime($ms_check['ms_deadline']) : null;
-            if ($ms_dl && $ms_dl <= $now_dt) {
+            if (is_deadline_passed($ms_check['ms_deadline'])) {
                 set_flash('error', 'Submission blocked: Deadline has passed.');
                 redirect('freelancer/milestone.php?id=' . $post_milestone_id);
             }
@@ -217,10 +238,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $st->execute();
                 $st->close();
 
-                $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE job_id=? AND freelancer_id=? AND status IN ('working', 'assigned')");
-                $st->bind_param('ii', $ms_check['job_id'], $fl_freelancer_id);
-                $st->execute();
-                $st->close();
+                $assignment_id = (int) ($ms_check['assignment_id'] ?? 0);
+                if ($assignment_id > 0) {
+                    $v_stmt = $conn->prepare("SELECT COALESCE(MAX(version), 0) + 1 FROM submissions WHERE assignment_id = ?");
+                    $v_stmt->bind_param('i', $assignment_id);
+                    $v_stmt->execute();
+                    $version = (int) ($v_stmt->get_result()->fetch_row()[0] ?? 1);
+                    $v_stmt->close();
+
+                    $quick_note = "Quick submission for milestone #" . $ms_check['id'];
+                    $sub_fl_id = (int) ($ms_check['asgn_fl_id'] ?: ($ms_check['ms_fl_id'] ?: $fl_freelancer_id));
+
+                    $sub_st = $conn->prepare("INSERT INTO submissions (assignment_id, freelancer_id, notes, version, status) VALUES (?, ?, ?, ?, 'pending')");
+                    $sub_st->bind_param('iisi', $assignment_id, $sub_fl_id, $quick_note, $version);
+                    $sub_st->execute();
+                    $sub_st->close();
+
+                    $st = $conn->prepare("UPDATE assignments SET status='submitted' WHERE id=? AND status IN ('working', 'assigned', 'overdue', 'revision_requested', 'not_started', 'in_progress') AND status != 'completed'");
+                    $st->bind_param('i', $assignment_id);
+                    $st->execute();
+                    $st->close();
+                }
 
                 $conn->commit();
 
@@ -231,16 +269,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ni = $ns->get_result()->fetch_assoc();
                     $ns->close();
                     if ($ni) {
-                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms_check['job_id'], $user_id);
+                        create_notification($conn, (int) $ni['user_id'], 'work_submitted', "Submitted work for a milestone.", 'company/view_applications.php?id=' . $ms_check['job_id'], $fl_uid);
                     }
-                } catch (Exception $ne) {
+                } catch (Throwable $ne) {
                     error_log("Notification failed after submission: " . $ne->getMessage());
                 }
 
                 set_flash('success', 'Milestone submitted for review!');
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $conn->rollback();
-                set_flash('error', 'Failed to submit milestone. Please try again.');
+                error_log('Submission error: ' . $e->getMessage());
+                set_flash('error', 'Failed to submit your work. Please check your submission details and try again.');
             }
         } else {
             set_flash('error', 'Milestone not found or not ready for submission.');
@@ -302,8 +341,8 @@ $progress = count($all_ms) > 0 ? round(($approved_count / count($all_ms)) * 100)
 
 require __DIR__ . '/../includes/freelancer_layout.php';
 
-$status_labels = ['draft'=>'Draft','funded'=>'Funded','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved','revision_requested'=>'Revision Requested','payment_pending'=>'Payment Pending','paid'=>'Received','overdue'=>'Overdue','cancelled'=>'Cancelled'];
-$escrow_labels = ['held'=>'Held in Escrow','released'=>'Released','refunded'=>'Refunded'];
+$status_labels = ['draft'=>'Draft','funded'=>'In Progress','in_progress'=>'In Progress','submitted'=>'Under Review','approved'=>'Approved','revision_requested'=>'Revision Requested','payment_pending'=>'Payment Pending','paid'=>'Received','overdue'=>'Overdue','cancelled'=>'Cancelled'];
+$escrow_labels = ['held'=>'In Progress','released'=>'Released','refunded'=>'Refunded'];
 $escrow_colors = ['held'=>'#f59e0b','released'=>'#10b981','refunded'=>'#ef4444'];
 $draft_enabled = ($milestone['status'] === 'draft');
 ?>
@@ -316,7 +355,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
 .ms-submitted-lg { background:rgba(139,92,246,0.1); color:#8b5cf6; }
 .ms-approved-lg { background:rgba(16,185,129,0.1); color:#10b981; }
 .ms-payment_pending-lg { background:rgba(245,158,11,0.1); color:#f59e0b; }
-.ms-revision_requested-lg { background:rgba(239,68,68,0.1); color:#ef4444; }
+.ms-revision_requested-lg { background:rgba(245,158,11,0.1); color:#f59e0b; }
 .ms-overdue-lg { background:rgba(220,38,38,0.1); color:#dc2626; }
 .ms-cancelled-lg { background:rgba(107,114,128,0.1); color:#6b7280; }
 
@@ -413,7 +452,6 @@ $draft_enabled = ($milestone['status'] === 'draft');
             </div>
             <?php endif; ?>
 
-            <!-- Overdue Warning -->
             <?php if ($milestone['status'] === 'overdue'): ?>
             <div class="rounded-2xl p-4 flex items-start gap-3 mb-6" style="background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.15)">
                 <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
@@ -426,29 +464,51 @@ $draft_enabled = ($milestone['status'] === 'draft');
                             <?= date('F j, Y \a\t g:ia', strtotime($milestone['deadline'])) ?>
                         </div>
                     <?php endif; ?>
+
                     <?php
-                    $has_pending_ext = false;
-                    $chk_ext = $conn->prepare("SELECT id FROM milestone_extensions WHERE milestone_id = ? AND status = 'pending'");
-                    $chk_ext->bind_param('i', $milestone['id']);
-                    $chk_ext->execute();
-                    if ($chk_ext->get_result()->num_rows > 0) $has_pending_ext = true;
-                    $chk_ext->close();
+                    $ext_requested = (int)($milestone['extension_requested'] ?? 0);
+                    $ext_status    = $milestone['extension_status'] ?? 'none';
                     ?>
-                    <?php if (!$has_pending_ext): ?>
-                    <button type="button" onclick="document.getElementById('requestExtModal').classList.remove('hidden')" class="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        Request Extension
-                    </button>
-                    <?php else: ?>
-                    <div class="mt-3 p-3 rounded-lg text-xs font-semibold text-amber-700" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">
-                        <svg class="w-4 h-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        Extension request pending — waiting for company review
-                    </div>
+
+                    <?php if ($ext_requested === 0): ?>
+                        <!-- No extension requested yet — show button -->
+                        <button type="button" onclick="document.getElementById('requestExtModal').classList.remove('hidden')" class="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition-all" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)">
+                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Request Extension
+                        </button>
+
+                    <?php elseif ($ext_status === 'pending'): ?>
+                        <!-- Extension pending company review -->
+                        <div class="mt-3 p-3 rounded-lg text-xs font-semibold text-amber-700" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Extension request <strong>Pending</strong> — waiting for company review
+                            <?php if (!empty($milestone['extension_deadline'])): ?>
+                                <p class="mt-1 font-normal">Requested new deadline: <strong><?= date('M j, Y', strtotime($milestone['extension_deadline'])) ?></strong></p>
+                            <?php endif; ?>
+                        </div>
+
+                    <?php elseif ($ext_status === 'approved'): ?>
+                        <!-- Extension approved — show new deadline -->
+                        <div class="mt-3 p-3 rounded-lg text-xs font-semibold text-emerald-700" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2)">
+                            <svg class="w-4 h-4 inline mr-1 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Extension <strong>Approved</strong>
+                            <?php if (!empty($milestone['deadline'])): ?>
+                                <p class="mt-1 font-normal">New deadline: <strong><?= date('M j, Y', strtotime($milestone['deadline'])) ?></strong></p>
+                            <?php endif; ?>
+                        </div>
+
+                    <?php elseif ($ext_status === 'rejected'): ?>
+                        <!-- Extension rejected -->
+                        <div class="mt-3 p-3 rounded-lg text-xs font-semibold text-red-700" style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2)">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            Extension <strong>Rejected</strong> — original deadline remains unchanged. No further extension requests are allowed.
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>
 
             <!-- Request Extension Modal -->
+            <?php if ($ext_requested === 0): ?>
             <div id="requestExtModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
                 <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('requestExtModal').classList.add('hidden')"></div>
                 <div class="relative w-full max-w-md rounded-2xl shadow-2xl overflow-hidden" style="background:var(--color-card);border:1px solid var(--color-border)">
@@ -459,7 +519,7 @@ $draft_enabled = ($milestone['status'] === 'draft');
                         </button>
                     </div>
                     <div class="p-5">
-                        <form method="POST">
+                        <form method="POST" id="extRequestForm">
                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="ms_action" value="request_extension">
                             <input type="hidden" name="milestone_id" value="<?= (int) $milestone['id'] ?>">
@@ -479,14 +539,18 @@ $draft_enabled = ($milestone['status'] === 'draft');
                                 <textarea name="extension_reason" required rows="3" placeholder="Explain why you need more time..." class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white transition-shadow"></textarea>
                             </div>
 
+                            <div id="extFormError" class="hidden mb-4 p-3 rounded-lg text-xs font-semibold text-red-700 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800"></div>
+                            <div id="extFormSuccess" class="hidden mb-4 p-3 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800"></div>
+
                             <div class="flex gap-2 justify-end">
                                 <button type="button" onclick="document.getElementById('requestExtModal').classList.add('hidden')" class="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">Cancel</button>
-                                <button type="submit" class="px-4 py-2 text-sm font-semibold text-white rounded-lg transition-all" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)" onclick="return confirm('Submit extension request?')">Submit Request</button>
+                                <button type="submit" id="extSubmitBtn" class="px-4 py-2 text-sm font-semibold text-white rounded-lg transition-all" style="background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 2px 8px rgba(59,130,246,0.3)">Submit Request</button>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
+            <?php endif; ?>
             <?php endif; ?>
 
             <!-- Action Area -->
@@ -508,95 +572,27 @@ $draft_enabled = ($milestone['status'] === 'draft');
                     </div>
                 </div>
 
-            <?php elseif ($milestone['status'] === 'in_progress'): ?>
+            <?php elseif (in_array($milestone['status'], ['in_progress', 'funded', 'revision_requested'], true)): ?>
                 <div class="glass rounded-2xl p-6 reveal">
                     <div class="flex items-center gap-3 mb-3">
                         <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background:rgba(99,102,241,0.1)">
                             <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </div>
                         <div>
-                            <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Work in Progress</h2>
-                            <p class="text-xs" style="color:var(--color-text-muted)">Upload your deliverables when ready</p>
+                            <h2 class="text-lg font-bold" style="color:var(--color-text-primary)"><?= $milestone['status'] === 'revision_requested' ? 'Resubmit Deliverables' : 'Work in Progress' ?></h2>
+                            <p class="text-xs" style="color:var(--color-text-muted)"><?= $milestone['status'] === 'revision_requested' ? 'Update your files and notes according to company feedback and resubmit' : 'Upload your deliverables when ready' ?></p>
                         </div>
                     </div>
 
-                    <?php 
-                    $can_submit = true;
-                    $ms_dl = !empty($milestone['deadline']) ? new DateTime($milestone['deadline']) : null;
-                    $now = new DateTime();
-                    if ($ms_dl && $ms_dl <= $now) {
-                        $can_submit = false;
-                    }
-                    ?>
-                    <?php if (!$can_submit): ?>
-                        <div class="p-4 rounded-xl border flex items-center gap-3 mb-4" style="background:rgba(239,68,68,0.05);border-color:rgba(239,68,68,0.2)">
-                            <svg class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                            <span class="text-sm font-semibold text-red-600">The deadline has passed. Submission is no longer allowed.</span>
+                    <?php if (!empty($milestone['revision_notes']) || !empty($milestone['rejection_reason'])): ?>
+                        <div class="mb-4 p-3.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300">
+                            <span class="font-bold block mb-1">Company Feedback / Requested Changes:</span>
+                            <p class="leading-relaxed whitespace-pre-wrap"><?= nl2br(e($milestone['revision_notes'] ?: $milestone['rejection_reason'])) ?></p>
                         </div>
-                    <?php else: ?>
-                    <form method="POST" enctype="multipart/form-data" id="submitForm">
-                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                        <input type="hidden" name="ms_action" value="submit">
-                        <input type="hidden" name="milestone_id" value="<?= (int) $milestone['id'] ?>">
-
-                        <!-- Submission Link removed -->
-
-                        <div class="mb-4">
-                            <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Attach File</label>
-                            <div class="upload-zone-lg" id="uploadZone">
-                                <input type="file" name="submission_file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.zip,.rar" class="hidden">
-                                <svg class="w-10 h-10 mx-auto mb-2" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
-                                <p class="text-sm font-medium" style="color:var(--color-text-secondary)">Click or drag to attach</p>
-                                <p class="text-xs mt-1" style="color:var(--color-text-muted)">ZIP, PDF, DOCX, Images — Max 500MB</p>
-                            </div>
-                            <div id="fileInfo" class="hidden mt-3 flex items-center gap-3 p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
-                                <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:rgba(16,185,129,0.1)">
-                                    <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-sm font-medium truncate" style="color:var(--color-text-primary)" id="fileName"></p>
-                                    <p class="text-xs" style="color:var(--color-text-muted)" id="fileSize"></p>
-                                </div>
-                                <button type="button" onclick="clearFile()" class="text-red-400 hover:text-red-600 transition-colors">
-                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="mb-5">
-                            <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Submission Note</label>
-                            <textarea name="submission_note" rows="4" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="Describe what you've delivered, any instructions for the reviewer..."></textarea>
-                        </div>
-
-                        <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 4px 15px rgba(139,92,246,0.3)" onclick="return confirmSubmit()">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                            Submit with Details
-                        </button>
-                    </form>
                     <?php endif; ?>
 
-
-                </div>
-
-            <?php elseif ($milestone['status'] === 'funded'): ?>
-                <div class="glass rounded-2xl p-6 reveal">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background:rgba(59,130,246,0.1)">
-                            <svg class="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        </div>
-                        <div>
-                            <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Milestone Funded</h2>
-                            <p class="text-xs" style="color:var(--color-text-muted)">Upload your deliverables when ready</p>
-                        </div>
-                    </div>
-
-                    <?php
-                    $can_submit = true;
-                    $ms_dl = !empty($milestone['deadline']) ? new DateTime($milestone['deadline']) : null;
-                    $now = new DateTime();
-                    if ($ms_dl && $ms_dl <= $now) {
-                        $can_submit = false;
-                    }
+                    <?php 
+                    $can_submit = !is_deadline_passed($milestone['deadline'] ?? null);
                     ?>
                     <?php if (!$can_submit): ?>
                         <div class="p-4 rounded-xl border flex items-center gap-3 mb-4" style="background:rgba(239,68,68,0.05);border-color:rgba(239,68,68,0.2)">
@@ -633,85 +629,61 @@ $draft_enabled = ($milestone['status'] === 'draft');
 
                         <div class="mb-5">
                             <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Submission Note</label>
-                            <textarea name="submission_note" rows="4" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="Describe what you've delivered, any instructions for the reviewer..."></textarea>
+                            <textarea name="submission_note" rows="4" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="Describe what you've delivered, any instructions for the reviewer..."><?= e($milestone['submission_note'] ?? '') ?></textarea>
                         </div>
 
                         <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#8b5cf6,#6366f1);box-shadow:0 4px 15px rgba(139,92,246,0.3)" onclick="return confirmSubmit()">
                             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                            Submit with Details
+                            <?= $milestone['status'] === 'revision_requested' ? 'Resubmit Work' : 'Submit with Details' ?>
                         </button>
                     </form>
                     <?php endif; ?>
                 </div>
 
-            <?php elseif ($milestone['status'] === 'revision_requested'): ?>
-                <div class="glass rounded-2xl p-6 reveal">
-                    <div class="flex items-center gap-3 mb-3">
-                        <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background:rgba(239,68,68,0.1)">
-                            <svg class="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <?php elseif ($milestone['status'] === 'rejected'): ?>
+                <div class="glass rounded-2xl p-6 reveal border border-red-200 dark:border-red-900/40" style="background:rgba(239,68,68,0.03)">
+                    <div class="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-red-200 dark:border-red-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-600">
+                                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </div>
+                            <div>
+                                <h2 class="text-base font-bold text-red-600 dark:text-red-400">Milestone Permanently Rejected</h2>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Resubmissions are disabled for this milestone.</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 class="text-lg font-bold text-red-600">Revision Requested</h2>
-                            <p class="text-xs" style="color:var(--color-text-muted)">Update your work and resubmit</p>
-                        </div>
+                        <?= status_badge('rejected') ?>
                     </div>
 
-                    <?php 
-                    $can_submit = true;
-                    $ms_dl = !empty($milestone['deadline']) ? new DateTime($milestone['deadline']) : null;
-                    $now = new DateTime();
-                    if ($ms_dl && $ms_dl <= $now) {
-                        $can_submit = false;
-                    }
-                    ?>
-                    <?php if (!$can_submit): ?>
-                        <div class="p-4 rounded-xl border flex items-center gap-3 mb-4" style="background:rgba(239,68,68,0.05);border-color:rgba(239,68,68,0.2)">
-                            <svg class="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                            <span class="text-sm font-semibold text-red-600">The deadline has passed. Submission is no longer allowed.</span>
+                    <?php if (!empty($milestone['rejection_reason'])): ?>
+                        <div class="mb-4 p-3.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300">
+                            <span class="font-bold block mb-1">Company Rejection Reason:</span>
+                            <p class="leading-relaxed"><?= nl2br(e($milestone['rejection_reason'])) ?></p>
                         </div>
-                    <?php else: ?>
-                    <form method="POST" enctype="multipart/form-data" id="submitForm">
-                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
-                        <input type="hidden" name="ms_action" value="submit">
-                        <input type="hidden" name="milestone_id" value="<?= (int) $milestone['id'] ?>">
-
-                        <!-- Submission Link removed -->
-
-                        <div class="mb-4">
-                            <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Attach File</label>
-                            <div class="upload-zone-lg" id="uploadZone">
-                                <input type="file" name="submission_file" id="fileInput" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.zip,.rar" class="hidden">
-                                <svg class="w-10 h-10 mx-auto mb-2" style="color:var(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg>
-                                <p class="text-sm font-medium" style="color:var(--color-text-secondary)">Click or drag to attach</p>
-                                <p class="text-xs mt-1" style="color:var(--color-text-muted)">ZIP, PDF, DOCX, Images — Max 500MB</p>
-                            </div>
-                            <div id="fileInfo" class="hidden mt-3 flex items-center gap-3 p-3 rounded-xl" style="background:var(--color-bg);border:1px solid var(--color-border)">
-                                <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:rgba(16,185,129,0.1)">
-                                    <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                </div>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-sm font-medium truncate" style="color:var(--color-text-primary)" id="fileName"></p>
-                                    <p class="text-xs" style="color:var(--color-text-muted)" id="fileSize"></p>
-                                </div>
-                                <button type="button" onclick="clearFile()" class="text-red-400 hover:text-red-600 transition-colors">
-                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="mb-5">
-                            <label class="block text-sm font-semibold mb-1.5" style="color:var(--color-text-secondary)">Submission Note</label>
-                            <textarea name="submission_note" rows="4" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="Describe the changes you've made..."></textarea>
-                        </div>
-
-                        <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white transition-all" style="background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 4px 15px rgba(239,68,68,0.3)" onclick="return confirmSubmit()">
-                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            Resubmit with Details
-                        </button>
-                    </form>
                     <?php endif; ?>
+                        <div class="flex items-center justify-between gap-2">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Submission Details (Read-Only)</h4>
+                            <?php if (!empty($milestone['submitted_at'])): ?>
+                                <span class="text-xs text-gray-400">Submitted <?= date('M j, Y \a\t g:i A', strtotime($milestone['submitted_at'])) ?></span>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($milestone['submission_file']): ?>
+                            <div class="flex items-center justify-between p-3 rounded-lg border bg-white dark:bg-gray-800 text-xs border-gray-200 dark:border-gray-700">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                    <span class="font-semibold text-gray-800 dark:text-gray-200 truncate"><?= e(basename($milestone['submission_file'])) ?></span>
+                                </div>
+                                <a href="<?= e(base_url('api/download_submission.php?milestone_id=' . $milestone['id'])) ?>" target="_blank" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold text-xs hover:bg-emerald-700">Download File</a>
+                            </div>
+                        <?php endif; ?>
 
-
+                        <?php if ($milestone['submission_note']): ?>
+                            <div class="p-3 rounded-lg border bg-white dark:bg-gray-800 text-xs border-gray-200 dark:border-gray-700">
+                                <span class="text-gray-400 block mb-1 font-semibold uppercase text-[10px]">Notes</span>
+                                <p class="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap"><?= nl2br(e($milestone['submission_note'])) ?></p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
             <?php elseif ($milestone['status'] === 'submitted'): ?>
@@ -722,22 +694,34 @@ $draft_enabled = ($milestone['status'] === 'draft');
                     </div>
                     <p class="text-sm mb-4" style="color:var(--color-text-secondary)">Your work has been submitted and is awaiting the company's review. You'll be notified once a decision is made.</p>
 
-                    <?php if ($milestone['submitted_at']): ?>
-                        <p class="text-xs" style="color:var(--color-text-muted)">Submitted <?= date('F j, Y \a\t g:ia', strtotime($milestone['submitted_at'])) ?></p>
-                    <?php endif; ?>
-
-                    <?php if ($milestone['submission_link'] || $milestone['submission_file'] || $milestone['submission_note']): ?>
-                    <div class="mt-4 p-4 rounded-xl space-y-2" style="background:var(--color-bg);border:1px solid var(--color-border)">
-                        <p class="text-xs font-semibold uppercase tracking-wider" style="color:var(--color-text-muted)">Your Submission</p>
+                    <?php 
+                    $has_fl_sub = !empty($milestone['submitted_at']) || !empty($milestone['submission_file']) || !empty($milestone['submission_link']) || !empty($milestone['submission_note']);
+                    ?>
+                    <?php if ($has_fl_sub): ?>
+                    <div class="mt-4 p-4 rounded-xl space-y-3" style="background:var(--color-bg);border:1px solid var(--color-border)">
+                        <div class="flex items-center justify-between gap-2 pb-2 border-b" style="border-color:var(--color-border)">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Submission Details</h4>
+                            <div class="flex items-center gap-2 text-xs">
+                                <?php if (!empty($milestone['submitted_at'])): ?>
+                                    <span class="text-gray-500 dark:text-gray-400">Submitted <?= date('M j, Y \a\t g:i A', strtotime($milestone['submitted_at'])) ?></span>
+                                <?php endif; ?>
+                                <?= status_badge($milestone['status']) ?>
+                            </div>
+                        </div>
                         <?php if ($milestone['submission_file']): ?>
-                            <div class="flex items-center gap-2">
-                                <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                                <a href="<?= e(base_url('api/download_submission.php?milestone_id=' . $milestone['id'])) ?>" target="_blank" class="text-sm font-medium text-emerald-600 hover:underline">Download</a>
+                            <div class="flex items-center justify-between p-3 rounded-lg border bg-white dark:bg-gray-800 text-xs" style="border-color:var(--color-border)">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                    <span class="font-semibold text-gray-800 dark:text-gray-200 truncate"><?= e(basename($milestone['submission_file'])) ?></span>
+                                </div>
+                                <a href="<?= e(base_url('api/download_submission.php?milestone_id=' . $milestone['id'])) ?>" target="_blank" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold text-xs hover:bg-emerald-700">Download File</a>
                             </div>
                         <?php endif; ?>
+
                         <?php if ($milestone['submission_note']): ?>
-                            <div class="mt-2 p-3 rounded-lg text-sm leading-relaxed" style="background:var(--color-card);border:1px solid var(--color-border);color:var(--color-text-secondary)">
-                                <?= nl2br(e($milestone['submission_note'])) ?>
+                            <div class="p-3 rounded-lg border bg-white dark:bg-gray-800 text-xs" style="border-color:var(--color-border)">
+                                <span class="text-gray-400 block mb-1 font-semibold uppercase text-[10px]">Notes</span>
+                                <p class="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap"><?= nl2br(e($milestone['submission_note'])) ?></p>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -933,6 +917,84 @@ function confirmSubmit() {
         return false;
     }
     return confirm('Submit this work for review?');
+}
+
+var extForm = document.getElementById('extRequestForm');
+if (extForm) {
+    var _extSubmitting = false;
+    extForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (_extSubmitting) return;
+
+        var btn = document.getElementById('extSubmitBtn');
+        var errDiv = document.getElementById('extFormError');
+        var succDiv = document.getElementById('extFormSuccess');
+
+        if (errDiv) { errDiv.classList.add('hidden'); errDiv.textContent = ''; }
+        if (succDiv) { succDiv.classList.add('hidden'); succDiv.textContent = ''; }
+
+        _extSubmitting = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Submitting...';
+        }
+
+        var formData = new FormData(extForm);
+
+        fetch('<?= e(base_url("api/request_extension.php")) ?>', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(function(res) {
+            return res.json().then(function(data) {
+                return { ok: res.ok, data: data };
+            });
+        })
+        .then(function(result) {
+            var data = result.data;
+            if (result.ok && data.success) {
+                if (succDiv) {
+                    succDiv.textContent = data.message || 'Extension request submitted successfully.';
+                    succDiv.classList.remove('hidden');
+                }
+                if (btn) {
+                    btn.textContent = 'Submitted!';
+                }
+                setTimeout(function() {
+                    window.location.reload();
+                }, 1200);
+            } else {
+                _extSubmitting = false;
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Submit Request';
+                }
+                var errMsg = (data && (data.message || data.error)) ? (data.message || data.error) : 'Failed to submit extension request. Please try again.';
+                if (errDiv) {
+                    errDiv.textContent = errMsg;
+                    errDiv.classList.remove('hidden');
+                } else {
+                    alert(errMsg);
+                }
+            }
+        })
+        .catch(function(err) {
+            _extSubmitting = false;
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Submit Request';
+            }
+            if (errDiv) {
+                errDiv.textContent = 'An unexpected error occurred. Please check your network connection and try again.';
+                errDiv.classList.remove('hidden');
+            } else {
+                alert('An unexpected error occurred.');
+            }
+        });
+    });
 }
 </script>
 

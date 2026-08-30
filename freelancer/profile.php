@@ -7,7 +7,7 @@ $is_own_profile = ($target_uid === $fl_uid);
 $is_edit = isset($_GET['edit']) && $is_own_profile;
 
 // Fetch profile and skills (moved from init to optimize other pages)
-$fl_stmt = $conn->prepare("SELECT f.*, u.email, u.profile_image, u.username, u.created_at FROM freelancers f JOIN users u ON u.id = f.user_id WHERE u.id = ?");
+$fl_stmt = $conn->prepare("SELECT f.*, u.email, u.profile_image, u.username, u.created_at, u.security_question FROM freelancers f JOIN users u ON u.id = f.user_id WHERE u.id = ?");
 $fl_stmt->bind_param('i', $target_uid); $fl_stmt->execute();
 $fl_profile = $fl_stmt->get_result()->fetch_assoc(); $fl_stmt->close();
 
@@ -38,19 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $is_edit) {
         $full_name = trim($_POST['full_name'] ?? '');
         $title = trim($_POST['title'] ?? '');
         $phone = trim($_POST['phone'] ?? '');
-        $location = trim($_POST['location'] ?? '');
-        $bio = trim($_POST['bio'] ?? '');
-        $experience_years = (int) ($_POST['experience_years'] ?? 0);
-        $hourly_rate = (float) ($_POST['hourly_rate'] ?? 0);
-        $selected_skills = $_POST['skills'] ?? [];
-        $payment_method = trim($_POST['payment_method'] ?? '');
-        $payment_account_name = trim($_POST['payment_account_name'] ?? '');
-        $payment_account_number = trim($_POST['payment_account_number'] ?? '');
-        $payment_bank_name = trim($_POST['payment_bank_name'] ?? '');
-        if ($full_name === '') $error = 'Full name is required.';
-        elseif ($phone !== '' && !preg_match('/^09[0-9]{9}$/', $phone)) $error = 'Invalid phone number format. Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx).';
-        elseif ($hourly_rate < 0) $error = 'Hourly rate must be 0 or greater.';
-        else {
+        $bio = trim($_POST['bio'] ?? '');        $selected_skills = $_POST['skills'] ?? [];        if ($full_name === '') $error = 'Full name is required.';
+        elseif ($phone !== '' && !preg_match('/^09[0-9]{9}$/', $phone)) $error = 'Invalid phone number format. Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx).';        else {
             $old_img = $fl_profile['profile_image'];
             $new_img = $old_img;
             if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === UPLOAD_ERR_OK) {
@@ -60,12 +49,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $is_edit) {
             if ($error === '') {
                 $conn->begin_transaction();
                 try {
-                    $st = $conn->prepare("UPDATE users SET profile_image=? WHERE id=?");
-                    $st->bind_param('si', $new_img, $target_uid); $st->execute(); $st->close();
-                    $ey = $experience_years > 0 ? $experience_years : null;
-                    $hr = $hourly_rate > 0 ? $hourly_rate : null;
-                    $st = $conn->prepare("UPDATE freelancers SET full_name=?,title=?,phone=?,location=?,bio=?,experience_years=?,hourly_rate=?,payment_method=?,payment_account_name=?,payment_account_number=?,payment_bank_name=? WHERE id=?");
-                    $st->bind_param('sssssidssssi', $full_name, $title, $phone, $location, $bio, $ey, $hr, $payment_method, $payment_account_name, $payment_account_number, $payment_bank_name, $target_freelancer_id);
+                    // Handle verification question
+                    $sec_question = trim($_POST['security_question'] ?? '');
+                    $sec_answer_raw = trim($_POST['security_answer'] ?? '');
+
+                    if ($sec_question !== '' && $sec_answer_raw !== '') {
+                        $sec_answer_hash = password_hash(strtolower($sec_answer_raw), PASSWORD_DEFAULT);
+                        $st = $conn->prepare("UPDATE users SET profile_image=?, security_question=?, security_answer_hash=? WHERE id=?");
+                        $st->bind_param('sssi', $new_img, $sec_question, $sec_answer_hash, $target_uid);
+                    } elseif ($sec_question !== '') {
+                        $st = $conn->prepare("UPDATE users SET profile_image=?, security_question=? WHERE id=?");
+                        $st->bind_param('ssi', $new_img, $sec_question, $target_uid);
+                    } else {
+                        $st = $conn->prepare("UPDATE users SET profile_image=? WHERE id=?");
+                        $st->bind_param('si', $new_img, $target_uid);
+                    }
+                    $st->execute(); $st->close();
+
+                    $st = $conn->prepare("UPDATE freelancers SET full_name=?,title=?,phone=?,bio=? WHERE id=?");
+                    $st->bind_param('ssssi', $full_name, $title, $phone, $bio, $target_freelancer_id);
                     $st->execute(); $st->close();
                     $st = $conn->prepare("DELETE FROM freelancer_skills WHERE freelancer_id=?");
                     $st->bind_param('i', $target_freelancer_id); $st->execute(); $st->close();
@@ -79,10 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $is_edit) {
                     $_SESSION['profile_image'] = $new_img;
                     $success = 'Profile updated successfully.';
                     $fl_profile['full_name']=$full_name; $fl_profile['title']=$title; $fl_profile['phone']=$phone;
-                    $fl_profile['location']=$location; $fl_profile['bio']=$bio;
-                    $fl_profile['experience_years']=$ey; $fl_profile['hourly_rate']=$hr; $fl_profile['profile_image']=$new_img;
-                    $fl_profile['payment_method']=$payment_method; $fl_profile['payment_account_name']=$payment_account_name;
-                    $fl_profile['payment_account_number']=$payment_account_number; $fl_profile['payment_bank_name']=$payment_bank_name;
+                    $fl_profile['bio']=$bio; $fl_profile['profile_image']=$new_img;
+                    if ($sec_question !== '') $fl_profile['security_question'] = $sec_question;
                     $fl_profile_skills = array_map('intval', $selected_skills);
                 } catch (Exception $e) { $conn->rollback(); $error = $e->getMessage(); }
             }
@@ -165,13 +165,9 @@ require __DIR__ . '/../includes/freelancer_layout.php';
         <div class="glass rounded-2xl p-6 reveal">
             <h2 class="text-lg font-bold mb-5" style="color:var(--color-text-primary)">Basic Information</h2>
             <div class="grid md:grid-cols-2 gap-4">
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Full Name *</label><input type="text" name="full_name" required class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['full_name']) ?>"></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Professional Title</label><input type="text" name="title" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="e.g. Full Stack Developer" value="<?= e($fl_profile['title'] ?? '') ?>"></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Email</label><input type="email" class="w-full px-4 py-2.5 rounded-xl text-sm opacity-60 cursor-not-allowed" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['email']) ?>" readonly><p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Email cannot be changed.</p></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Phone</label><input type="tel" name="phone" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="09xxxxxxxxx" pattern="^09[0-9]{9}$" maxlength="11" title="Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx)" oninvalid="this.setCustomValidity('Must be an 11-digit Myanmar local number starting with 09 (e.g., 09xxxxxxxxx)')" oninput="this.setCustomValidity('')" value="<?= e($fl_profile['phone'] ?? '') ?>"></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Location</label><input type="text" name="location" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['location'] ?? '') ?>"></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Experience (Years)</label><input type="number" name="experience_years" min="0" max="100" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['experience_years'] ?? '') ?>"></div>
-                <div><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Hourly Rate (MMK)</label><input type="number" name="hourly_rate" min="0" step="0.50" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['hourly_rate'] ?? '') ?>"></div>
+                
+                
+                
 
             </div>
             <div class="mt-4"><label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Bio</label><textarea name="bio" rows="4" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="Tell clients about yourself..."><?= e($fl_profile['bio'] ?? '') ?></textarea></div>
@@ -191,41 +187,42 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                 <div><input type="file" name="profile_image" accept="image/jpeg,image/png,image/gif,image/webp" class="text-sm" onchange="previewImage(this, 'profilePreview')"><p class="text-xs mt-1" style="color:var(--color-text-placeholder)">JPG, PNG, GIF, WebP. Max 2MB.</p></div>
             </div>
         </div>
-        <div class="glass rounded-2xl p-6 reveal reveal-d3">
-            <h2 class="text-lg font-bold mb-5" style="color:var(--color-text-primary)">Payment Settings</h2>
-            <div class="mb-5">
-                <label class="block text-sm font-medium mb-3" style="color:var(--color-text-secondary)">Preferred Payment Method</label>
-                <div class="grid sm:grid-cols-3 gap-4">
-                    <label class="flex items-center gap-3 p-4 rounded-xl cursor-pointer border hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" style="border-color:var(--color-border);background:var(--color-bg)">
-                        <input type="radio" name="payment_method" value="kpay" <?= $fl_profile['payment_method'] === 'kpay' ? 'checked' : '' ?> class="w-4 h-4 text-primary-600 focus:ring-primary-500" onchange="togglePaymentFields()">
-                        <span class="text-sm font-semibold" style="color:var(--color-text-primary)">KPay</span>
-                    </label>
-                    <label class="flex items-center gap-3 p-4 rounded-xl cursor-pointer border hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" style="border-color:var(--color-border);background:var(--color-bg)">
-                        <input type="radio" name="payment_method" value="wavepay" <?= $fl_profile['payment_method'] === 'wavepay' ? 'checked' : '' ?> class="w-4 h-4 text-primary-600 focus:ring-primary-500" onchange="togglePaymentFields()">
-                        <span class="text-sm font-semibold" style="color:var(--color-text-primary)">WavePay</span>
-                    </label>
-                    <label class="flex items-center gap-3 p-4 rounded-xl cursor-pointer border hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" style="border-color:var(--color-border);background:var(--color-bg)">
-                        <input type="radio" name="payment_method" value="bank_transfer" <?= $fl_profile['payment_method'] === 'bank_transfer' ? 'checked' : '' ?> class="w-4 h-4 text-primary-600 focus:ring-primary-500" onchange="togglePaymentFields()">
-                        <span class="text-sm font-semibold" style="color:var(--color-text-primary)">Bank Transfer</span>
-                    </label>
+
+        <div class="glass rounded-2xl p-6 reveal reveal-d3" style="border-top: 3px solid #6366f1;">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:rgba(99,102,241,0.1)">
+                    <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                </div>
+                <div>
+                    <h2 class="text-lg font-bold" style="color:var(--color-text-primary)">Verification Question</h2>
+                    <p class="text-xs mt-0.5" style="color:var(--color-text-muted)">Used to verify your identity during password recovery.</p>
                 </div>
             </div>
-            
-            <div id="payment-fields-wrapper" class="grid md:grid-cols-2 gap-4 <?= empty($fl_profile['payment_method']) ? 'hidden' : '' ?>">
-                <div id="bank-name-field" class="<?= $fl_profile['payment_method'] === 'bank_transfer' ? '' : 'hidden' ?>">
-                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Bank Name</label>
-                    <input type="text" name="payment_bank_name" id="payment_bank_name_input" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" placeholder="e.g. KBZ Bank" value="<?= e($fl_profile['payment_bank_name'] ?? '') ?>">
+            <div class="p-4 rounded-xl mb-4 text-sm" style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);color:var(--color-text-secondary)">
+                💡 Create a question that only you can answer. Avoid information that can be easily guessed or found online.
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Verification Question</label>
+                    <input type="text" name="security_question" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)"
+                           placeholder="e.g. What was the name of my first school?"
+                           value="<?= e($fl_profile['security_question'] ?? '') ?>">
+                    <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Write your own unique question.</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">Account Name</label>
-                    <input type="text" name="payment_account_name" id="payment_account_name_input" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['payment_account_name'] ?? '') ?>">
-                </div>
-                <div>
-                    <label id="payment-number-label" class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)"><?= $fl_profile['payment_method'] === 'bank_transfer' ? 'Account Number' : 'Phone Number' ?></label>
-                    <input type="text" name="payment_account_number" id="payment_account_number_input" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)" value="<?= e($fl_profile['payment_account_number'] ?? '') ?>">
+                    <label class="block text-sm font-medium mb-1.5" style="color:var(--color-text-secondary)">
+                        Verification Answer
+                        <?php if (!empty($fl_profile['security_question'])): ?>
+                            <span class="ml-2 text-xs font-normal text-emerald-500">✔ Already set — leave blank to keep unchanged</span>
+                        <?php endif; ?>
+                    </label>
+                    <input type="password" name="security_answer" autocomplete="new-password" class="w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" style="background:var(--color-bg);border:1px solid var(--color-border);color:var(--color-text-primary)"
+                           placeholder="<?= !empty($fl_profile['security_question']) ? 'Leave blank to keep current answer' : 'Your secret answer' ?>">
+                    <p class="text-xs mt-1" style="color:var(--color-text-placeholder)">Answers are case-insensitive and stored securely.</p>
                 </div>
             </div>
         </div>
+
         <div class="flex justify-end gap-3">
             <a href="<?= e(base_url('freelancer/profile.php')) ?>" class="px-5 py-2.5 text-sm font-semibold rounded-xl border" style="border-color:var(--color-border);color:var(--color-text-primary)">Cancel</a>
             <button type="submit" class="btn-grad px-6 py-2.5 text-sm font-semibold rounded-xl text-white shadow-lg shadow-primary-500/20">Save Changes</button>
@@ -283,24 +280,9 @@ require __DIR__ . '/../includes/freelancer_layout.php';
                     <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['phone']) ?></dd>
                 </div>
                 <?php endif; ?>
-                <?php if ($fl_profile['location']): ?>
-                <div>
-                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Location</dt>
-                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= e($fl_profile['location']) ?></dd>
-                </div>
-                <?php endif; ?>
-                <?php if ($fl_profile['experience_years'] !== null): ?>
-                <div>
-                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Experience</dt>
-                    <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= (int) $fl_profile['experience_years'] ?> year<?= (int) $fl_profile['experience_years'] !== 1 ? 's' : '' ?></dd>
-                </div>
-                <?php endif; ?>
-                <?php if ($fl_profile['hourly_rate'] !== null): ?>
-                <div>
-                    <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Hourly Rate</dt>
-                    <dd class="mt-1 text-base font-semibold text-emerald-600"><?= number_format((float) $fl_profile['hourly_rate'], 2) ?> MMK / hr</dd>
-                </div>
-                <?php endif; ?>
+
+                
+                
                 <div>
                     <dt class="text-sm font-medium" style="color:var(--color-text-muted)">Joined</dt>
                     <dd class="mt-1 text-base font-semibold" style="color:var(--color-text-primary)"><?= date('F j, Y', strtotime($fl_profile['created_at'])) ?></dd>
@@ -370,30 +352,6 @@ function previewImage(input, imgId) {
     }
 }
 
-function togglePaymentFields() {
-    var method = document.querySelector('input[name="payment_method"]:checked');
-    if (!method) return;
-    
-    document.getElementById('payment-fields-wrapper').classList.remove('hidden');
-    var isBank = method.value === 'bank_transfer';
-    
-    document.getElementById('bank-name-field').classList.toggle('hidden', !isBank);
-    document.getElementById('payment-number-label').textContent = isBank ? 'Account Number' : 'Phone Number';
-    
-    // Add required attributes dynamically
-    if (isBank) {
-        document.getElementById('payment_bank_name_input').setAttribute('required', 'required');
-    } else {
-        document.getElementById('payment_bank_name_input').removeAttribute('required');
-    }
-    document.getElementById('payment_account_name_input').setAttribute('required', 'required');
-    document.getElementById('payment_account_number_input').setAttribute('required', 'required');
-}
-
-// Initial toggle if editing
-if (document.querySelector('input[name="payment_method"]')) {
-    togglePaymentFields();
-}
 </script>
 
 <?php require __DIR__ . '/../includes/freelancer_footer.php'; ?>

@@ -34,7 +34,6 @@ CREATE TABLE IF NOT EXISTS companies (
     location VARCHAR(255) DEFAULT NULL,
     established_year INT DEFAULT NULL,
     industry VARCHAR(100) DEFAULT NULL,
-    company_size VARCHAR(50) DEFAULT NULL,
     description TEXT,
     logo_image VARCHAR(255) DEFAULT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -77,14 +76,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     title VARCHAR(200) NOT NULL,
     category VARCHAR(100) NOT NULL DEFAULT '',
     experience_level ENUM('beginner', 'intermediate', 'expert') DEFAULT 'intermediate',
-    gender_requirement ENUM('any', 'male', 'female') DEFAULT 'any',
     description TEXT,
     requirements TEXT,
     budget DECIMAL(10, 2),
-    deadline DATETIME NULL,
+    deadline DATETIME DEFAULT NULL,
     duration VARCHAR(100) DEFAULT NULL,
-    freelancers_needed INT DEFAULT 1,
-    visibility ENUM('public', 'private') DEFAULT 'public',
     attachment VARCHAR(255) DEFAULT NULL,
     status ENUM('pending', 'approved', 'rejected', 'completed') DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -205,6 +201,10 @@ CREATE TABLE IF NOT EXISTS messages (
     receiver_id INT NOT NULL,
     message TEXT NOT NULL,
     status ENUM('unread','read') DEFAULT 'unread',
+    attachment_name VARCHAR(255) NULL DEFAULT NULL,
+    attachment_path VARCHAR(255) NULL DEFAULT NULL,
+    attachment_size INT NULL DEFAULT NULL,
+    attachment_type VARCHAR(100) NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -307,19 +307,6 @@ DEALLOCATE PREPARE stmt;
 -- ============================================================
 -- PART 4: Chat Enhancement Tables (from db_chat_enhancement.sql)
 -- ============================================================
-
--- Message attachments table
-CREATE TABLE IF NOT EXISTS message_attachments (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    message_id INT NOT NULL,
-    file_name VARCHAR(255) NOT NULL,
-    file_path VARCHAR(255) NOT NULL,
-    file_size INT NOT NULL DEFAULT 0,
-    file_type VARCHAR(100) NOT NULL DEFAULT '',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
-    INDEX idx_attach_message (message_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Add message_type column to messages
 SET @columnname = 'message_type';
